@@ -1,0 +1,67 @@
+# ==============================================================================
+# create_project.tcl
+# Rebuilds a Vivado 2022.1 project for one top design from the repo sources.
+#
+# Usage (from the repo root):
+#   vivado -mode batch -source scripts/create_project.tcl -tclargs <top_module>
+#   e.g. -tclargs fmc_clock_loopback
+# Add "build" as a 2nd arg to also run synthesis + implementation + bitstream:
+#   vivado -mode batch -source scripts/create_project.tcl -tclargs fmc_clock_loopback build
+#
+# Output goes to build/<top_module>/ (git-ignored). Open the .xpr from there.
+# ==============================================================================
+
+set repo [file normalize [file join [file dirname [info script]] ..]]
+set part xc7z020clg484-1
+
+if {$argc < 1} {
+    puts "ERROR: give the top module name, e.g. -tclargs fmc_clock_loopback"
+    exit 1
+}
+set top [lindex $argv 0]
+set do_build [expr {$argc > 1 && [lindex $argv 1] eq "build"}]
+
+# Top designs that reuse another design's XDC (same port names).
+# Everything else uses fpga/constraints/<top>.xdc.
+array set xdc_override {
+    fmc_clock_loopback_slow fmc_clock_loopback.xdc
+    single_pin_tester       PINS_layout.xdc
+}
+if {[info exists xdc_override($top)]} {
+    set xdc [file join $repo fpga constraints $xdc_override($top)]
+} else {
+    set xdc [file join $repo fpga constraints $top.xdc]
+}
+if {![file exists $xdc]} {
+    puts "ERROR: no constraints file for '$top' (looked for $xdc)"
+    exit 1
+}
+
+set proj_dir [file join $repo build $top]
+create_project $top $proj_dir -part $part -force
+
+# Design sources: all .v/.sv in fpga/src. Unused modules are simply not elaborated.
+set srcs [glob -nocomplain [file join $repo fpga src *.v] [file join $repo fpga src *.sv]]
+add_files -norecurse -fileset sources_1 $srcs
+add_files -norecurse -fileset constrs_1 $xdc
+set_property top $top [get_filesets sources_1]
+
+# Testbenches: tb_<top>.sv / .v if present (convention: fpga/tb/tb_<module>.sv)
+set tbs [glob -nocomplain [file join $repo fpga tb *.v] [file join $repo fpga tb *.sv]]
+if {[llength $tbs] > 0} {
+    add_files -norecurse -fileset sim_1 $tbs
+    foreach tb_top [list tb_$top] {
+        if {[llength [get_files -quiet -of_objects [get_filesets sim_1] *$tb_top.*]] > 0} {
+            set_property top $tb_top [get_filesets sim_1]
+        }
+    }
+}
+
+update_compile_order -fileset sources_1
+puts "Project created: [file join $proj_dir $top.xpr] (top = $top, xdc = [file tail $xdc])"
+
+if {$do_build} {
+    launch_runs impl_1 -to_step write_bitstream -jobs 4
+    wait_on_run impl_1
+    puts "Bitstream: [glob -nocomplain [file join $proj_dir $top.runs impl_1 *.bit]]"
+}

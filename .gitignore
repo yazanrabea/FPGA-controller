@@ -1,0 +1,21 @@
+# Vivado generated output (rebuild with scripts/create_project.tcl)
+*.jou
+*.log
+*.str
+*.backup.*
+.Xil/
+*.cache/
+*.hw/
+*.runs/
+*.sim/
+*.ip_user_files/
+*.gen/
+*.bit
+*.xpr
+build/
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+~$*
