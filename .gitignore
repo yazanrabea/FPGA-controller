@@ -1,0 +1,16 @@
+# Vivado generated files
+*.runs/
+*.cache/
+*.hw/
+*.sim/
+*.ip_user_files/
+*.gen/
+.Xil/
+*.jou
+*.log
+*.str
+*.backup.*
+webtalk*
+vivado_pid*
+usage_statistics_webtalk.*
+.DS_Store
