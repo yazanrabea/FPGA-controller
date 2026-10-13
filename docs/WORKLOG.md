@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Generic chip controller — Phase 2 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `tools/nemo_ctl/wizard.py`, `tools/nemo_ctl/cli.py`, this file |
+| Rahaf | Generic chip controller — Phase 3 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `fpga/src/sig_cell.sv`, `cap_cell.sv`, `run_ctrl.sv`, `fpga/tb/*_tb.sv`, this file |
 
 ---
 
@@ -178,6 +178,116 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Next steps: Phase 3 (RTL cells + testbenches) is the first phase that touches
   `fpga/src`/`fpga/tb` — needs my approval/redirection first, same phase-gate rule as
   before. Everything through Phase 2 remains software/config only, no hardware claims.
+
+---
+
+## 2026-10-13, Rahaf, branch feature/rahaf-generic-controller-spec
+- Goal: Phase 3 of `generic_controller_prompt.md` — RTL cells + testbenches:
+  `sig_cell.sv`, `cap_cell.sv`, `run_ctrl.sv`, each with a self-checking testbench
+  covering the brief's required edge cases (N=2, odd N, width=1 tick, delay=0, cycles=1,
+  config change while running), plus a utilization estimate for the 26 cells.
+- Done:
+  - No Vivado/license-server in this environment, so installed **Icarus Verilog**
+    (`iverilog`/`vvp` 13.0) to actually run the testbenches, and **yosys** (0.69) to get a
+    real synthesized utilization number instead of a hand count — both via
+    `/opt/homebrew/bin/brew` (this machine also has a broken Intel Homebrew at
+    `/usr/local` whose bundled compiler can't build anything; the arm64 one works via
+    prebuilt bottles, no compile needed). Documented in CLAUDE.md §4 as secondary,
+    local-only tools — Vivado remains the real target toolchain, nothing here produces a
+    bitstream.
+  - Added `fpga/src/sig_cell.sv`: one generic cell per driven chip pin, modes
+    LOW/HIGH/PULSE/CLOCK/SERIAL. **Deliberately did not give it a 6th "BUS" hardware
+    mode** — a BUS setting (`tools/nemo_ctl/groups.py`) is already decomposed into plain
+    LOW/HIGH per pin by the Python tool before it reaches a register, so a BUS mode in
+    hardware would be a dead, untestable state identical to LOW/HIGH. Flagged per
+    CLAUDE.md §2's "if you find a concrete reason to deviate, explain first" — explained
+    in the module's header comment. Also dropped a separate "polarity" config field: the
+    pin_db/wizard layer already resolves polarity into `idle_level` (confirmed against
+    `tools/nemo_ctl/data/pin_db.yaml`'s own `rst_sipo`/`rst_piso` entries), so carrying
+    both would just be redundant, conflicting information reaching the same cell.
+  - Added `fpga/src/cap_cell.sv`: one generic capture cell per chip output pin, modes
+    LEVEL/EDGE_COUNT/PERIOD/SERIAL. Assumes `sync_in` is already 2-FF-synchronized
+    upstream (per the architecture diagram), consistent with CLAUDE.md §8.
+  - Added `fpga/src/run_ctrl.sv`: global RUN/STOP + one-cycle APPLY strobe, with 2-FF
+    synchronizers + edge detection on all three command inputs (CLAUDE.md §8: every
+    asynchronous input gets a 2-FF synchronizer) so a command held high for many cycles
+    (e.g. a switch, not a one-shot pulse) still only fires once.
+  - Added self-checking testbenches: `fpga/tb/sig_cell_tb.sv` (24 checks),
+    `fpga/tb/cap_cell_tb.sv` (13 checks), `fpga/tb/run_ctrl_tb.sv` (9 checks), and
+    `fpga/tb/integration_tb.sv` (16 checks, a small sanity wiring of one `sig_cell` CLOCK
+    through `run_ctrl` into one `cap_cell` PERIOD measurement — not required by the
+    brief's module list on its own, but cheap given the unit tests already existed, and
+    it catches wiring mistakes before Phase 4's real top level). 62 checks total, all
+    passing. Added `scripts/run_phase3_sims.sh` to re-run all four plus the yosys
+    estimate in one command.
+  - Added `fpga/tb/utilization_estimate_top.sv`: synthesis-only scaffolding (not built by
+    `scripts/create_project.tcl`, not simulated) that instantiates the real 26 cells —
+    `TICK_W=20` (realistic for this project: the largest delay in
+    `config/nemo_config.yaml` today is 150 us = 15,000 ticks = 14 bits; 20 gives headroom
+    to ~10.5 ms), `SERIAL_W=136` for `sipo_in`, `CAP_W=168` for `piso_out`, 1 for every
+    other pin (which never uses SERIAL/serial-capture) — and ran it through
+    `yosys synth_xilinx -family xc7`.
+- Hardware setup: none — still simulation/synthesis-estimate only, no FPGA involved.
+- Results: **[simulated]** — `scripts/run_phase3_sims.sh`: 62/62 checks pass across the
+  four testbenches (real Icarus Verilog 13.0 runs, not claimed without execution).
+  **Utilization — [measured, real synthesis output, not estimated]** (yosys 0.69,
+  `synth_xilinx -family xc7`, not Vivado — no P&R, no timing closure):
+  FF (`FDCE`+`FDPE`) 4,923 / 106,400 (4.6%); LUT (`LUT2`-`LUT6`) 6,449 / 53,200 (12.1%);
+  1,254 `CARRY4` chains; yosys "Estimated LCs" 5,244 / 53,200 (9.9%). Higher LUT usage
+  than Phase 0's hand-counted guess (~3%), mainly from the two wide shift registers
+  (136+168=304 bits) and the `CARRY4`-chain comparators every 20-bit tick counter needs —
+  still comfortably inside the chip's budget. `docs/controller_spec.md` §10/§10a updated
+  (old guess kept for history, marked superseded).
+- Problems / fixes (several real bugs found via the testbenches, not just test-script
+  typos — each confirmed with a VCD/print trace before deciding which side the bug was
+  really on):
+  - **Testbench race** (the big one): driving `apply`/`run`/`shift_strobe` right after
+    `@(posedge clk)` races the DUT's own `always_ff` evaluating that identical edge — both
+    are separate processes woken by the same event with no defined relative order.
+    Icarus resolved it by running the testbench's post-wait code before the DUT saw the
+    edge, making every config appear to load one full cycle early and costing 7 failing
+    checks the first run. Fixed by driving all stimulus at `@(negedge clk)` instead (a
+    distinct event, half a cycle from either neighbouring posedge — removes the ambiguity
+    entirely), and documented as a comment in every testbench's `tick()`/drive tasks so
+    it isn't rediscovered next phase.
+  - **Second, related race**: reading DUT outputs with a bare `@(posedge clk)` (no delay)
+    sees their pre-edge (one-cycle-stale) value, since those outputs update via
+    nonblocking assignment in the NBA region, which runs strictly after the Active region
+    that resumes right after the wait. Edge-counting checks (counting occurrences over
+    many ticks) didn't care and passed even with this bug present, which is exactly why
+    it wasn't caught until point-in-time checks (exact pulse timing, SERIAL bit values)
+    started failing. Fixed by adding a 1ns settle (`#1`) after every `@(posedge clk)` used
+    for sampling.
+  - `sig_cell.sv`'s combinational `next_pin_out` block originally used `unique case` plus
+    a same-block override `if` statement after the case; Icarus 13.0 only partially
+    supports that pattern for this toolchain (own "sorry" warnings nearby). Simplified to
+    a single `if (!run) ... else case (...)` with no `unique` qualifier and no
+    post-case override — cleaner regardless of the tool quirk, and the actual fix (the
+    bug above was the real cause; this was a secondary, real but not symptom-causing
+    cleanup done at the same time).
+  - PULSE test expectation bug (not an RTL bug): `delay=20` was assumed to mean the
+    action starts on tick 20; the RTL actually (and sensibly) starts it on tick 21 — 20
+    full idle ticks (1..20), action on the 21st — consistent with how delay=0 already
+    behaved (0 idle ticks, action immediately on tick 1). Fixed the test's expectation,
+    not the RTL.
+  - `cap_cell.sv` SERIAL capture alignment: confirmed (not a bug) that `msb_first`
+    (shifts left, new bit at LSB) and `!msb_first` (shifts right, new bit at the top)
+    land a *partial* capture (`cfg_bits < CAP_W`) in different halves of the register —
+    bottom `[cfg_bits-1:0]` for msb_first, top `[CAP_W-1:CAP_W-cfg_bits]` for !msb_first.
+    Only matters when `CAP_W != cfg_bits`; documented in the module header so Phase 4
+    sizes `CAP_W` to the real frame width (as `utilization_estimate_top.sv` already does)
+    and never has to care.
+- Decisions: `sig_cell` gets no hardware BUS mode and no separate polarity field (both
+  explained above); atomic `apply` resets every internal counter/shift-register to zero
+  (not just the config fields), so a config change while running cleanly restarts the
+  cell's sequence under the new config rather than trying to splice old phase into new
+  timing. `TICK_W` widened from the Phase 0 register-map sketch's implied 16 bits to a
+  parameter (20 used for the utilization estimate, 32 as the modules' own default) —
+  Phase 0 §7 called that sketch "sizing only," so this is a refinement, not a conflict.
+- Next steps: Phase 4 (top level with compile-time config, hardware bring-up on the
+  verified loopback pairs) — needs my approval/redirection first, same phase-gate rule.
+  This is the first phase that touches real hardware; everything through Phase 3 is
+  simulation/synthesis-estimate only.
 
 ---
 

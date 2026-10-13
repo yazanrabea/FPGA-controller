@@ -324,11 +324,15 @@ item for Phase 4/5 hardware bring-up. (c), VIO over JTAG, remains available in p
 Phase 3/4 debug regardless, since CLAUDE.md already lists Vivado ILA as a planned
 verification tool. §8's framed protocol is now the one that applies (no AXI-Lite path).
 
-## 10. Resource estimate (rough, not measured)
+## 10. Resource estimate
 
-26 generic cells (22 `sig_cell` + 4 `cap_cell`) + one `run_ctrl` + register file + link
+**Superseded by Phase 3** (`fpga/src/sig_cell.sv`, `cap_cell.sv`, `run_ctrl.sv` now exist
+and pass self-checking testbenches — see `docs/WORKLOG.md`'s Phase 3 entry). The original
+hand-counted guess below is kept for history; §10a has a real synthesized number instead.
+
+~~26 generic cells (22 `sig_cell` + 4 `cap_cell`) + one `run_ctrl` + register file + link
 interface. Order-of-magnitude only, each `sig_cell`/`cap_cell` sized like a 16-bit counter +
-16-bit comparator + double-buffered (shadow/active) control word:
+16-bit comparator + double-buffered (shadow/active) control word:~~
 
 | Block | Rough FF | Rough LUT |
 |---|---|---|
@@ -337,9 +341,33 @@ interface. Order-of-magnitude only, each `sig_cell`/`cap_cell` sized like a 16-b
 | `run_ctrl` + register file + link interface | ~300-500 | ~300-500 |
 | **Total (estimate)** | **~2500-2700** | **~1600-1800** |
 
-Against the XC7Z020 (53,200 LUTs, 106,400 FFs): roughly 3-5% utilization either way — ample
-margin. **[simulated/estimated only — not measured; to be confirmed with real synthesis in
-Phase 3.]**
+### 10a. Phase 3: real synthesized number (yosys, not Vivado)
+
+No Vivado license/server in this environment, so `fpga/tb/utilization_estimate_top.sv`
+(26 cells unrolled explicitly, `TICK_W=20`, `SERIAL_W`/`CAP_W` sized to the real frame
+widths — 136 for `sipo_in`, 168 for `piso_out`, 1 for every pin that never uses
+SERIAL/serial-capture) was run through **yosys 0.69, `synth_xilinx -family xc7`** instead —
+a real generic-xc7 synthesis, not a hand count, though still not a true Vivado
+place-and-route (no timing closure, no routing congestion check):
+
+| Resource | Count | Of XC7Z020 | % |
+|---|---|---|---|
+| FF (`FDCE`+`FDPE`) | 4,923 | 106,400 | 4.6% |
+| LUT (`LUT2`-`LUT6`) | 6,449 | 53,200 | 12.1% |
+| `CARRY4` chains | 1,254 | 13,300 slices | — (carry logic for the wide tick-counter comparisons) |
+| yosys "Estimated LCs" | 5,244 | 53,200 | 9.9% |
+
+**[measured — real synthesis output, not estimated]**, reproducible with:
+```
+yosys -p "read_verilog -sv fpga/src/sig_cell.sv fpga/src/cap_cell.sv fpga/src/run_ctrl.sv \
+           fpga/tb/utilization_estimate_top.sv; \
+           synth_xilinx -family xc7 -top utilization_estimate_top; stat"
+```
+LUT usage (12.1%) is higher than the original hand-counted guess (~3%) mainly because of
+the two wide shift registers (136+168=304 bits total) and the `CARRY4`-chain comparators
+every tick-counter needs at `TICK_W=20` — still comfortably inside the chip's budget, but
+a real number instead of a guess. Not yet a Vivado report; that's a Phase 4 to-do once a
+real top level with the actual register file exists.
 
 ## 11. Exit criteria for this phase
 

@@ -26,6 +26,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - Board: Digilent **ZedBoard**, Zynq-7000 **XC7Z020-CLG484-1**, FMC-LPC connector.
 - Daughter board: **HTG-FMC-SMA-LVDS REV.1.0**. LA pairs on headers J2/J3 (J3: LA00-16, J2: LA17-33; header position = LA index; use only the **P** column).
 - Tools: **Vivado 2022.1** (RTL project, part `xc7z020clg484-1`, no block design). Project path must not contain `&`.
+- Secondary, local-only tools (not a replacement for Vivado, no bitstream capability): **Icarus Verilog** (`iverilog`/`vvp`) for simulating self-checking testbenches without a Vivado license/license-server, and **yosys** (`synth_xilinx -family xc7`) for a real (synthesized, not hand-counted) LUT/FF/CARRY4 utilization estimate. Installed via `brew` under `/opt/homebrew` — on an Intel-Homebrew (`/usr/local`) machine, use the arm64 `/opt/homebrew/bin/brew` explicitly if both are present and the Intel one's compiler is broken.
 - Measurement: Fluke 115 multimeter now; Keysight oscilloscope and Vivado ILA next.
 - FMC bank voltage: **LVCMOS18**, and the ZedBoard **J18 (VADJ) jumper must physically be on 1V8**. `IOSTANDARD LVCMOS18` in the XDC does NOT change the real voltage.
 
@@ -48,14 +49,18 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `fmc_selectable_loopback.sv` | T2: static 0/1 loopback + LD0-LD2 |
 | `fmc_clock_loopback.sv` | T3: 1 MHz clock loopback + sticky fault latch (LD3) |
 | `fmc_clock_loopback_slow.sv` | T4: ~100 Hz version for the multimeter (reuses T3 XDC) |
+| `sig_cell.sv` | Generic config-driven signal cell (LOW/HIGH/PULSE/CLOCK/SERIAL) for the controller in `generic_controller_prompt.md`/`docs/controller_spec.md`. One instance per driven chip pin. Not yet instantiated in a top level (Phase 4) — [simulated] only, `fpga/tb/sig_cell_tb.sv` |
+| `cap_cell.sv` | Generic config-driven capture cell (LEVEL/EDGE_COUNT/PERIOD/SERIAL) for the same controller. One instance per captured chip pin. [simulated] only, `fpga/tb/cap_cell_tb.sv` |
+| `run_ctrl.sv` | Global RUN/STOP + one-cycle APPLY strobe, synchronized command inputs. [simulated] only, `fpga/tb/run_ctrl_tb.sv` |
 
 ## 7. Next tasks
 1. Verify remaining 15 pairs (static + clock).
 2. Oscilloscope and Vivado ILA: period, duty, swing, edges, ringing.
 3. Generic per-pin I/O on hardware.
-4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted).
-5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed) and the explanation + timing diagrams in `docs/session1/`.
+4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
+5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed) and the explanation + timing diagrams in `docs/session1/`. Partly superseded by the generic controller (`sig_cell`'s SERIAL mode, `cap_cell`'s SERIAL mode) — see `docs/controller_spec.md` Phase 6.
 6. Connect and test the real Y-Flash chip.
+7. Generic controller Phase 4 (top level, compile-time config, hardware bring-up on the verified loopback pairs) — not started; everything in `sig_cell.sv`/`cap_cell.sv`/`run_ctrl.sv` is simulated only so far, never on real hardware.
 
 ## 8. Coding and answer rules for Claude
 - Provide clean, **synthesizable**, modular Verilog/SystemVerilog with inline comments about timing/logic.
