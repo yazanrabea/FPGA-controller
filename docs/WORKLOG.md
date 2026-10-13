@@ -6,7 +6,64 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Yazan | Repo setup | `feature/repo-setup` | everything (initial import) |
+| Rahaf | Generic chip controller — Phase 0 spec (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `docs/controller_spec.md`, this file |
+
+---
+
+## 2026-10-13, Rahaf, branch feature/rahaf-generic-controller-spec
+- Goal: Phase 0 of `generic_controller_prompt.md` — a spec for one generic, user-configurable
+  controller that replaces the hard-coded bring-up designs, so the user picks what every
+  chip input does per mode without editing HDL. No code this phase.
+- Done:
+  - Located the brief's source files (none of the stated paths were trusted blindly; verified
+    each): `docs/reference/nemo_chip/Blocks.xlsx` sheet "Blocks Interface - Digital";
+    `docs/reference/nemo_chip/IO_pinout.xlsx` sheet "IO-Pins-Dima" (the brief's named
+    `IO_pinout2.xlsx` does not exist as a filename in the repo — same content lives in
+    `IO_pinout.xlsx`, per that folder's own README); `docs/session1/NEMO chip SIPO, PISO and
+    Y-Flash modes explained.pdf` (read in full, 13 pages); `fpga/reference/dima_blocks/`
+    (`sipo.sv`, `sipo_wrapper.sv`, `piso.sv`, read in full).
+  - Installed `openpyxl` and `pypdf` locally (not present in the environment) to read the
+    `.xlsx`/`.pdf` sources programmatically rather than by eye.
+  - Wrote `docs/controller_spec.md`: reconciled 26-signal pin table (22 in + 4 out, matching
+    the session1 explainer's own count), config schema shape, FPGA register-map sketch, a
+    link-protocol frame draft, a link-options comparison with a recommendation, a rough
+    (unmeasured) resource estimate, and every disagreement found between the source sheets.
+- Hardware setup: none this session (spec only).
+- Results: none measured. The 26-signal list, the register-map sizes and the resource
+  estimate are **[simulated/estimated]** at best — nothing synthesized or run yet.
+- Problems / fixes: n/a (research/documentation session).
+- Decisions: none made — this phase produces a spec for approval, not a decision. One
+  recommendation given (link option (a), USB-UART on a PMOD) but explicitly left open
+  pending the user's sign-off per the task brief's phase-gate rule.
+- Disagreements / open questions found while cross-checking the sheets (full detail in
+  `docs/controller_spec.md` §2 and §5):
+  - Neither "Blocks Interface - Digital" nor "IO-Pins-Dima" alone lists all 22 inputs + 4
+    outputs the session1 explainer says exist; the correct 26 only appears by taking the
+    union of both sheets.
+  - `rst_sipo`: absent from "Blocks Interface - Digital" (pad 39 there is "Unused"); pin 37
+    in "IO-Pins-Dima"'s numbered list. The task brief's own note says pad 39 — neither number
+    is confirmed as the true physical pad.
+  - DFT-per-ADC select width disagrees: 4 bits (`s0-3_dft`) on "Blocks Interface - Digital"
+    vs. 2 bits (`s0-1_dft` only) on "IO-Pins-Dima" — neither cleanly selects the 8-way DFT
+    mux the brief describes.
+  - `s0_p/s1_p/s2_p` (newer sheet) vs. `s0/s1/s2` (older sheet) — same signals, renamed; the
+    explainer confirms this is a known rename, not two different pins.
+  - `Pinout_TO1`, `Pinout`, `Pinout_Dima` describe an unrelated, SPI-based digital interface
+    (`SCLK/SDI/SDO/CS/DATA<0:7>/...`) that matches none of the current chip's RTL signal
+    names — treated as describing an earlier/different chip generation, not this one.
+  - The unnumbered `PISO_WR` row and the "stand-alone test structure" pins are both flagged
+    as possibly not applicable to the current chip (one looks like a leftover from the SPI
+    scheme above; the other is explicitly stated in session1 to be off the latest pad ring).
+  - No chip-pin → FMC LA_P assignment exists anywhere in the repo yet — every signal's FMC
+    pin is TBD in `docs/controller_spec.md` §3, to be decided in Phase 1/4, constrained to
+    the 32 verified LA_P pins (only pair 0 has a hardware-confirmed loopback so far, per
+    `docs/pin_verification.md`).
+  - PMOD bank voltage (needed to judge link option (a)) is not documented anywhere in this
+    repo; not assumed in the spec, flagged as TBD pending a check against the actual
+    ZedBoard reference manual.
+- Next steps: get the spec in `docs/controller_spec.md` approved (or redirected) and the
+  link choice made — these are the Phase 0 exit criteria in `generic_controller_prompt.md`.
+  Phase 1 (config format + Python core) does not start before that.
 
 ---
 
