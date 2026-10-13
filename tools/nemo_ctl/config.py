@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-from .types import PinType
+from .pin_types import PinType
 
 DFT_HELPER_TYPE = "DFT_HELPER"  # pseudo-type: not a hardware PinType, resolved by dft_helper.py
 

@@ -49,9 +49,10 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `fmc_selectable_loopback.sv` | T2: static 0/1 loopback + LD0-LD2 |
 | `fmc_clock_loopback.sv` | T3: 1 MHz clock loopback + sticky fault latch (LD3) |
 | `fmc_clock_loopback_slow.sv` | T4: ~100 Hz version for the multimeter (reuses T3 XDC) |
-| `sig_cell.sv` | Generic config-driven signal cell (LOW/HIGH/PULSE/CLOCK/SERIAL) for the controller in `generic_controller_prompt.md`/`docs/controller_spec.md`. One instance per driven chip pin. Not yet instantiated in a top level (Phase 4) — [simulated] only, `fpga/tb/sig_cell_tb.sv` |
+| `sig_cell.sv` | Generic config-driven signal cell (LOW/HIGH/PULSE/CLOCK/SERIAL) for the controller in `generic_controller_prompt.md`/`docs/controller_spec.md`. One instance per driven chip pin. [simulated] only, `fpga/tb/sig_cell_tb.sv` |
 | `cap_cell.sv` | Generic config-driven capture cell (LEVEL/EDGE_COUNT/PERIOD/SERIAL) for the same controller. One instance per captured chip pin. [simulated] only, `fpga/tb/cap_cell_tb.sv` |
 | `run_ctrl.sv` | Global RUN/STOP + one-cycle APPLY strobe, synchronized command inputs. [simulated] only, `fpga/tb/run_ctrl_tb.sv` |
+| `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.svh` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] only so far (`fpga/tb/phase4_loopback_top_tb.sv`, `scripts/run_phase4_sim.sh`) — **not yet run on hardware**, see `docs/experiments/EXP-01_*.md` |
 
 ## 7. Next tasks
 1. Verify remaining 15 pairs (static + clock).
@@ -60,7 +61,11 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
 5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed) and the explanation + timing diagrams in `docs/session1/`. Partly superseded by the generic controller (`sig_cell`'s SERIAL mode, `cap_cell`'s SERIAL mode) — see `docs/controller_spec.md` Phase 6.
 6. Connect and test the real Y-Flash chip.
-7. Generic controller Phase 4 (top level, compile-time config, hardware bring-up on the verified loopback pairs) — not started; everything in `sig_cell.sv`/`cap_cell.sv`/`run_ctrl.sv` is simulated only so far, never on real hardware.
+7. Generic controller Phase 4 hardware run: `phase4_loopback_top.sv` is written and
+   [simulated] (`scripts/run_phase4_sim.sh`), but **needs Vivado + a physical ZedBoard**
+   (neither available where it was built) to actually synthesize, program, and measure —
+   see `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` for the exact
+   procedure. This is the actual Phase 4 exit criterion; nothing above it counts as done.
 
 ## 8. Coding and answer rules for Claude
 - Provide clean, **synthesizable**, modular Verilog/SystemVerilog with inline comments about timing/logic.

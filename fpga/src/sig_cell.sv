@@ -108,6 +108,25 @@ module sig_cell #(
     logic [SERIAL_W-1:0] shift_reg;
     logic [TICK_W-1:0]   bit_cnt;
 
+    // Next-shift value, split out so the SERIAL_W==1 case (a cell that will
+    // never actually use SERIAL mode, like every non-SERIAL test pin in
+    // fpga/tb/utilization_estimate_top.sv / fpga/src/phase4_loopback_top.sv)
+    // doesn't need a {shift_reg[-1:0], ...} part-select, which is invalid
+    // Verilog regardless of simulator -- a 1-bit register has nothing left
+    // to keep once its one bit shifts out, so the "next" value is just a
+    // placeholder; it's never actually observed, since bits_exhausted gates
+    // off any shift once bit_cnt reaches active_bits (<= SERIAL_W).
+    logic [SERIAL_W-1:0] shift_next_msb, shift_next_lsb;
+    generate
+        if (SERIAL_W > 1) begin : g_shift_multi
+            assign shift_next_msb = {shift_reg[SERIAL_W-2:0], 1'b0};
+            assign shift_next_lsb = {1'b0, shift_reg[SERIAL_W-1:1]};
+        end else begin : g_shift_one
+            assign shift_next_msb = '0;
+            assign shift_next_lsb = '0;
+        end
+    endgenerate
+
     assign delay_done = (delay_cnt >= active_delay);
 
     // how many repeats this type is supposed to do before finishing
@@ -256,9 +275,7 @@ module sig_cell #(
                     TYPE_SERIAL: begin
                         if (!bits_exhausted && shift_strobe) begin
                             bit_cnt   <= bit_cnt + 1'b1;
-                            shift_reg <= active_msb_first
-                                         ? {shift_reg[SERIAL_W-2:0], 1'b0}
-                                         : {1'b0, shift_reg[SERIAL_W-1:1]};
+                            shift_reg <= active_msb_first ? shift_next_msb : shift_next_lsb;
                         end
                     end
                     default: ;

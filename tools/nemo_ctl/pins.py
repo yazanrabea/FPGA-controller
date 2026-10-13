@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from .types import PinType
+from .pin_types import PinType
 
 DEFAULT_PIN_DB_PATH = Path(__file__).resolve().parent / "data" / "pin_db.yaml"
 

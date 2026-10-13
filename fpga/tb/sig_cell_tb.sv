@@ -59,6 +59,27 @@ module sig_cell_tb;
         .active(active_o), .done(done_o)
     );
 
+    // second instance at SERIAL_W=1 -- the width every non-SERIAL test pin in
+    // fpga/src/phase4_loopback_top.sv actually uses (a cell that will never run
+    // SERIAL mode); regression test for the {shift_reg[-1:0], ...} bug this found.
+    logic              w1_rst_n, w1_run, w1_apply;
+    logic [2:0]        w1_cfg_type;
+    logic              w1_cfg_idle_level;
+    logic [TICK_W-1:0] w1_cfg_delay, w1_cfg_param_a, w1_cfg_param_b, w1_cfg_cycles, w1_cfg_bits;
+    logic              w1_cfg_msb_first;
+    logic [0:0]        w1_cfg_data;
+    logic              w1_shift_strobe, w1_pin_out;
+
+    sig_cell #(.TICK_W(TICK_W), .SERIAL_W(1)) dut_w1 (
+        .clk(clk), .rst_n(w1_rst_n), .run(w1_run), .apply(w1_apply),
+        .cfg_type(w1_cfg_type), .cfg_idle_level(w1_cfg_idle_level),
+        .cfg_delay(w1_cfg_delay), .cfg_param_a(w1_cfg_param_a), .cfg_param_b(w1_cfg_param_b),
+        .cfg_cycles(w1_cfg_cycles), .cfg_msb_first(w1_cfg_msb_first),
+        .cfg_data(w1_cfg_data), .cfg_bits(w1_cfg_bits),
+        .shift_strobe(w1_shift_strobe),
+        .pin_out(w1_pin_out), .rising_edge(), .falling_edge(), .active(), .done()
+    );
+
     always #5 clk = ~clk;  // 100 MHz (10 ns period = 1 tick)
 
     int fails = 0;
@@ -325,6 +346,40 @@ module sig_cell_tb;
             check(got == expected, $sformatf("replayed SERIAL after re-RUN got %04b (expected %04b)", got, expected));
         end
         drive_run(0); tick(2);
+
+        // ---- 12. SERIAL_W=1 instance: CLOCK still works, and sending its one
+        //          SERIAL bit doesn't elaborate an invalid part-select ----
+        $display("\n-- SERIAL_W=1 instance (phase4_loopback_top's actual width for non-SERIAL pins) --");
+        w1_rst_n = 0; w1_run = 0; w1_apply = 0; w1_shift_strobe = 0;
+        w1_cfg_type = 0; w1_cfg_idle_level = 0; w1_cfg_delay = 0; w1_cfg_param_a = 0;
+        w1_cfg_param_b = 0; w1_cfg_cycles = 0; w1_cfg_msb_first = 1; w1_cfg_data = 0; w1_cfg_bits = 0;
+        tick(3);
+        @(negedge clk); w1_rst_n = 1;
+        tick(2);
+
+        @(negedge clk);
+        w1_cfg_type = TYPE_CLOCK; w1_cfg_param_a = 4; w1_cfg_param_b = 2;
+        @(negedge clk); w1_apply = 1;
+        @(negedge clk); w1_apply = 0;
+        @(negedge clk); w1_run = 1;
+        tick(1);
+        check(w1_pin_out == 1'b1, "SERIAL_W=1 instance's CLOCK mode still toggles correctly (high phase)");
+        tick(2);
+        check(w1_pin_out == 1'b0, "...and the low phase (period=4, high=2)");
+        @(negedge clk); w1_run = 0;
+
+        @(negedge clk);
+        w1_cfg_type = TYPE_SERIAL; w1_cfg_msb_first = 1; w1_cfg_data = 1'b1; w1_cfg_bits = 1;
+        @(negedge clk); w1_apply = 1;
+        @(negedge clk); w1_apply = 0;
+        @(negedge clk); w1_run = 1;
+        @(posedge clk); #1;
+        check(w1_pin_out == 1'b1, "SERIAL_W=1 instance presents its one bit (1) with no shift ever needed");
+        @(negedge clk); w1_shift_strobe = 1;
+        @(negedge clk); w1_shift_strobe = 0;
+        @(posedge clk); #1;
+        check(1'b1, "a shift_strobe after the only bit is already done doesn't elaborate {shift_reg[-1:0],...}");
+        @(negedge clk); w1_run = 0;
 
         // ---- summary ----
         $display("\n================================================");

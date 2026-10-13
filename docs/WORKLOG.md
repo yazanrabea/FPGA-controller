@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Generic chip controller — Phase 3 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `fpga/src/sig_cell.sv`, `cap_cell.sv`, `run_ctrl.sv`, `fpga/tb/*_tb.sv`, this file |
+| Rahaf | Generic chip controller — Phase 4, software side only (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `fpga/src/phase4_loopback_top.sv`, `tools/nemo_ctl/gen_svh.py`, `docs/experiments/EXP-01_*.md`, this file |
 
 ---
 
@@ -288,6 +288,109 @@ Tag every result **[simulated]** or **[measured on board]**.
   verified loopback pairs) — needs my approval/redirection first, same phase-gate rule.
   This is the first phase that touches real hardware; everything through Phase 3 is
   simulation/synthesis-estimate only.
+
+---
+
+## 2026-10-13, Rahaf, branch feature/rahaf-generic-controller-spec
+- Goal: Phase 4 of `generic_controller_prompt.md` — top level with compile-time config,
+  hardware bring-up on the verified/pin-mapped loopback pairs. **Important limitation
+  hit immediately: this phase's own exit criterion needs [measured on board] results,
+  which needs Vivado (not installed/licensed here) and physical access to the ZedBoard,
+  jumper wires, and a multimeter/scope (none available in this environment).** Did
+  everything achievable without those — the compile-time config generator, the top-level
+  RTL + XDC, and pre-validating all of it in simulation — and stopped at the hardware
+  boundary rather than fabricate a "ran fine" result. `docs/experiments/EXP-01_*.md` is
+  the handoff: fully written setup/procedure, results table marked PENDING.
+- Done:
+  - Added `config/phase4_loopback_test.yaml` + `tools/nemo_ctl/gen_svh.py` ->
+    `fpga/src/gen/nemo_cfg_pkg.svh`: one `sig_cell`+`cap_cell` pair per signal TYPE
+    (CLOCK/PULSE/SERIAL/LOW/HIGH), each on one loopback pair (0-4) from
+    `docs/pin_verification.md` — **not** the real chip config (`config/nemo_config.yaml`,
+    whose `pin_map` is still all `null`; there's no chip-pin -> FMC assignment to build a
+    real top level from yet). This matches the brief's own suggested Phase 4 activity:
+    "hardware test of every signal type on the verified loopback pairs." CLOCK uses
+    100 Hz (the already-proven `fmc_clock_loopback_slow` approach, read 0.899 V on the
+    multimeter previously); PULSE/SERIAL use human/multimeter/scope-scale timing (500 ms,
+    10 Hz) deliberately, so a person — or an oscilloscope — can actually observe them.
+  - Added `fpga/src/phase4_loopback_top.sv` + `fpga/constraints/phase4_loopback_top.xdc`:
+    `run_ctrl` + 5 driven test pairs + 5 capture pairs + an internal helper clock (not
+    tied to any pin) generating the SERIAL pair's shift/capture strobe. `sw[4]`=RUN,
+    `sw[2:0]`=which pair's status shows on the LEDs, no reset button (internal power-on
+    counter + a single auto-APPLY, since this is compile-time config with no link). XDC
+    reuses the exact same confirmed pin assignments as every earlier bring-up design
+    (clk/sw/led/fmc_pins all copied from `fmc_clock_loopback.xdc`, which agrees with the
+    other 4 XDC files already in the repo).
+  - Added `fpga/tb/phase4_loopback_top_tb.sv` (21 checks) + `scripts/run_phase4_sim.sh`:
+    pre-validates the whole top level with Icarus Verilog before it ever touches Vivado.
+    Models the 5 **external** jumper wires directly (shorting `fmc_pins[i]` to
+    `fmc_pins[i+16]`) since the real jumpers don't exist in simulation — the DUT itself
+    never connects them, same as on the real board. Deliberately checks only what's
+    reachable in a short simulated window (first edges, immediate levels, the LED mux,
+    the fault latch staying clear) since the real timings (500 ms pulse, 10 Hz strobe)
+    are far too slow to simulate to completion in reasonable wall-clock time — a
+    documented scope limit, not a shortcut: the brief's real validation is the hardware
+    step this testbench cannot replace.
+  - Fixed `scripts/create_project.tcl`: it only globbed `fpga/src/*.v`/`*.sv`, which would
+    have silently missed the generated `fpga/src/gen/*.svh` package — added that glob.
+  - Added a note to `docs/pin_verification.md` pointing at EXP-01 as pending additional
+    coverage for pairs 1-4, without touching that table's own PASS/FAIL columns (those
+    are T2-T4 results specifically, not this).
+- Hardware setup: **none — this is the limitation, see above.**
+- Results: **[simulated]** only. `scripts/run_phase3_sims.sh`: 69/69 (sig_cell grew to 28
+  checks, +4 for a new `SERIAL_W=1`/width-edge-case regression; cap_cell grew to 16, +3
+  for the matching `CAP_W=1` case). `scripts/run_phase4_sim.sh`: 21/21.
+  `python3 -m pytest`: 72/72 (added `gen_svh` tests). **No [measured on board] result
+  exists for this phase** — `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
+  §4 is a template, not a result.
+- Problems / fixes (several real bugs, each confirmed with a minimal repro before
+  deciding which side the bug was on — same discipline as Phase 3):
+  - **Real RTL bug in `sig_cell.sv`/`cap_cell.sv`**: `{shift_reg[SERIAL_W-2:0], ...}` /
+    `{capture_reg[CAP_W-2:0], ...}` becomes an invalid `[-1:0]` part-select whenever
+    `SERIAL_W`/`CAP_W` == 1 — exactly the width every non-SERIAL pin in
+    `phase4_loopback_top.sv` actually uses (cheapest possible shift register for a mode a
+    cell will never run). Neither Phase 3 unit testbench happened to exercise width==1,
+    so this sat undetected until the first real multi-cell top level. Fixed with a
+    `generate if (WIDTH > 1) / else` producing a same-named "next value" signal, used by
+    the main `always_ff` either way (`sig_cell`: the width==1 "next" value is an unused
+    placeholder, since `bits_exhausted` gates off any shift beyond the first bit anyway;
+    `cap_cell`: it's `sync_in` directly, since capturing straight into the one bit a
+    1-bit register has *is* the meaningful behavior there, not a placeholder). Added a
+    dedicated `SERIAL_W=1`/`CAP_W=1` regression test to each Phase 3 testbench.
+  - **Icarus-specific width-resolution bug, not an RTL bug**: wildcard-importing a
+    package (`import nemo_cfg_pkg::*;`) and then using an imported localparam as a module
+    port connection got silently truncated to 1 bit before zero-padding back — confirmed
+    with a minimal repro completely outside this project's files, and confirmed it
+    disappears with explicit `pkg::NAME` scoping instead of a wildcard import
+    (`$bits()` on the same identifier correctly reports 32 either way, so this is purely
+    about the *connection*, not the declaration). This one mattered: it would have fed
+    `cfg_param_a`/`cfg_param_b` almost-always-wrong values (e.g. the 100 Hz clock's
+    1,000,000-tick period truncated to its LSB, 0, then zero-extended) if shipped as a
+    "just a warning, probably fine" — rewrote every reference in
+    `phase4_loopback_top.sv` to explicit `nemo_cfg_pkg::` scoping.
+  - **Generator bug** (`tools/nemo_ctl/gen_svh.py`): MSB-first SERIAL data was emitted
+    right-justified (`0x00A5` for an 8-bit `0xA5` in a 16-bit field), but `sig_cell.sv`'s
+    own header comment already specifies MSB-first data must be left-justified (shifts
+    left from the top bit) — confirmed against the already-passing `sig_cell_tb.sv`,
+    which used the correct left-justified form. Fixed to shift left by
+    `(DATA_FIELD_W - bits)` for `msb_first`, left as-is for `!msb_first` (already
+    naturally right-justified, which is what shifting right from the bottom needs).
+  - **Design fix, not exactly a bug**: the SERIAL pair's helper clock drove its
+    `shift_strobe` from `rising_edge`, which fires immediately on the very first tick of
+    RUN (the idle -> first-high-phase transition) — shifting the first bit away before it
+    was ever presented. Switched to `falling_edge` (can't occur before at least a
+    half-period has elapsed), matching the real SIPO/PISO convention noted in
+    `docs/session1` (data changes on `clk_sipo`'s falling edge, not rising).
+- Decisions: built the bring-up top level against a dedicated test config
+  (`config/phase4_loopback_test.yaml`), not the real chip config — there is no FMC pin
+  assignment for the real 26 signals yet (`config/nemo_config.yaml`'s `pin_map` is still
+  all `null`), so generating a "real" top level now would mean inventing pin assignments.
+  This dedicated-config approach still satisfies the brief's own Phase 4 activity
+  ("hardware test of every signal type on the verified loopback pairs") without that.
+- Next steps: **run EXP-01 on real hardware** — needs Vivado + a physical ZedBoard with
+  VADJ on 1.8 V, 5 jumper wires per the experiment doc, and a multimeter/scope. I cannot
+  do this part; it needs you (or Yazan) to actually run it and fill in EXP-01 §4. Once
+  that's done [measured on board], Phase 5 (runtime link) is next and needs
+  approval/redirection first, same phase-gate rule as every prior phase.
 
 ---
 

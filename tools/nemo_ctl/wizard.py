@@ -23,7 +23,7 @@ from .config import DFT_HELPER_TYPE, Config, PinSetting
 from .dft_helper import SIGNAL_NAMES, resolve as resolve_dft
 from .groups import PIN_GROUPS, group_bits
 from .pins import Pin, input_blocks
-from .types import PinType
+from .pin_types import PinType
 from .units import UnitsError, quantize_clock, quantize_duration
 
 Ask = Callable[[str], str]

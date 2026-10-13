@@ -1,5 +1,5 @@
 from nemo_ctl.pins import load_pin_db
-from nemo_ctl.types import PinType
+from nemo_ctl.pin_types import PinType
 
 
 def test_pin_count_matches_session1_explainer():

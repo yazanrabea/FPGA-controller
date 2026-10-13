@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from .config import DFT_HELPER_TYPE, Config
 from .dft_helper import resolve as resolve_dft
 from .groups import PIN_GROUPS
-from .types import PinType
+from .pin_types import PinType
 from .units import quantize_clock, quantize_duration, ticks_to_ns
 
 

@@ -25,3 +25,9 @@ Legend: PASS / FAIL / – (not tested). All results here are **[measured on boar
 | 15 | LA15_P / J16 / J3-15 | LA31_P / B16 / J2-31 | – | – | – | – |
 
 Designs: T2 = `fmc_selectable_loopback`, T3 = `fmc_clock_loopback`, T4 = `fmc_clock_loopback_slow`.
+
+Pairs 1-4 also have a pending additional test: `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
+(generic-controller `sig_cell`/`cap_cell` PULSE/SERIAL/LOW/HIGH, not the T1-T4 designs above)
+— not yet run (needs Vivado + hardware, not available when it was written). Not a
+replacement for this table; update this table from T2-T4 results specifically, and EXP-01
+separately once it's actually run.

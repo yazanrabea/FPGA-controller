@@ -40,8 +40,11 @@ if {![file exists $xdc]} {
 set proj_dir [file join $repo build $top]
 create_project $top $proj_dir -part $part -force
 
-# Design sources: all .v/.sv in fpga/src. Unused modules are simply not elaborated.
-set srcs [glob -nocomplain [file join $repo fpga src *.v] [file join $repo fpga src *.sv]]
+# Design sources: all .v/.sv in fpga/src (unused modules are simply not elaborated),
+# plus any generated .svh packages in fpga/src/gen (e.g. nemo_cfg_pkg.svh, regenerated
+# by tools/nemo_ctl/gen_svh.py -- run that first if phase4_loopback_top's config changed).
+set srcs [glob -nocomplain [file join $repo fpga src *.v] [file join $repo fpga src *.sv] \
+                           [file join $repo fpga src gen *.svh]]
 add_files -norecurse -fileset sources_1 $srcs
 add_files -norecurse -fileset constrs_1 $xdc
 set_property top $top [get_filesets sources_1]

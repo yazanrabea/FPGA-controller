@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .config import DFT_HELPER_TYPE, Config
 from .groups import PIN_GROUPS
-from .types import PinType
+from .pin_types import PinType
 from .units import quantize_clock, quantize_duration
 
 

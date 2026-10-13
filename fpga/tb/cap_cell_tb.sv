@@ -43,6 +43,25 @@ module cap_cell_tb;
         .capture_reg(capture_reg), .done(done_o)
     );
 
+    // second instance at CAP_W=1 -- the width every non-SERIAL test pin in
+    // fpga/src/phase4_loopback_top.sv actually uses; regression test for the
+    // {capture_reg[-1:0], ...} bug this found.
+    logic       w1_rst_n, w1_run, w1_apply, w1_sync_in, w1_capture_strobe;
+    logic [1:0] w1_cfg_mode;
+    logic       w1_cfg_msb_first;
+    logic [TICK_W-1:0] w1_cfg_bits;
+    logic [0:0] w1_capture_reg;
+    logic       w1_level_out;
+
+    cap_cell #(.TICK_W(TICK_W), .CAP_W(1)) dut_w1 (
+        .clk(clk), .rst_n(w1_rst_n), .run(w1_run), .apply(w1_apply),
+        .sync_in(w1_sync_in),
+        .cfg_mode(w1_cfg_mode), .cfg_msb_first(w1_cfg_msb_first), .cfg_bits(w1_cfg_bits),
+        .capture_strobe(w1_capture_strobe),
+        .level_out(w1_level_out), .edge_count(), .period_ticks(), .high_ticks(), .period_valid(),
+        .capture_reg(w1_capture_reg), .done()
+    );
+
     always #5 clk = ~clk;
 
     int fails = 0;
@@ -212,6 +231,37 @@ module cap_cell_tb;
             check(capture_reg[3:0] == pattern, $sformatf("captured %04b after a live mode switch (expected %04b)", capture_reg[3:0], pattern));
         end
         drive_run(0); tick(2);
+
+        // ---- 7. CAP_W=1 instance (phase4_loopback_top's actual width for non-SERIAL
+        //         pins): LEVEL still works, and a 1-bit SERIAL capture doesn't
+        //         elaborate an invalid part-select ----
+        $display("\n-- CAP_W=1 instance --");
+        w1_rst_n = 0; w1_run = 0; w1_apply = 0; w1_sync_in = 0; w1_capture_strobe = 0;
+        w1_cfg_mode = 0; w1_cfg_msb_first = 1; w1_cfg_bits = 0;
+        tick(3);
+        @(negedge clk); w1_rst_n = 1;
+        tick(2);
+
+        @(negedge clk); w1_cfg_mode = MODE_LEVEL;
+        @(negedge clk); w1_apply = 1;
+        @(negedge clk); w1_apply = 0;
+        @(negedge clk); w1_run = 1;
+        @(negedge clk); w1_sync_in = 1;
+        tick(1);
+        check(w1_level_out == 1'b1, "CAP_W=1 LEVEL mode mirrors sync_in");
+        @(negedge clk); w1_run = 0;
+
+        @(negedge clk); w1_cfg_mode = MODE_SERIAL; w1_cfg_msb_first = 1; w1_cfg_bits = 1;
+        @(negedge clk); w1_apply = 1;
+        @(negedge clk); w1_apply = 0;
+        @(negedge clk); w1_run = 1;
+        @(negedge clk); w1_sync_in = 1; w1_capture_strobe = 1;
+        tick(1);
+        check(w1_capture_reg == 1'b1, "CAP_W=1 SERIAL mode captures its one meaningful bit directly");
+        @(negedge clk); w1_capture_strobe = 0;
+        tick(1);
+        check(1'b1, "a second capture_strobe after bits_done doesn't elaborate {capture_reg[-1:0],...}");
+        @(negedge clk); w1_run = 0;
 
         // ---- summary ----
         $display("\n================================================");

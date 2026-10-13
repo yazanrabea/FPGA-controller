@@ -1,0 +1,60 @@
+# Phase 4 bring-up config (generic_controller_prompt.md §3 Phase 4): one
+# sig_cell+cap_cell pair per signal TYPE, exercised on the pin-mapped loopback
+# pairs from docs/pin_verification.md -- NOT the real chip config
+# (config/nemo_config.yaml, whose pin_map is still all null; no chip-pin ->
+# FMC assignment exists yet). This is the brief's own suggested Phase 4
+# activity: "hardware test of every signal type on the verified loopback
+# pairs."
+#
+# la_pair 0 is the only one with a prior CONFIRMED end-to-end hardware
+# loopback (docs/pin_verification.md: static + 1 MHz checker + multimeter, all
+# PASS). la_pairs 1-4 have their pin mapping confirmed via XDC (all 5 XDC
+# files agree) but have never carried a real signal yet -- testing them here
+# incidentally extends CLAUDE.md §7 item 1's open "verify remaining 15 pairs"
+# task, four pairs' worth, as a side effect of proving the generic cells.
+#
+# Consumed by tools/nemo_ctl/gen_svh.py -> fpga/src/gen/nemo_cfg_pkg.svh.
+
+pairs:
+  - name: test_clock
+    la_pair: 0
+    type: CLOCK
+    freq: 100Hz        # matches the already-proven T4 slow-clock approach
+                        # (docs/pin_verification.md: read 0.899 V, ideal 0.9 V)
+    duty: 50%
+    capture_mode: EDGE_COUNT
+
+  - name: test_pulse
+    la_pair: 1
+    type: PULSE
+    width: 500ms        # long enough to see on LD0/LD1 or catch on a scope
+    delay: 0
+    polarity: active_high
+    repeat: 5
+    period: 2s
+    capture_mode: EDGE_COUNT
+
+  - name: test_serial
+    la_pair: 2
+    type: SERIAL
+    data: "0xA5"         # 1010_0101 -- mixed pattern, not all-0/all-1
+    bits: 8
+    msb_first: true
+    capture_mode: SERIAL
+
+  - name: test_low
+    la_pair: 3
+    type: LOW
+    capture_mode: LEVEL
+
+  - name: test_high
+    la_pair: 4
+    type: HIGH
+    capture_mode: LEVEL
+
+# Internal helper clock -- NOT tied to any FMC/LED pin. Generates the
+# shift/capture strobe for test_serial only (sig_cell's SERIAL mode needs an
+# external bit-clock edge by design; see sig_cell.sv's header comment). Slow
+# enough to watch bit-by-bit on LD0/LD1 while it runs.
+serial_strobe:
+  freq: 10Hz

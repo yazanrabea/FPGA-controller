@@ -91,6 +91,23 @@ module cap_cell #(
     assign fall = run && !sync_in && sync_in_d;
     assign bits_done = (bit_cnt >= active_bits);
 
+    // Next-shift value, split out so CAP_W==1 (a cell that will never
+    // actually use SERIAL mode) doesn't need a {capture_reg[-1:0], ...}
+    // part-select, which is invalid regardless of simulator. Unlike
+    // sig_cell's shift register, the CAP_W==1 case here is meaningful, not
+    // dead: capturing directly into the one bit the register has is the
+    // whole point when CAP_W==1, so it's just sync_in, not a placeholder.
+    logic [CAP_W-1:0] capture_next_msb, capture_next_lsb;
+    generate
+        if (CAP_W > 1) begin : g_capture_multi
+            assign capture_next_msb = {capture_reg[CAP_W-2:0], sync_in};
+            assign capture_next_lsb = {sync_in, capture_reg[CAP_W-1:1]};
+        end else begin : g_capture_one
+            assign capture_next_msb = sync_in;
+            assign capture_next_lsb = sync_in;
+        end
+    endgenerate
+
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             active_mode      <= MODE_LEVEL;
@@ -157,9 +174,7 @@ module cap_cell #(
                     MODE_SERIAL: begin
                         if (!bits_done && capture_strobe) begin
                             bit_cnt     <= bit_cnt + 1'b1;
-                            capture_reg <= active_msb_first
-                                           ? {capture_reg[CAP_W-2:0], sync_in}
-                                           : {sync_in, capture_reg[CAP_W-1:1]};
+                            capture_reg <= active_msb_first ? capture_next_msb : capture_next_lsb;
                             if (bit_cnt == active_bits - 1) done <= 1'b1;
                         end
                     end
