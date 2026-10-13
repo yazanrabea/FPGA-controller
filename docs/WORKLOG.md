@@ -30,3 +30,4 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Done: added `docs/reference/nemo_chip/Blocks.xlsx` and `IO_pinout.xlsx` (from `IO_pinout(2).xlsx`) with a README describing the sheets. No code changes.
 - Results: none.
 - Next steps: use the Pinout sheets to plan the chip-pin to FMC LA-pin mapping for the SIPO/PISO and phase signals.
+- Moved Rahaf's `session1/` (SIPO/PISO/Y-Flash explanation PDF + 6 diagrams) to `docs/session1/` to match the repo layout; contents unchanged. CLAUDE.md layout and SIPO/PISO task now point there.

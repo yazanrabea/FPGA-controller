@@ -54,7 +54,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 2. Oscilloscope and Vivado ILA: period, duty, swing, edges, ringing.
 3. Generic per-pin I/O on hardware.
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted).
-5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed).
+5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed) and the explanation + timing diagrams in `docs/session1/`.
 6. Connect and test the real Y-Flash chip.
 
 ## 8. Coding and answer rules for Claude
@@ -149,6 +149,7 @@ docs/measurements/   # scope/multimeter captures (PDF/PNG)
 docs/reference/      # pin_mapping_FMC-FPGA.xlsx, FMC pinout PDF, papers/
 docs/project/        # project spec, spec presentation, NEMO tracking sheet
 docs/meetings/       # per-meeting material (YYYY-MM-DD/)
+docs/session1/       # SIPO/PISO/Y-Flash modes explained + diagrams (Rahaf)
 fpga/reference/      # third-party code for reference only, not built (e.g. dima_blocks/ SIPO/PISO)
 ```
 
