@@ -1,0 +1,364 @@
+_generated_by: tools/nemo_ctl/gen_pin_db.py
+_source:
+- docs/reference/nemo_chip/Blocks.xlsx!Blocks Interface - Digital
+- docs/reference/nemo_chip/IO_pinout.xlsx!IO-Pins-Dima
+- docs/controller_spec.md (reconciliation + per-pin metadata)
+_count:
+  inputs: 22
+  outputs: 4
+  total: 26
+pins:
+- name: clk
+  block: Clock Generator
+  direction: in
+  pad_digital_sheet: 14
+  pad_io_pins_dima: 52
+  fmc_la: null
+  allowed_types:
+  - CLOCK
+  limits:
+    max_freq_hz: null
+  idle_level: LOW
+  polarity: null
+  notes: Drives on-chip phi1/phi2/phiR generation; max rate TBD (Q7).
+- name: reset
+  block: Clock Generator
+  direction: in
+  pad_digital_sheet: 63
+  pad_io_pins_dima: 28
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - PULSE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: Meaning/polarity undocumented (Q6).
+- name: set
+  block: Clock Generator
+  direction: in
+  pad_digital_sheet: 24
+  pad_io_pins_dima: 32
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - PULSE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: Meaning/polarity undocumented (Q6).
+- name: rst_dsa
+  block: DSA
+  direction: in
+  pad_digital_sheet: 6
+  pad_io_pins_dima: 35
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - PULSE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: Clears DSA accumulators; polarity TBD (Q6).
+- name: pulse
+  block: Array with Muxes
+  direction: in
+  pad_digital_sheet: 22
+  pad_io_pins_dima: 53
+  fmc_la: null
+  allowed_types:
+  - PULSE
+  limits:
+    min_width_ticks: null
+  idle_level: null
+  polarity: null
+  notes: Probably program/erase pulse timing; width/meaning TBD (Q6, Q7).
+- name: s0_p
+  block: Array with Muxes
+  direction: in
+  pad_digital_sheet: 11
+  pad_io_pins_dima: 29
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: 3-bit mode/op select with s1_p,s2_p; meaning TBD (Q6).
+- name: s1_p
+  block: Array with Muxes
+  direction: in
+  pad_digital_sheet: 12
+  pad_io_pins_dima: 30
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: See s0_p.
+- name: s2_p
+  block: Array with Muxes
+  direction: in
+  pad_digital_sheet: 13
+  pad_io_pins_dima: 31
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: See s0_p.
+- name: b0_dft
+  block: DFT - All
+  direction: in
+  pad_digital_sheet: 25
+  pad_io_pins_dima: 40
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: "DFT-All pair select; lookup table UNCONFIRMED (spec \xA74)."
+- name: b1_dft
+  block: DFT - All
+  direction: in
+  pad_digital_sheet: 23
+  pad_io_pins_dima: 41
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: See b0_dft.
+- name: b2_dft
+  block: DFT - All
+  direction: in
+  pad_digital_sheet: 62
+  pad_io_pins_dima: 42
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: See b0_dft.
+- name: s0_dft
+  block: dft per ADC
+  direction: in
+  pad_digital_sheet: 8
+  pad_io_pins_dima: 38
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: dft-per-ADC d0..d7 select; bit count disagrees between sheets (Q10).
+- name: s1_dft
+  block: dft per ADC
+  direction: in
+  pad_digital_sheet: 7
+  pad_io_pins_dima: 39
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: See s0_dft.
+- name: s2_dft
+  block: dft per ADC
+  direction: in
+  pad_digital_sheet: 64
+  pad_io_pins_dima: null
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: "Absent from IO-Pins-Dima's linear list (Q10) \u2014 exists per the digital sheet."
+- name: s3_dft
+  block: dft per ADC
+  direction: in
+  pad_digital_sheet: 5
+  pad_io_pins_dima: null
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - BUS
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: "Absent from IO-Pins-Dima's linear list (Q10) \u2014 exists per the digital sheet."
+- name: sipo_in
+  block: SIPO
+  direction: in
+  pad_digital_sheet: 28
+  pad_io_pins_dima: 27
+  fmc_la: null
+  allowed_types:
+  - SERIAL
+  limits:
+    frame_bits: 136
+  idle_level: LOW
+  polarity: null
+  notes: MSB first, bit135 first; must change on clk_sipo falling edge.
+- name: clk_sipo
+  block: SIPO
+  direction: in
+  pad_digital_sheet: 29
+  pad_io_pins_dima: 26
+  fmc_la: null
+  allowed_types:
+  - CLOCK
+  limits:
+    max_freq_hz: null
+    cycles: 136
+  idle_level: LOW
+  polarity: null
+  notes: 136 edges then stop low; max rate TBD (Q7).
+- name: cs
+  block: SIPO
+  direction: in
+  pad_digital_sheet: 31
+  pad_io_pins_dima: 34
+  fmc_la: null
+  allowed_types:
+  - PULSE
+  limits:
+    min_width_ticks: 1
+  idle_level: LOW
+  polarity: active_high
+  notes: Edge-triggered, not a level; must come from a registered FF.
+- name: rst_sipo
+  block: SIPO
+  direction: in
+  pad_digital_sheet: null
+  pad_io_pins_dima: 37
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - PULSE
+  limits: {}
+  idle_level: HIGH
+  polarity: active_low
+  notes: "Active-low confirmed from RTL (rst_n); pad-level polarity TBD (Q6). Pad number itself unconfirmed:\
+    \ 37 (IO-Pins-Dima list) vs 39 (brief's note on the floorplan diagram) \u2014 see spec \xA72.1."
+- name: clk_piso
+  block: PISO
+  direction: in
+  pad_digital_sheet: 56
+  pad_io_pins_dima: 25
+  fmc_la: null
+  allowed_types:
+  - CLOCK
+  limits:
+    max_freq_hz: null
+    cycles: 168
+  idle_level: LOW
+  polarity: null
+  notes: 1 load edge + 167 shift edges; max rate TBD (Q7).
+- name: shift
+  block: PISO
+  direction: in
+  pad_digital_sheet: 57
+  pad_io_pins_dima: 33
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  limits: {}
+  idle_level: LOW
+  polarity: null
+  notes: 0=load/sample, 1=shift (RTL `load`); sequencing is a Phase-7 concern.
+- name: rst_piso
+  block: PISO
+  direction: in
+  pad_digital_sheet: 59
+  pad_io_pins_dima: 36
+  fmc_la: null
+  allowed_types:
+  - LOW
+  - HIGH
+  - PULSE
+  limits: {}
+  idle_level: HIGH
+  polarity: active_low
+  notes: Active-low confirmed from RTL (rst_n); pad-level polarity TBD (Q6).
+- name: sipo_out
+  block: SIPO
+  direction: out
+  pad_digital_sheet: 30
+  pad_io_pins_dima: 44
+  fmc_la: null
+  allowed_types:
+  - CAPTURE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: shift_reg[0], one-clock-late echo of sipo_in; liveness check only.
+- name: piso_out
+  block: PISO
+  direction: out
+  pad_digital_sheet: 58
+  pad_io_pins_dima: 43
+  fmc_la: null
+  allowed_types:
+  - CAPTURE
+  limits:
+    frame_bits: 168
+  idle_level: null
+  polarity: null
+  notes: MSB first, split 4x[14+7+14+7]; bit 1 valid before any shift clocks, sample thereafter on clk_piso
+    falling edge.
+- name: dft0_buff
+  block: DFT - All
+  direction: out
+  pad_digital_sheet: 4
+  pad_io_pins_dima: 54
+  fmc_la: null
+  allowed_types:
+  - CAPTURE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: Buffered DFT observation output 0; selection via DFT helper (UNCONFIRMED).
+- name: dft1_buff
+  block: DFT - All
+  direction: out
+  pad_digital_sheet: 66
+  pad_io_pins_dima: 55
+  fmc_la: null
+  allowed_types:
+  - CAPTURE
+  limits: {}
+  idle_level: null
+  polarity: null
+  notes: Buffered DFT observation output 1; selection via DFT helper (UNCONFIRMED).

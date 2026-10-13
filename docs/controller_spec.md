@@ -317,12 +317,12 @@ moot. Finalizing this section is blocked on the link decision (§9).
 | (b) Zynq PS + AXI-Lite (on-board USB-UART, wired to the PS) | No extra cable — reuses the ZedBoard's built-in USB-UART; AXI-Lite gives a clean register-mapped interface, no §8 framing needed. | Requires a block design + Vitis. **This directly conflicts with CLAUDE.md §4: "Vivado 2022.1 (RTL project, part xc7z020clg484-1, no block design)."** Adopting it means either changing that project rule or keeping the PS path as a separate sub-project. | **No**, not without changing an existing project rule — flagged, not decided here. |
 | (c) Vivado VIO over JTAG | Zero extra hardware, fastest to stand up, good for Phase 3/4 bring-up and debug. | Explicitly debug-only — requires a PC tethered via JTAG/Vivado hardware manager, not a standalone link; doesn't give the "change a setting from the PC without re-synthesis" Phase 5 exit criterion on its own (VIO probes are fixed at synthesis time unless re-generated). | Usable now, not as the final link. |
 
-**Recommendation: (a) USB-UART on a PMOD**, contingent on confirming the PMOD bank voltage
-against the actual ZedBoard reference manual (not assumed here) — it is the only option
-that doesn't require renegotiating the "no block design" project rule. Suggest using (c),
-VIO over JTAG, in parallel during Phase 3/4 as a debug aid regardless of which link is
-chosen for Phase 5, since CLAUDE.md already lists Vivado ILA as a planned verification tool.
-**This is a recommendation for approval, not a decision — exit criterion for this phase.**
+**Decision (2026-10-13, approved by Rahaf): option (a), USB-UART on a PMOD.** Still
+contingent on confirming the PMOD bank voltage against the actual ZedBoard reference manual
+before wiring anything — that check has not been done yet and is carried forward as an open
+item for Phase 4/5 hardware bring-up. (c), VIO over JTAG, remains available in parallel for
+Phase 3/4 debug regardless, since CLAUDE.md already lists Vivado ILA as a planned
+verification tool. §8's framed protocol is now the one that applies (no AXI-Lite path).
 
 ## 10. Resource estimate (rough, not measured)
 
@@ -343,6 +343,6 @@ Phase 3.]**
 
 ## 11. Exit criteria for this phase
 
-Per the task brief: approve this spec, and choose the link (§9) — recommendation is option
-(a), USB-UART on a PMOD, pending PMOD voltage confirmation. Phase 1 (config format + Python
-core) does not start until that approval is given.
+Per the task brief: approve this spec, and choose the link (§9). **Both done 2026-10-13** —
+spec approved, link = option (a) USB-UART on a PMOD (pending PMOD voltage confirmation,
+carried into later phases). Phase 1 starts next.

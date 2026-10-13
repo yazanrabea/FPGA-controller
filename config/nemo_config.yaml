@@ -1,0 +1,80 @@
+# NEMO / Y-Flash FPGA controller config — source of truth.
+#
+# Edited by hand, by the Phase-2 wizard, or via the Excel round-trip (tools/nemo_ctl).
+# Pin names, blocks, allowed types and known limits come from
+# tools/nemo_ctl/data/pin_db.yaml (generated from the lab workbooks, see
+# tools/nemo_ctl/gen_pin_db.py and docs/controller_spec.md §2/§3).
+#
+# Anything marked TBD/UNCONFIRMED here mirrors an open question in
+# docs/controller_spec.md §5 — do not treat these values as chip-verified.
+
+modes:
+  READ: {}   # not built out yet — Y-Flash read-mode timing is TBD (session1 explainer §5)
+
+  WRITE: {}  # TBD — kept as one mode per generic_controller_prompt.md §1, to be split
+             # into PROGRAM / ERASE once v_write/v_erase sequencing is confirmed with Dima
+
+  INFERENCE:
+    Clock Generator:
+      clk:   {type: CLOCK, freq: 1MHz, duty: 50%}
+      reset: {type: PULSE, width: 1us, delay: 0, polarity: active_low}   # polarity TBD, Q6
+      set:   {type: LOW}                                                 # TBD, Q6
+
+    Array with Muxes:
+      s0_p:  {type: LOW}            # TBD meaning, Q6
+      s1_p:  {type: LOW}
+      s2_p:  {type: LOW}
+      pulse: {type: PULSE, width: 1us, delay: 0}   # TBD meaning/width, Q6/Q7
+
+    DSA:
+      rst_dsa: {type: PULSE, width: 100ns, polarity: active_high}        # TBD, Q6
+
+    SIPO:
+      rst_sipo: {type: PULSE, width: 100ns, polarity: active_low, delay: 0}
+      clk_sipo: {type: CLOCK, freq: 1MHz, cycles: 136, delay: 2us}
+      sipo_in:  {type: SERIAL, clock: clk_sipo, data: "0x" ,
+                 msb_first: true, data_edge: falling, bits: 136}
+      cs:       {type: PULSE, width: 1us, delay: 140us}
+      sipo_out: {type: CAPTURE, mode: level}   # liveness echo only, not a real output
+
+    PISO:
+      rst_piso: {type: PULSE, width: 100ns, polarity: active_low, delay: 0}
+      clk_piso: {type: CLOCK, freq: 1MHz, cycles: 168, delay: 150us}
+      shift:    {type: LOW}        # sequenced in Phase 7: 0 for the load edge, then 1
+      piso_out: {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling}
+
+    DFT - All:
+      dft_select: {adc: 3, signal: phi1}   # helper -> b0..b2, s0..s3 — UNCONFIRMED, spec §4
+      # raw alternative, kept available per generic_controller_prompt.md §1:
+      # b_dft: {type: BUS, value: 0b011}
+
+# Chip pin -> FMC LA_P pin. TBD for every signal (docs/controller_spec.md §3) — no
+# assignment exists yet; this is a Phase 1/4 decision, constrained to the 32 verified
+# LA_P pins in docs/pin_verification.md (only pair 0 has a hardware-confirmed loopback).
+pin_map:
+  clk: null
+  reset: null
+  set: null
+  rst_dsa: null
+  pulse: null
+  s0_p: null
+  s1_p: null
+  s2_p: null
+  b0_dft: null
+  b1_dft: null
+  b2_dft: null
+  s0_dft: null
+  s1_dft: null
+  s2_dft: null
+  s3_dft: null
+  sipo_in: null
+  clk_sipo: null
+  cs: null
+  rst_sipo: null
+  clk_piso: null
+  shift: null
+  rst_piso: null
+  sipo_out: null
+  piso_out: null
+  dft0_buff: null
+  dft1_buff: null

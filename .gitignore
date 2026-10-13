@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 # Vivado generated output (rebuild with scripts/create_project.tcl)
-=======
-# Vivado generated files
 *.runs/
 *.cache/
 *.hw/
@@ -9,31 +6,25 @@
 *.ip_user_files/
 *.gen/
 .Xil/
->>>>>>> origin/main
 *.jou
 *.log
 *.str
 *.backup.*
-<<<<<<< HEAD
-.Xil/
-*.cache/
-*.hw/
-*.runs/
-*.sim/
-*.ip_user_files/
-*.gen/
 *.bit
 *.xpr
 build/
+webtalk*
+vivado_pid*
+usage_statistics_webtalk.*
 
 # OS / editor
 Thumbs.db
 desktop.ini
 .DS_Store
 ~$*
-=======
-webtalk*
-vivado_pid*
-usage_statistics_webtalk.*
-.DS_Store
->>>>>>> origin/main
+
+# Python (tools/nemo_ctl)
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/

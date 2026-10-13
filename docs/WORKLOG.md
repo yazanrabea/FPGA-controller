@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Generic chip controller — Phase 0 spec (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `docs/controller_spec.md`, this file |
+| Rahaf | Generic chip controller — Phase 1 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `tools/nemo_ctl/`, `config/nemo_config.yaml`, this file |
 
 ---
 
@@ -64,6 +64,66 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Next steps: get the spec in `docs/controller_spec.md` approved (or redirected) and the
   link choice made — these are the Phase 0 exit criteria in `generic_controller_prompt.md`.
   Phase 1 (config format + Python core) does not start before that.
+
+---
+
+## 2026-10-13, Rahaf, branch feature/rahaf-generic-controller-spec
+- Goal: Phase 0 exit + Phase 1 of `generic_controller_prompt.md` — config format + Python
+  core, no hardware. Phase 0 spec approved; link choice = option (a), USB-UART on a PMOD
+  (PMOD voltage still needs checking against the real ZedBoard manual before any wiring).
+- Done:
+  - Updated `docs/controller_spec.md` §9/§11 to record the approval and link decision.
+  - Added `tools/nemo_ctl/`, a Python package (no FPGA code):
+    - `gen_pin_db.py` — regenerates `data/pin_db.yaml` straight from
+      `docs/reference/nemo_chip/Blocks.xlsx` / `IO_pinout.xlsx`, applying the Phase 0
+      reconciliation (both sheets' disagreeing pad numbers kept side by side, not
+      resolved); raises if a workbook changes in a way the reconciliation doesn't expect.
+    - `pins.py`, `types.py`, `groups.py`, `dft_helper.py` — pin database, the 7 setting
+      types, BUS pin groupings (`s_p`, `b_dft`, `s_dft`), and the DFT "pick ADC k, signal
+      X" helper (kept explicitly `confirmed=False`, per spec §4).
+    - `units.py` — ns/us/ms/Hz/kHz/MHz/% <-> 100 MHz-tick integers, always reporting
+      achieved value + error (checked against the brief's own worked example: 3 MHz ->
+      N=33 -> 3.0303 MHz, +1.0%, matches exactly).
+    - `config.py` — loads/saves `config/nemo_config.yaml`.
+    - `validate.py` — the four required checks: allowed types per pin, safe limits
+      (generic 10 MHz warn / 50 MHz hard clock ceiling + any pin-specific limit), SERIAL
+      must reference a configured CLOCK pin, no pin configured twice.
+    - `timing.py` — per-mode timing summary table.
+    - `preview.py` — WaveDrom JSON waveform preview per mode.
+    - `excel_io.py` — Excel import/export, one sheet per mode, same columns as the YAML,
+      plus a blank template generator.
+  - Added `config/nemo_config.yaml`: the example from the brief, filled out for
+    INFERENCE (Clock Generator, Array with Muxes, DSA, SIPO, PISO, DFT - All), with READ
+    and WRITE left empty (TBD, per spec §1/§6). `pin_map` present with every chip pin ->
+    `null` (TBD, nothing assigned yet, per spec §3).
+  - Added `tools/nemo_ctl/tests/` (pytest, 55 tests) covering every module above,
+    including a regression test that re-running `gen_pin_db.py` against the live
+    workbooks reproduces the checked-in `pin_db.yaml` exactly.
+  - Fixed a real bug this testing turned up: `validate.py`'s clock hard-limit check
+    compared against the *achieved* frequency, but `quantize_clock` already clamps
+    `period_ticks` to a minimum of 2 ticks, so achieved frequency can never exceed 50 MHz
+    on the 100 MHz timebase — the check was dead code. Fixed to check the *requested*
+    frequency instead, so asking for e.g. 60 MHz is now correctly flagged as an error
+    (not silently clamped to 50 MHz with no warning).
+  - Fixed an unrelated pre-existing bug found while editing `.gitignore`: it had
+    unresolved git merge-conflict markers (`<<<<<<<`/`=======`/`>>>>>>>`) committed on
+    `main` since `0b26dd4` ("merge: fold Rahaf's initial upload into the repo layout") —
+    cleaned up by merging both halves' content, deduplicated, and added the new Python
+    tooling ignores (`__pycache__/`, `.pytest_cache/`, etc.).
+  - Added `pytest.ini` (repo root, points at `tools/nemo_ctl/tests`) and
+    `tools/requirements.txt` (openpyxl, pyyaml, pytest).
+- Hardware setup: none — Phase 1 is explicitly software-only.
+- Results: **[simulated/software only]**. `python3 -m pytest` from the repo root: 55
+  passed, 0 failed. The example INFERENCE config validates with 4 warnings (all TBD/
+  UNCONFIRMED items already flagged in the spec, zero errors) and produces a correct
+  timing table and WaveDrom preview — this is the Phase 1 exit criterion.
+- Problems / fixes: the two bugs above (dead hard-limit check; broken `.gitignore`).
+- Decisions: Excel export/import round-trips through a flat, fixed column set
+  (`Block, Pin, Type` + every param key any type uses) rather than a different column
+  set per type, so "same columns" (brief's own requirement) holds exactly across modes
+  and sheets.
+- Next steps: Phase 2, the interactive CLI wizard — needs my approval/redirection first
+  per the brief's phase-gate rule, same as Phase 0 -> Phase 1 was.
 
 ---
 

@@ -18,7 +18,14 @@ fpga/tb/           testbenches
 fpga/constraints/  XDC, one per top design
 scripts/           create_project.tcl
 docs/              worklog, experiments, decisions, issues, measurements
+config/            nemo_config.yaml — generic controller config (source of truth)
+tools/nemo_ctl/    Python config/validation tool for the generic controller, see its README
 ```
+
+Generic, user-configurable NEMO chip controller (replaces the per-signal bring-up designs
+above once it's hardware-ready): see [`docs/controller_spec.md`](docs/controller_spec.md)
+and [`tools/nemo_ctl/README.md`](tools/nemo_ctl/README.md). Phase 1 (config format +
+Python core, no hardware) is done; run `python3 -m pytest` from the repo root.
 
 ## Build
 Vivado 2022.1, from the repo root:
