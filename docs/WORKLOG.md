@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Generic chip controller — Phase 1 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `tools/nemo_ctl/`, `config/nemo_config.yaml`, this file |
+| Rahaf | Generic chip controller — Phase 2 (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `tools/nemo_ctl/wizard.py`, `tools/nemo_ctl/cli.py`, this file |
 
 ---
 
@@ -124,6 +124,60 @@ Tag every result **[simulated]** or **[measured on board]**.
   and sheets.
 - Next steps: Phase 2, the interactive CLI wizard — needs my approval/redirection first
   per the brief's phase-gate rule, same as Phase 0 -> Phase 1 was.
+
+---
+
+## 2026-10-13, Rahaf, branch feature/rahaf-generic-controller-spec
+- Goal: Phase 2 of `generic_controller_prompt.md` — interactive CLI wizard. Approved to
+  proceed straight after Phase 1 in the same session, no redirection needed.
+- Done:
+  - Added `tools/nemo_ctl/wizard.py`: a headless engine (functions take `ask`/`tell`
+    callables instead of calling `input()`/`print()` directly, so the whole flow is
+    scriptable in tests — not just usable from a real terminal). Implements the brief's
+    flow exactly: pick mode -> each block -> each input pin, current setting + a menu
+    built from exactly the types `pin_db.yaml` allows for that pin (no dead options like
+    offering "pulse" on a CLOCK-only pin). Per-block extras: copy the block from another
+    mode, reset it to defaults (clear it), and — for the two DFT groups — a "DFT helper
+    (pick ADC + signal)" shortcut that resolves both `b_dft` and `s_dft` from one pick
+    (still `confirmed=False`, per spec §4) with a "materialize" step so later overriding
+    just one of the two groups doesn't silently lose the other's value.
+  - BUS groups (`s_p`, `b_dft`, `s_dft`) are walked once, not once per member pin, with
+    a "set individually" escape hatch back to the raw per-pin menu — raw bit control
+    stays possible, per the brief's own requirement.
+  - Added `tools/nemo_ctl/cli.py`: the one file that actually calls `input()`/`print()`.
+    `python3 -m nemo_ctl.cli wizard --mode INFERENCE` (plus `validate`, `preview`,
+    `export-excel`, `import-excel`, `gen-template`). Saves back to
+    `config/nemo_config.yaml` by default; `--excel` also exports afterward.
+  - Added `tools/nemo_ctl/tests/test_wizard.py` (7 tests: full scripted INFERENCE build,
+    copy-block, reset-to-defaults, invalid-choice retry, DFT-helper-then-override, bad
+    width error) and `tests/test_cli.py` (6 tests driving the actual `python3 -m
+    nemo_ctl.cli` subprocess, including the wizard over piped stdin — not just the
+    in-process engine).
+  - Exercised the exit criterion for real: scripted the full INFERENCE profile (every
+    block, every pin) through both the headless engine and the piped-stdin CLI, checked
+    it validates with zero errors (same TBD/UNCONFIRMED warnings as Phase 1, nothing
+    new), and round-trips through Excel export/import byte-for-byte on the parsed config.
+- Hardware setup: none — Phase 2 is software-only, same as Phase 1.
+- Results: **[simulated/software only]**. `python3 -m pytest`: 68 passed, 0 failed
+  (55 from Phase 1 + 13 new). Manual full-profile run via both the engine and the real
+  CLI (piped stdin) confirmed clean.
+- Problems / fixes: found and fixed a real round-trip bug in `config.py`'s
+  `config_to_dict` while building the scripted full-build test — a block that ends up
+  with zero settings (e.g. `dft per ADC` once the DFT helper absorbs it into `DFT - All`)
+  wrote no rows to its Excel sheet, so re-importing lost that block key entirely even
+  though every other consumer (`iter_settings`, `validate_config`, `timing`, `preview`)
+  already treats "block absent" and "block present but empty" identically. Fixed by
+  dropping empty blocks consistently in `config_to_dict`, so both directions agree.
+  (First caught this with a manual script, not a test — then wrote
+  `test_full_inference_build_validates_and_round_trips_through_excel` to pin it down.)
+- Decisions: the DFT helper writes/reads a single `dft_select` entry under the
+  `DFT - All` block (matching the brief's own schema example) rather than two separate
+  per-group entries; overriding one of the two groups it covers "materializes" both
+  into explicit `b_dft`/`s_dft` BUS settings first, so the un-overridden group's value
+  survives instead of disappearing along with `dft_select`.
+- Next steps: Phase 3 (RTL cells + testbenches) is the first phase that touches
+  `fpga/src`/`fpga/tb` — needs my approval/redirection first, same phase-gate rule as
+  before. Everything through Phase 2 remains software/config only, no hardware claims.
 
 ---
 

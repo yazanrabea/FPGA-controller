@@ -54,3 +54,13 @@ def blocks(pin_db: dict[str, Pin]) -> dict[str, list[str]]:
     for pin in pin_db.values():
         out.setdefault(pin.block, []).append(pin.name)
     return out
+
+
+def input_blocks(pin_db: dict[str, Pin]) -> dict[str, list[str]]:
+    """block name -> list of *input* pin names only, in pin_db order. The Phase 2
+    wizard walks these (generic_controller_prompt.md §3 Phase 2: "each input pin")."""
+    out: dict[str, list[str]] = {}
+    for pin in pin_db.values():
+        if pin.direction == "in":
+            out.setdefault(pin.block, []).append(pin.name)
+    return out

@@ -16,3 +16,11 @@ def group_bits(group: str, value: int) -> dict[str, int]:
     if value < 0 or value >= (1 << len(pins)):
         raise ValueError(f"value {value} doesn't fit in {len(pins)}-bit group {group!r}")
     return {pin: (value >> i) & 1 for i, pin in enumerate(pins)}
+
+
+def group_for_pin(pin_name: str) -> str | None:
+    """pin name -> the PIN_GROUPS key it belongs to, or None if it's standalone."""
+    for group, members in PIN_GROUPS.items():
+        if pin_name in members:
+            return group
+    return None

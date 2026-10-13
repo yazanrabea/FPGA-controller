@@ -1,7 +1,7 @@
 # nemo_ctl
 
-Phase 1 of `generic_controller_prompt.md` (see `docs/controller_spec.md`). Config format +
-Python core only — **no hardware, no FPGA code yet.**
+Phases 1-2 of `generic_controller_prompt.md` (see `docs/controller_spec.md`): config
+format + Python core, plus the interactive CLI wizard. **No hardware, no FPGA code yet.**
 
 ```
 pip3 install -r tools/requirements.txt
@@ -24,7 +24,20 @@ python3 -m pytest          # from the repo root; pytest.ini points at tools/nemo
 | `timing.py` | Per-mode timing summary table. |
 | `preview.py` | WaveDrom JSON waveform preview for one mode. |
 | `excel_io.py` | Excel import/export, one sheet per mode, same columns as the YAML; also a blank template generator. |
+| `wizard.py` | Headless wizard engine (Phase 2): pick mode -> each block -> each input pin, with copy-block-from-another-mode, reset-to-defaults, and a DFT helper menu. Takes `ask`/`tell` callables so the whole flow is scriptable in tests, not just from a real terminal. |
+| `cli.py` | The only file that calls `input()`/`print()` directly. `python3 -m nemo_ctl.cli wizard --mode INFERENCE` (also `validate`, `preview`, `export-excel`, `import-excel`, `gen-template`). |
 | `tests/` | pytest suite — run from the repo root with `python3 -m pytest`. |
+
+## Build a mode interactively
+
+```
+python3 -m nemo_ctl.cli wizard --mode INFERENCE
+```
+
+Walks every input pin, block by block, showing the current setting and a menu built from
+exactly the types that pin allows. Grouped pins (`s0_p,s1_p,s2_p` etc.) are walked once as
+a group, with a "set individually" escape hatch back to raw per-pin control. Saves back to
+`config/nemo_config.yaml` (or `--config <path>`); add `--excel out.xlsx` to also export.
 
 ## Quick check
 

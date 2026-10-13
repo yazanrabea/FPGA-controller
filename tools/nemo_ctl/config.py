@@ -88,6 +88,12 @@ def load_config(path: Path | None = None) -> Config:
 
 
 def config_to_dict(config: Config) -> dict:
+    """Empty blocks (no settings at all — e.g. fully absorbed into another block's DFT
+    helper pick) are dropped, not emitted as `{}`. Every consumer (iter_settings,
+    validate_config, timing, preview) already treats "block absent" and "block present
+    but empty" identically, and excel_io.py's per-mode sheet has no way to represent a
+    block with zero rows — so both directions of the round-trip must agree on dropping
+    them, or re-importing an exported sheet silently loses those keys."""
     out_modes = {}
     for mode_name, blocks in config.modes.items():
         out_blocks = {}
@@ -98,7 +104,8 @@ def config_to_dict(config: Config) -> dict:
                     out_block[key] = dict(setting.params)
                 else:
                     out_block[key] = {"type": setting.type, **setting.params}
-            out_blocks[block_name] = out_block
+            if out_block:
+                out_blocks[block_name] = out_block
         out_modes[mode_name] = out_blocks
     return {"modes": out_modes, "pin_map": dict(config.pin_map)}
 
