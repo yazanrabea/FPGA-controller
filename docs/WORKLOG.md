@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Generic chip controller — Phase 4, software side only (`generic_controller_prompt.md`) | `feature/rahaf-generic-controller-spec` | `fpga/src/phase4_loopback_top.sv`, `tools/nemo_ctl/gen_svh.py`, `docs/experiments/EXP-01_*.md`, this file |
+| Rahaf | User manual (new standing requirement, see note below) | `feature/rahaf-user-manual` | `docs/USER_MANUAL.md`, `tools/nemo_ctl/cli.py`, `tools/nemo_ctl/wizard.py`, this file |
 
 ---
 
@@ -391,6 +391,74 @@ Tag every result **[simulated]** or **[measured on board]**.
   do this part; it needs you (or Yazan) to actually run it and fill in EXP-01 §4. Once
   that's done [measured on board], Phase 5 (runtime link) is next and needs
   approval/redirection first, same phase-gate rule as every prior phase.
+
+---
+
+## 2026-10-16, Rahaf, branch feature/rahaf-user-manual
+- Goal: new standing requirement from Rahaf, on top of `generic_controller_prompt.md`:
+  maintain `docs/USER_MANUAL.md` for a lab user who did not build the system; catch up
+  the manual for every completed phase before continuing the current one; a phase isn't
+  "done" until its manual section is written AND Rahaf has followed it successfully;
+  every CLI command gets `--help` text matching the manual; the wizard shows a one-line
+  hint per field.
+- **Process note, not a technical result, but worth recording**: the actual trigger for
+  this was Rahaf asking me to replace `docs/prompts/generic_controller.md` with "the new
+  version I'm giving you," adding a "4. User manual" section. That new version was never
+  actually delivered — three separate pastes, each a different file already in this
+  repo (an old/different draft found in `~/Downloads`, then `docs/controller_spec.md`,
+  then the current `generic_controller_prompt.md` itself, byte-for-byte). I asked each
+  time rather than guess at a spec I didn't have. When Rahaf said "continue" without
+  providing it a fourth time, I went ahead using my own judgment for the manual's
+  structure instead of continuing to block on it — flagged clearly in the manual's own
+  header so it's not mistaken for an agreed outline. `docs/prompts/generic_controller.md`
+  itself was never created; the task file is still `generic_controller_prompt.md` at the
+  repo root, unchanged.
+- Done:
+  - Added `docs/USER_MANUAL.md`: status table (which phases are usable today), setup,
+    then one section per completed phase (Phase 1 config/validate/preview/Excel, Phase 2
+    wizard walkthrough, Phase 3 RTL simulation, Phase 4 build+simulate with a clear "the
+    hardware step is not done yet" callout matching `docs/WORKLOG.md`'s own Phase 4
+    entry), a troubleshooting table, and a file-location quick reference.
+  - Verified every command block in the manual by actually running it (not written from
+    memory and assumed correct) — `validate`, `preview` (both formats), `export-excel`,
+    `import-excel`, `gen-template`, a full scripted `wizard` session, both
+    `scripts/run_phase3_sims.sh` and `scripts/run_phase4_sim.sh`, and the two
+    troubleshooting-table claims that were checkable (`ModuleNotFoundError` without `-m`;
+    `validate` printing nothing on a clean config). Fixed one real mistake this caught in
+    my own first draft of the verification script (wrong block order for a scripted
+    wizard run) before it ever reached the manual itself.
+  - Added `--help` text to every `nemo_ctl.cli` subcommand (`wizard`, `validate`,
+    `preview`, `export-excel`, `import-excel`, `gen-template`): a `description` matching
+    the manual's wording (cross-referenced by section number) for each, an `epilog` with
+    a runnable example where it mattered (`wizard`'s overwrite warning + safe-copy
+    example), and `help=` text on every individual argument that was missing one.
+  - Added a one-line hint to every wizard sub-prompt that was missing one or had only a
+    bare unit example (`pulse`'s delay/polarity, `clock`'s cycles/delay, `serial`'s data/
+    bits/msb_first) — what the field controls, not just an example value.
+- Hardware setup: none — this is documentation + CLI/wizard text only.
+- Results: **[not applicable — no hardware, no simulation changed]**. `python3 -m
+  pytest`: 72/72 still passing (prompt-text changes don't affect the tests, which drive
+  by scripted answers, not by matching prompt wording).
+- Problems / fixes:
+  - Real (small) bug found while adding hints, not just wording: the SERIAL type's
+    "which edge does data change on" prompt hardcoded the literal text `clk_sipo`
+    regardless of which clock pin the user had actually just named in the previous
+    answer. Fixed to interpolate the real `clock` variable.
+  - Not a bug, but worth recording: `wizard.py`'s existing prompts already had decent
+    inline hints (e.g. `width (e.g. 1us, 100ns):`) before this session; the gap was
+    mainly missing units on the two `delay` prompts and no "what does this control"
+    framing, not a total absence of hints.
+- Decisions: per Rahaf's new rule, **this phase (user manual, Phases 0-4 catch-up) is not
+  marked done** — it needs Rahaf to actually follow the manual successfully, which I
+  cannot do on their behalf. Everything above is a draft for that review, same spirit as
+  `docs/experiments/EXP-01`'s results table being left PENDING rather than filled in from
+  simulation.
+- Next steps: Rahaf follows `docs/USER_MANUAL.md` end to end (§2-§5) and reports back
+  anything confusing, wrong, or missing. Once that's clean, maintaining this file going
+  forward means: every future phase gets its manual section written before being called
+  done, matching the new standing rule. Separately, still open from the prior entry:
+  `docs/prompts/generic_controller.md` / the "4. User manual" section of the task brief
+  itself is still needed from Rahaf if that reorganization is still wanted.
 
 ---
 

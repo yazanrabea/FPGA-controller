@@ -105,26 +105,30 @@ def _build_setting(pin: Pin, choice: str, ask: Ask, tell: Tell) -> PinSetting:
         return PinSetting(pin.name, PinType.HIGH.value, {})
 
     if choice == "pulse":
-        width = ask("  width (e.g. 1us, 100ns): ").strip()
+        width = ask("  width -- how long the pulse stays active (ns/us/ms/s or a bare "
+                    "tick count, e.g. 1us, 100ns): ").strip()
         try:
             q = quantize_duration(width)
         except UnitsError as exc:
             raise WizardError(str(exc)) from None
         tell(f"    -> {q.ticks} ticks ({q.achieved_ns:.0f} ns, {q.error_pct:+.2f}%)")
         params: dict = {"width": width}
-        delay = ask("  delay (blank = 0): ").strip()
+        delay = ask("  delay -- wait this long after RUN before the pulse starts "
+                    "(ns/us/ms/s or ticks, blank = 0): ").strip()
         if delay:
             qd = quantize_duration(delay)
             tell(f"    -> delay {qd.ticks} ticks ({qd.achieved_ns:.0f} ns)")
             params["delay"] = delay
         default_pol = pin.polarity or "active_high"
-        pol = ask(f"  polarity (active_high/active_low, blank = {default_pol}): ").strip()
+        pol = ask(f"  polarity -- active_high pulses 0->1->0, active_low pulses 1->0->1 "
+                  f"(blank = {default_pol}): ").strip()
         params["polarity"] = pol or default_pol
         return PinSetting(pin.name, PinType.PULSE.value, params)
 
     if choice == "clock":
-        freq = ask("  frequency (e.g. 1MHz): ").strip()
-        duty = ask("  duty (blank = 50%): ").strip() or "50%"
+        freq = ask("  frequency -- how fast it toggles (Hz/kHz/MHz, e.g. 1MHz, "
+                    "500kHz): ").strip()
+        duty = ask("  duty -- percent of each period spent high (blank = 50%): ").strip() or "50%"
         try:
             q = quantize_clock(freq, duty)
         except UnitsError as exc:
@@ -132,21 +136,27 @@ def _build_setting(pin: Pin, choice: str, ask: Ask, tell: Tell) -> PinSetting:
         tell(f"    -> achieved {q.achieved_hz/1e6:.4f} MHz (N={q.period_ticks} ticks, "
              f"high={q.high_ticks}, {q.error_pct:+.2f}%)")
         params = {"freq": freq, "duty": duty}
-        cycles = ask("  cycles (blank = free-running): ").strip()
+        cycles = ask("  cycles -- how many periods to run, then stop at idle "
+                     "(integer, blank = free-running forever): ").strip()
         if cycles:
             params["cycles"] = int(cycles)
-        delay = ask("  delay (blank = 0): ").strip()
+        delay = ask("  delay -- wait this long after RUN before the first edge "
+                    "(ns/us/ms/s or ticks, blank = 0): ").strip()
         if delay:
             params["delay"] = delay
         return PinSetting(pin.name, PinType.CLOCK.value, params)
 
     if choice == "serial":
-        clock = ask("  clock pin this shifts on (e.g. clk_sipo): ").strip()
-        data = ask("  data (hex string or file path): ").strip()
+        clock = ask("  clock pin this shifts on -- must be a pin you've set (or will "
+                     "set) to type clock in this same mode (e.g. clk_sipo): ").strip()
+        data = ask("  data -- the bit pattern to send (hex string like 0xA5, or a path "
+                    "to a file containing one): ").strip()
         default_bits = pin.limits.get("frame_bits")
-        bits_raw = ask(f"  bits (blank = {default_bits}): ").strip()
-        msb = ask("  msb first? [Y/n]: ").strip().lower()
-        edge = ask("  data changes on which clk_sipo edge (falling/rising, blank = falling): ").strip()
+        bits_raw = ask(f"  bits -- how many bits of `data` to send "
+                        f"(integer, blank = {default_bits}): ").strip()
+        msb = ask("  msb first? -- send the highest bit of `data` first [Y/n]: ").strip().lower()
+        edge = ask(f"  data changes on which edge of {clock!r} (falling/rising, "
+                    f"blank = falling): ").strip()
         params = {
             "clock": clock, "data": data,
             "msb_first": msb not in ("n", "no"),
