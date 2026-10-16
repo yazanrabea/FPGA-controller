@@ -6,7 +6,121 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | User manual (new standing requirement, see note below) | `feature/rahaf-user-manual` | `docs/USER_MANUAL.md`, `tools/nemo_ctl/cli.py`, `tools/nemo_ctl/wizard.py`, this file |
+| Rahaf | Phase 5 runtime link (RTL+Python+CLI done, hardware bring-up pending — EXP-02) | `feature/rahaf-user-manual` | `fpga/src/{uart_tx,uart_rx,link_ctrl,phase5_link_top}.sv`, `fpga/tb/{uart_tb,link_ctrl_tb,phase5_link_top_tb}.sv`, `fpga/constraints/phase5_link_top.xdc`, `tools/nemo_ctl/{link,cli}.py`, `docs/{link_register_map,USER_MANUAL,controller_spec}.md`, `docs/experiments/EXP-02...md`, this file |
+
+---
+
+## 2026-10-16, Rahaf, branch feature/rahaf-user-manual
+- Goal: Phase 5 of `generic_controller_prompt.md` — the runtime link ("implement the
+  link chosen in Phase 0 [USB-UART on a PMOD]... Python: `nemo_ctl.link` with
+  `send_config(mode)`, `apply()`, `run()`, `stop()`, `read_captures()`... exit: change a
+  clock frequency from the PC without re-synthesis and see it on the multimeter/scope").
+  Started before Phase 4's own hardware exit criterion was met, on Rahaf's explicit
+  instruction to deviate from the normal phase-gate rule and proceed anyway.
+- Done:
+  - `docs/link_register_map.md`: the concrete byte-level register map (superseding
+    `controller_spec.md` §7-8's draft sketch) — global SCRATCH/RUN_CTRL/APPLY_CTRL/
+    STATUS at 0x0000-0x0003, 5 `sig_cell` regions at 0x0010 (24 B stride: CTRL/DELAY/
+    PARAM_A/PARAM_B/CYCLES/DATA/BITS), 5 `cap_cell` regions at 0x0100 (24 B stride:
+    writable CTRL/BITS + read-only STATUS_FLAGS/EDGE_COUNT/PERIOD_TICKS/HIGH_TICKS/
+    CAPTURE_REG), and the frame format (SOF/CMD/ADDR/LEN/DATA/CHECKSUM). Documented
+    limitation: DATA/CAPTURE_REG fixed at 16 bits — fine for the 5 debug cells, not
+    enough for the real chip's 136-bit SIPO data (flagged as later-phase work).
+  - `fpga/src/uart_tx.sv` + `uart_rx.sv`: parameterized 8-N-1 UART, `fpga/tb/uart_tb.sv`
+    **[simulated]**, 12/12 checks (round trip, busy-flag timing, back-to-back bytes,
+    send-while-busy ignored, bad-stop-bit -> frame_error).
+  - `fpga/src/link_ctrl.sv`: frame parser + flat register file + all 8 commands
+    (WRITE_REG/READ_REG/APPLY/RUN/STOP/STATUS/READ_CAPTURE, LOAD_MODE permanently
+    NACKed as unimplemented) + NACK on bad checksum or unknown CMD.
+    `fpga/tb/link_ctrl_tb.sv` **[simulated]**, 22/22 checks, byte-level (bypasses real
+    UART timing — that's `uart_tb.sv`'s job).
+  - `fpga/src/phase5_link_top.sv` + `fpga/constraints/phase5_link_top.xdc`: reuses
+    Phase 4's exact 5 debug cells (test_clock/pulse/serial/low/high) and clk/sw/led/
+    fmc_pins pin assignments, but RUN/STOP/APPLY and every cfg_* field now come from
+    `link_ctrl.sv`'s register file instead of compile-time constants. `rxd`/`txd`
+    deliberately left unconstrained in the XDC — PMOD bank voltage still unconfirmed
+    from Phase 0, see Decisions below. `fpga/tb/phase5_link_top_tb.sv` **[simulated]**,
+    7/7 checks, a mock PC with its own real UART pair (not the byte-level shortcut) —
+    centerpiece test directly exercises the exit criterion: configure test_clock to a
+    20-tick period, RUN, measure period=20 on the loopback pin, then *while still
+    RUNning, no STOP* write a new 40-tick period and APPLY again, re-measure period=40.
+  - `scripts/run_phase5_link_sim.sh`: runs all three testbenches above in order.
+  - `tools/nemo_ctl/link.py`: Python client for the protocol — `build_frame`/
+    `parse_frame`/checksum, `Transport` protocol + `SerialTransport`/`open_serial`
+    (pyserial imported lazily, so nothing else needs it installed), `SigCellConfig`/
+    `CapCellConfig`/`CapCellStatus` encode/decode, and `Link` with
+    `write_reg`/`read_reg`/`apply`/`run`/`stop`/`status`/`read_capture_raw` plus the
+    debug-harness helpers `send_cell_config`/`send_cap_config`/`send_config`/
+    `read_captures`. Explicitly scoped to the 5 fixed debug cells
+    (`DEBUG_CELL_NAMES`), not the full generic per-pin config — that RTL doesn't exist
+    on hardware yet.
+  - `tools/nemo_ctl/tests/test_link.py`: 27 tests against an in-memory model of
+    `link_ctrl.sv`'s own parsing/dispatch rules (`_FakeDevice`/`_FakeTransport`), not
+    real hardware — frame encode/decode, config encode/decode, every `Link` method,
+    NACK handling, timeouts, and a protocol-level mirror of the live-frequency-change
+    exit criterion. Added `pyserial>=3.5` to `tools/requirements.txt`.
+  - `tools/nemo_ctl/cli.py`: added a `link` subcommand group (`status`/`run`/`stop`/
+    `apply`/`set-clock`/`read-captures`), each with `--help` text cross-referencing
+    `docs/USER_MANUAL.md` §6, per the standing CLI-text rule. `set-clock` reuses
+    `units.quantize_clock()` (same quantization the wizard uses) so a requested
+    frequency/duty gets the same achieved-value-and-error treatment everywhere in this
+    tool. 3 new subprocess tests in `tools/nemo_ctl/tests/test_cli.py` (help text,
+    missing `--port`, clean failure on an unreachable port).
+  - `docs/USER_MANUAL.md`: new §6 "Phase 5 — the runtime link" (scope note, the PMOD
+    blocker, simulate-first instructions, the `nemo_ctl.cli link` walkthrough), updated
+    §0 status table, §1 setup note for `pyserial`, §7 troubleshooting rows, §8 quick
+    reference rows. Old §6/§7 renumbered to §7/§8.
+  - `docs/controller_spec.md`: marked §7 (register map draft) and §8 (link protocol
+    draft) superseded by `docs/link_register_map.md`, with the real implementation's
+    two deltas from the original sketch noted (LOAD_MODE is an explicit NACK, not
+    silently ignored; read requests still carry LEN dummy payload bytes).
+  - `docs/experiments/EXP-02_phase5_link_bringup.md`: full hardware procedure and exit-
+    criterion checklist, results table left PENDING (same pattern as EXP-01).
+- Hardware setup: **none — no Vivado, no board access in this environment.** Everything
+  above is `pytest`/Icarus Verilog only.
+- Results:
+  - **[simulated]**: `scripts/run_phase5_link_sim.sh` — `uart_tb` 12/12,
+    `link_ctrl_tb` 22/22, `phase5_link_top_tb` 7/7 (including the live frequency-change
+    exit criterion, period 20 ticks -> 40 ticks while RUNning).
+  - **[not hardware]**: `python3 -m pytest tools/nemo_ctl/tests`: 102/102 (72 pre-
+    existing + 27 new `test_link.py` + 3 new `test_cli.py`).
+  - **[measured on board]**: none yet — see `docs/experiments/EXP-02...md` §4, PENDING.
+- Problems / fixes:
+  - `phase5_link_top_tb.sv` compile errors (declaration-before-use for a reset signal
+    used before its `logic` declaration; a task's 3rd argument silently inheriting the
+    `output` direction from the preceding `output int period_ticks` argument because it
+    had no explicit `input` keyword — classic SV ANSI-port-list gotcha, not an Icarus
+    bug) — fixed by reordering the declaration and adding the explicit `input` keyword.
+  - Real testbench timing bug, not an RTL bug: the mock PC's `pc_send_frame` task
+    returned right after queuing the checksum byte's send pulse, before that byte
+    actually finished transmitting (~8680 cycles at 100 MHz/115200 baud) — margins
+    after RUN/APPLY/STOP were far too short, and worse, the first fix attempt (a blind
+    extra-cycle margin added unconditionally inside `pc_send_frame`) broke the READ_REG
+    test by eating the response's own leading byte(s) during that margin, before
+    `pc_wait_for_response` ever started listening. Fixed by having `pc_send_frame` wait
+    for the transport to actually go idle (no blind margin baked in), and adding an
+    explicit one-byte-period margin only at call sites checking a side effect of a
+    response-less command (RUN/STOP/APPLY), not before commands that get a response.
+- Decisions:
+  - Proceeding into Phase 5 despite Phase 4's own hardware exit criterion
+    (`docs/experiments/EXP-01...md`) being unmeasured — explicit, informed call by
+    Rahaf, deviating from `generic_controller_prompt.md`'s normal "wait for approval
+    between phases" rule. Both Phase 4 and Phase 5 hardware bring-up remain open.
+  - `send_config()`/the debug-harness helpers in `link.py` are scoped to exactly the 5
+    fixed cells `phase5_link_top.sv` wires up, not the full generic per-pin
+    `config.py`/`nemo_config.yaml` model — that generic RTL hasn't been built. Keeping
+    this explicit (via `DEBUG_CELL_NAMES` and docstrings) rather than pretending the
+    Python API already covers the real chip's pin set.
+  - Per Rahaf's standing rule, **Phase 5 is not marked done** — RTL/software are ready
+    and simulated, but the PMOD UART adapter's pin/voltage is still unconfirmed
+    (blocking even wiring it up), and nobody has run `docs/experiments/EXP-02...md` on
+    real hardware yet.
+- Next steps: confirm the PMOD bank voltage for the USB-UART adapter against the actual
+  ZedBoard reference manual (the single blocker on starting EXP-02 at all), update
+  `fpga/constraints/phase5_link_top.xdc` with the real `rxd`/`txd` pin assignment, then
+  run EXP-01 and EXP-02 on real hardware. Still open from earlier: the real "4. User
+  manual" section of `generic_controller_prompt.md` was never delivered by Rahaf despite
+  being asked three times — still needed if that reorganization is wanted.
 
 ---
 

@@ -22,13 +22,14 @@ want to understand *why* it's built this way, read `CLAUDE.md` and
 | 2 | Interactive CLI wizard | Done | §3 below |
 | 3 | RTL cells (`sig_cell`/`cap_cell`/`run_ctrl`) + testbenches | Done, **simulated only** | §4 below |
 | 4 | Top-level design + compile-time config | RTL/software done, **hardware step not run** | §5 below (build + simulate now; wiring/measuring needs you) |
-| 5-8 | Runtime link, SIPO/PISO, mode sequencer, chip-ready checklist | Not started | — |
+| 5 | Runtime link (framed UART protocol, register file, Python client + CLI) | RTL/software done, **simulated only, hardware step not run** | §6 below (talk to it once §5's board is actually built and wired; the link itself needs its own build/wiring too, see §6.1) |
+| 6-8 | SIPO/PISO, mode sequencer, chip-ready checklist | Not started | — |
 
-Nothing past Phase 4 exists yet. Phase 4 itself is **not complete** by this project's own
-rule ("a phase is not done until ... I have followed it successfully myself") — the RTL
-and simulations are ready, but nobody has actually built it in Vivado and measured it on
-the ZedBoard yet. `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` has the
-exact procedure for that step.
+Nothing past Phase 5 exists yet. Phases 4 **and** 5 are **not complete** by this project's
+own rule ("a phase is not done until ... I have followed it successfully myself") — the
+RTL and simulations are ready for both, but nobody has actually built either in Vivado and
+measured it on the ZedBoard yet. `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
+and `docs/experiments/EXP-02_phase5_link_bringup.md` have the exact procedures.
 
 ## 1. Setup (one time)
 
@@ -66,6 +67,10 @@ the Intel one's compiler is broken, use `/opt/homebrew/bin/brew` explicitly (see
 
 For §5 (hardware) you need Vivado 2022.1, a ZedBoard, the HTG-FMC-SMA-LVDS daughter
 board, jumper wires, and (for measuring) a multimeter and ideally an oscilloscope.
+
+For §6 (the runtime link) you additionally need `pyserial` (already in
+`tools/requirements.txt`, so step 1 above covers it) and, on hardware, a USB-UART
+adapter wired to the board — see §6.1 for what's still unconfirmed about that wiring.
 
 ## 2. Phase 1 — working with the config file directly
 
@@ -270,7 +275,85 @@ it exists before you run it.)
 - This is the step nobody has actually run yet. **Do not write a PASS/FAIL into EXP-01's
   results table without a real reading taken on real hardware.**
 
-## 6. Troubleshooting
+## 6. Phase 5 — the runtime link
+
+Phase 4's `phase4_loopback_top` has compile-time-only config: every CLOCK/PULSE/SERIAL/
+LOW/HIGH setting is baked in at synthesis time, so changing anything means re-running
+Vivado. `phase5_link_top.sv` replaces that with the exact same 5 debug cells
+(`test_clock`/`test_pulse`/`test_serial`/`test_low`/`test_high`), but every setting now
+comes from the PC over a USB-UART link instead — a framed byte protocol
+(`docs/link_register_map.md`) parsed by `fpga/src/link_ctrl.sv`, with a Python client
+(`tools/nemo_ctl/link.py`) and matching `nemo_ctl.cli link` commands on this side.
+
+**Scope note**: this is still only the same 5 fixed debug cells Phase 4 used, not the
+full ~26-signal generic chip config from `docs/controller_spec.md`/`config/nemo_config.yaml`
+— that per-pin RTL hasn't been built or wired to the link yet. `link set-clock` and the
+`SigCellConfig`/`CapCellConfig` classes in `link.py` only know about those 5 names (see
+`DEBUG_CELL_NAMES`).
+
+### 6.1 Before you touch hardware
+
+`rxd`/`txd` (the UART lines) are **deliberately left unconstrained** in
+`fpga/constraints/phase5_link_top.xdc`. Which ZedBoard PMOD header carries a USB-UART
+adapter, and whether that bank is 3.3 V or VADJ (1.8 V), was never confirmed back in
+Phase 0 (`docs/controller_spec.md` §9) — building this in Vivado will warn about
+unconstrained I/O until that's checked against the actual ZedBoard reference manual and
+the XDC updated. **Do not invent a pin assignment or a voltage.** This is the main
+blocker on actually running §6.2-§6.3 on real hardware; everything else (RTL, Python,
+CLI) is ready and waiting on it.
+
+### 6.2 Simulate it first
+
+```
+scripts/run_phase5_link_sim.sh
+```
+
+Runs three self-checking testbenches in order: `uart_tb` (TX/RX loopback, 12 checks),
+`link_ctrl_tb` (frame parser + register file + command dispatch, byte-level, 22 checks),
+and `phase5_link_top_tb` (the real thing, bit-serial UART timing end to end, 7 checks).
+The last one models a mock
+PC (its own `uart_tx`/`uart_rx` pair) talking real bit-serial UART frames to the DUT, not
+just the byte-level shortcut `link_ctrl_tb.sv` uses — including the actual Phase 5 exit
+criterion: configure `test_clock` to a 20-tick period, RUN it, measure the period on the
+loopback pin, then — **while still RUNning, no STOP** — write a new 40-tick period and
+APPLY again, and confirm the pin's period actually changed. All checks pass
+**[simulated]**.
+
+### 6.3 Talk to it from the PC
+
+Once a board is programmed with `phase5_link_top` and wired per §6.1 (**not possible
+yet** — see above), find the adapter's serial device name (e.g. `/dev/tty.usbserial-XXXX`
+on macOS, `/dev/ttyUSB0` on Linux, `COM3` on Windows) and:
+
+```
+cd tools
+python3 -m nemo_ctl.cli link status --port /dev/ttyUSB0
+python3 -m nemo_ctl.cli link run --port /dev/ttyUSB0
+python3 -m nemo_ctl.cli link set-clock --port /dev/ttyUSB0 --cell test_clock --freq 2kHz --apply
+python3 -m nemo_ctl.cli link stop --port /dev/ttyUSB0
+python3 -m nemo_ctl.cli link read-captures --port /dev/ttyUSB0
+```
+
+`set-clock` is the direct exercise of Phase 5's exit criterion ("change a clock
+frequency from the PC without re-synthesis and see it on the multimeter/scope"): run
+`link run` once, then run `link set-clock` again with a different `--freq --apply`
+**without stopping first**, and watch the frequency actually change on the instrument.
+`--freq`/`--duty` take the same units as the wizard (§3.2) and are quantized by the same
+`quantize_clock()` — the achieved value and error are printed immediately, same as
+everywhere else in this tool. Every `link` subcommand's `--help` has the full option
+list; `--baud`/`--timeout` default to 115200/1.0s and rarely need changing.
+
+For scripting instead of the CLI, `tools/nemo_ctl/link.py`'s `Link` class has the same
+operations (`run()`/`stop()`/`apply()`/`status()`/`send_cell_config()`/`send_config()`/
+`read_captures()`) plus the raw `write_reg()`/`read_reg()`/`read_capture_raw()` if you
+need an address `docs/link_register_map.md` describes but no helper wraps yet.
+
+**Full procedure, exit-criterion checklist, and results table**:
+`docs/experiments/EXP-02_phase5_link_bringup.md`. **This step (and therefore all of
+Phase 5) has not been run on real hardware yet** — don't write a PASS/FAIL into EXP-02
+without an actual reading.
+
+## 7. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -279,9 +362,12 @@ it exists before you run it.)
 | Wizard says "not understood: ''" repeatedly | You answered blank where the menu needs an actual choice (blank is only valid for optional follow-ups like delay/duty, not the main type menu) | Type a number or a bracketed keyword |
 | `validate` prints nothing | That's success, not a hang — no issues found | — |
 | `iverilog: command not found` | Not installed, or installed under `/opt/homebrew/bin` which isn't on `PATH` | `export PATH="/opt/homebrew/bin:$PATH"` or install it |
-| A testbench's checks pass individually but you're not sure the design is really right | Simulation proves logic, not real voltage levels, timing margins, or signal integrity | That's exactly why Phase 4 still needs a real hardware run (§5.3) — don't treat [simulated] as a substitute for [measured on board] |
+| A testbench's checks pass individually but you're not sure the design is really right | Simulation proves logic, not real voltage levels, timing margins, or signal integrity | That's exactly why Phases 4/5 still need a real hardware run (§5.3/§6.3) — don't treat [simulated] as a substitute for [measured on board] |
+| `link status`/`link run`/... hangs or times out | Wrong `--port`, adapter not actually wired/powered, or `--baud` doesn't match the loaded bitstream's `uart_tx.sv`/`uart_rx.sv` `BAUD` parameter | Double-check the port name and wiring; confirm baud matches (115200 by default) |
+| `link ...` raises `ModuleNotFoundError: No module named 'serial'` | `pyserial` isn't installed | `pip3 install -r tools/requirements.txt` (step §1) |
+| `link.NackError` | The device NACKed — either a bad checksum got through somehow, or you sent `LOAD_MODE` (permanently unimplemented) | Check `--baud` and wiring (a bad checksum from clean code usually means a framing/timing problem, not a logic bug); don't use `LOAD_MODE` |
 
-## 7. Where things live (quick reference)
+## 8. Where things live (quick reference)
 
 | Thing | Path |
 |---|---|
@@ -291,4 +377,7 @@ it exists before you run it.)
 | RTL sources | `fpga/src/` |
 | Testbenches | `fpga/tb/` |
 | Hardware procedure for Phase 4 | `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` |
+| Phase 5 link protocol / byte-level register map | `docs/link_register_map.md` |
+| Phase 5 Python client + CLI | `tools/nemo_ctl/link.py`, `nemo_ctl.cli link` |
+| Hardware procedure for Phase 5 | `docs/experiments/EXP-02_phase5_link_bringup.md` |
 | Chronological project log | `docs/WORKLOG.md` |

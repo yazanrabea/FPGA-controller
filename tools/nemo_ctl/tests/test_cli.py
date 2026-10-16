@@ -57,6 +57,27 @@ def test_export_then_import_excel_round_trip(tmp_path):
     assert round_tripped.exists()
 
 
+def test_link_subcommand_help_lists_every_action():
+    result = _run(["link", "--help"])
+    assert result.returncode == 0, result.stderr
+    for action in ("status", "run", "stop", "apply", "set-clock", "read-captures"):
+        assert action in result.stdout
+
+
+def test_link_status_requires_port():
+    result = _run(["link", "status"])
+    assert result.returncode != 0
+    assert "--port" in result.stderr
+
+
+def test_link_status_fails_cleanly_without_a_real_port():
+    # No real hardware/serial port in this environment (and pyserial isn't installed
+    # either) -- just confirms this is a clean nonzero exit, not a hang, when the port
+    # can't be opened.
+    result = _run(["link", "status", "--port", "/dev/__definitely_not_a_real_port__"])
+    assert result.returncode != 0
+
+
 def test_wizard_subcommand_over_piped_stdin(tmp_path):
     cfg_path = tmp_path / "wizard_config.yaml"
     cfg_path.write_text(REPO_CONFIG.read_text())

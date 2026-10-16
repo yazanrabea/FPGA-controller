@@ -12,9 +12,11 @@ from pathlib import Path
 
 from .config import DEFAULT_CONFIG_PATH, load_config, save_config
 from .excel_io import export_config, export_template, import_config
+from .link import DEBUG_CELL_NAMES, SigCellConfig, open_serial
 from .pins import load_pin_db
 from .preview import preview_mode
 from .timing import format_timing_table, summarize_mode
+from .units import quantize_clock
 from .validate import validate_config
 from .wizard import run_wizard
 
@@ -85,6 +87,80 @@ def cmd_gen_template(args: argparse.Namespace) -> int:
     pin_db = load_pin_db()
     export_template(pin_db, Path(args.out), modes=tuple(args.modes))
     print(f"wrote {args.out}")
+    return 0
+
+
+def _open_link(args: argparse.Namespace):
+    return open_serial(args.port, baud=args.baud, timeout=args.timeout)
+
+
+def cmd_link_status(args: argparse.Namespace) -> int:
+    lnk = _open_link(args)
+    try:
+        running = lnk.status()
+    finally:
+        lnk.close()
+    print("RUNNING" if running else "STOPPED")
+    return 0
+
+
+def cmd_link_run(args: argparse.Namespace) -> int:
+    lnk = _open_link(args)
+    try:
+        lnk.run()
+    finally:
+        lnk.close()
+    print("RUN sent")
+    return 0
+
+
+def cmd_link_stop(args: argparse.Namespace) -> int:
+    lnk = _open_link(args)
+    try:
+        lnk.stop()
+    finally:
+        lnk.close()
+    print("STOP sent")
+    return 0
+
+
+def cmd_link_apply(args: argparse.Namespace) -> int:
+    lnk = _open_link(args)
+    try:
+        lnk.apply()
+    finally:
+        lnk.close()
+    print("APPLY sent")
+    return 0
+
+
+def cmd_link_set_clock(args: argparse.Namespace) -> int:
+    q = quantize_clock(args.freq, args.duty)
+    cfg = SigCellConfig(type="CLOCK", param_a=q.period_ticks, param_b=q.high_ticks,
+                         cycles=args.cycles)
+    lnk = _open_link(args)
+    try:
+        lnk.send_cell_config(args.cell, cfg)
+        if args.apply:
+            lnk.apply()
+    finally:
+        lnk.close()
+    print(f"requested {q.requested_hz / 1e6:.4f} MHz -> achieved {q.achieved_hz / 1e6:.4f} MHz "
+          f"({q.error_pct:+.2f}%), period={q.period_ticks} ticks, high={q.high_ticks} ticks"
+          + (" -- applied" if args.apply else " -- NOT applied yet, run `link apply` (or pass --apply)"))
+    return 0
+
+
+def cmd_link_read_captures(args: argparse.Namespace) -> int:
+    lnk = _open_link(args)
+    try:
+        statuses = lnk.read_captures()
+    finally:
+        lnk.close()
+    for cell, st in statuses.items():
+        print(f"{cell}: level_out={st.level_out} period_valid={st.period_valid} done={st.done} "
+              f"edge_count={st.edge_count} period_ticks={st.period_ticks} high_ticks={st.high_ticks} "
+              f"capture_reg=0x{st.capture_reg:04X}")
     return 0
 
 
@@ -218,6 +294,106 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--modes", nargs="+", default=["READ", "WRITE", "INFERENCE"],
                      help="which mode sheets to include (default: all three)")
     gt.set_defaults(func=cmd_gen_template)
+
+    # ---- link: Phase 5 runtime link over a real USB-UART serial port ----
+    # needs actual hardware (a programmed board + a confirmed serial port) -- see
+    # docs/USER_MANUAL.md section 6 and docs/experiments/EXP-02.
+    link_common = argparse.ArgumentParser(add_help=False)
+    link_common.add_argument("--port", required=True,
+                              help="serial device for the USB-UART adapter, e.g. /dev/ttyUSB0 "
+                                   "or /dev/tty.usbserial-XXXX (macOS) or COM3 (Windows)")
+    link_common.add_argument("--baud", type=int, default=115_200,
+                              help="must match uart_tx.sv/uart_rx.sv's BAUD on the loaded "
+                                   "bitstream (default: 115200)")
+    link_common.add_argument("--timeout", type=float, default=1.0,
+                              help="seconds to wait for a response before giving up (default: 1.0)")
+
+    lk = sub.add_parser(
+        "link",
+        help="talk to a running phase5_link_top bitstream over the serial link",
+        description=_wrap(
+            "Low-level control of the Phase 5 runtime link (docs/link_register_map.md, "
+            "fpga/src/link_ctrl.sv). Needs a board already programmed with a "
+            "phase5_link_top bitstream and a USB-UART adapter wired up -- see "
+            "docs/USER_MANUAL.md section 6."
+        ),
+        formatter_class=_RDF,
+    )
+    lk_sub = lk.add_subparsers(dest="link_command", required=True)
+
+    lk_status = lk_sub.add_parser(
+        "status", parents=[link_common], formatter_class=_RDF,
+        help="print whether the board is currently RUNNING or STOPPED",
+        description=_wrap("Send STATUS and print RUNNING or STOPPED. See docs/USER_MANUAL.md section 6.2."),
+    )
+    lk_status.set_defaults(func=cmd_link_status)
+
+    lk_run = lk_sub.add_parser(
+        "run", parents=[link_common], formatter_class=_RDF,
+        help="send RUN (start every configured cell)",
+        description=_wrap("Send the RUN command. See docs/USER_MANUAL.md section 6.2."),
+    )
+    lk_run.set_defaults(func=cmd_link_run)
+
+    lk_stop = lk_sub.add_parser(
+        "stop", parents=[link_common], formatter_class=_RDF,
+        help="send STOP (halt every cell, pins idle)",
+        description=_wrap("Send the STOP command. See docs/USER_MANUAL.md section 6.2."),
+    )
+    lk_stop.set_defaults(func=cmd_link_stop)
+
+    lk_apply = lk_sub.add_parser(
+        "apply", parents=[link_common], formatter_class=_RDF,
+        help="send APPLY (latch any pending register writes, even while RUNning)",
+        description=_wrap(
+            "Send the APPLY command, which atomically latches any WRITE_REGs sent since "
+            "the last apply -- works while RUNning, no STOP needed. See "
+            "docs/USER_MANUAL.md section 6.2."
+        ),
+    )
+    lk_apply.set_defaults(func=cmd_link_apply)
+
+    lk_clock = lk_sub.add_parser(
+        "set-clock", parents=[link_common], formatter_class=_RDF,
+        help="configure one debug cell as a CLOCK at a given frequency",
+        description=_wrap(
+            "Write a CLOCK config (requested frequency/duty, quantized to 100 MHz ticks "
+            "the same way the wizard does -- see docs/USER_MANUAL.md section 2.2) to one "
+            "of the 5 fixed debug cells. This is Phase 5's own exit criterion: run it "
+            "once, `link run`, then run it again with a different --freq and --apply (or "
+            "a separate `link apply`) WHILE still running, and see the new frequency on "
+            "the multimeter/scope -- no re-synthesis. See docs/USER_MANUAL.md section 6.2 "
+            "and docs/experiments/EXP-02."
+        ),
+        epilog=(
+            "Example (change test_clock to 2 kHz and take effect immediately):\n"
+            "  python3 -m nemo_ctl.cli link set-clock --port /dev/ttyUSB0 \\\n"
+            "      --cell test_clock --freq 2kHz --apply"
+        ),
+    )
+    lk_clock.add_argument("--cell", required=True, choices=list(DEBUG_CELL_NAMES),
+                           help="which debug cell to configure")
+    lk_clock.add_argument("--freq", required=True,
+                           help="requested frequency, e.g. 1MHz, 500kHz, or a bare number of Hz")
+    lk_clock.add_argument("--duty", default="50%",
+                           help="requested duty cycle, e.g. 50%% (default: 50%%)")
+    lk_clock.add_argument("--cycles", type=int, default=0,
+                           help="run for this many cycles then stop on its own, 0 = free-running "
+                                "(default: 0)")
+    lk_clock.add_argument("--apply", action="store_true",
+                           help="also send APPLY immediately after writing the config")
+    lk_clock.set_defaults(func=cmd_link_set_clock)
+
+    lk_cap = lk_sub.add_parser(
+        "read-captures", parents=[link_common], formatter_class=_RDF,
+        help="print every debug cell's live capture status",
+        description=_wrap(
+            "Read and print every debug cell's cap_cell status (level_out/period_valid/"
+            "done/edge_count/period_ticks/high_ticks/capture_reg). See "
+            "docs/USER_MANUAL.md section 6.2."
+        ),
+    )
+    lk_cap.set_defaults(func=cmd_link_read_captures)
 
     return p
 

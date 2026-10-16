@@ -1,3 +1,4 @@
 openpyxl>=3.1
 pyyaml>=6.0
 pytest>=7.0
+pyserial>=3.5  # only needed for nemo_ctl.link.open_serial() (real hardware); the rest of the package works without it
