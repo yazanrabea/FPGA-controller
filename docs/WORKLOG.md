@@ -61,8 +61,26 @@ Tag every result **[simulated]** or **[measured on board]**.
     136/168-bit frames is deferred to Phase 7.
   - ZedBoard is available in the lab, so EXP-01 (Phase 4 hardware run) goes next, built
     with the Vivado on this PC.
-- Next steps: build the `phase4_loopback_top` bitstream, run EXP-01 with Rahaf at the
-  board; then Phase 6 steps 6.1-6.5.
+- EXP-01 preparation (Phase 4 hardware run, first Vivado build of this top):
+  - First `create_project.tcl -tclargs phase4_loopback_top build` failed synthesis:
+    `nemo_cfg_pkg` not declared (Vivado never compiles `.svh` files). Fixed by generating
+    `fpga/src/gen/nemo_cfg_pkg.sv` instead (`git mv`, `gen_svh.py`, `create_project.tcl`,
+    `run_phase4_sim.sh`, CLAUDE.md §6, USER_MANUAL, EXP-01, controller_spec,
+    `config/phase4_loopback_test.yaml` comment). Details in `docs/issues.md`.
+  - Rebuilt: bitstream `build/phase4_loopback_top/phase4_loopback_top.runs/impl_1/phase4_loopback_top.bit`.
+    **[Vivado implementation report, not a measurement]**: all timing constraints met,
+    WNS +3.702 ns / WHS +0.117 ns; 440 LUTs, 415 FFs, 24 bonded IOBs. Warnings reviewed,
+    all expected (unused `cfg_msb_first` in 1-bit cells, `led[7:5]` tied 0, PS7 DRC
+    ZPS7-1 normal for a PL-only design).
+  - Cross-checked `fpga/constraints/phase4_loopback_top.xdc`: `clk`, `sw[4:0]`,
+    `led[7:0]` and `fmc_pins[0..4,16..20]` are identical to `fmc_clock_loopback.xdc`
+    (the XDC behind the measured pair 0 result).
+  - Added `scripts/program_board.tcl` (programs the PL over JTAG with a top's built
+    bitstream). Ran it: `no JTAG target found` -- board not powered/connected yet. EXP-01
+    measurements not started.
+- Next steps: Rahaf powers the board (VADJ 1V8, jumpers per EXP-01 §1, `sw` all 0) and
+  connects PROG J17; program with `program_board.tcl`; run EXP-01 §3; then Phase 6
+  steps 6.1-6.5.
 
 ---
 

@@ -10,7 +10,7 @@ simulated; §4 (Results) is a template to fill in while actually running it.
 
 - **Design**: `fpga/src/phase4_loopback_top.sv` (top), `fpga/constraints/phase4_loopback_top.xdc`.
   Depends on `fpga/src/run_ctrl.sv`, `sig_cell.sv`, `cap_cell.sv`, and the generated
-  `fpga/src/gen/nemo_cfg_pkg.svh` (from `config/phase4_loopback_test.yaml` via
+  `fpga/src/gen/nemo_cfg_pkg.sv` (from `config/phase4_loopback_test.yaml` via
   `tools/nemo_ctl/gen_svh.py` — regenerate with `cd tools && python3 -m nemo_ctl.gen_svh`
   if the YAML changes; `scripts/run_phase4_sim.sh` does this automatically).
 - **Board**: ZedBoard, VADJ jumper (J18) on **1.8 V** (CLAUDE.md §4 — check before powering up).
@@ -61,13 +61,15 @@ simulated; §4 (Results) is a template to fill in while actually running it.
 
 ## 3. Procedure (to run on hardware)
 
-1. Make sure `fpga/src/gen/nemo_cfg_pkg.svh` is up to date (`scripts/run_phase4_sim.sh`
+1. Make sure `fpga/src/gen/nemo_cfg_pkg.sv` is up to date (`scripts/run_phase4_sim.sh`
    regenerates it automatically; standalone: `cd tools && python3 -m nemo_ctl.gen_svh`).
    Then `vivado -mode batch -source scripts/create_project.tcl -tclargs phase4_loopback_top`
-   — the script globs `fpga/src/gen/*.svh` alongside the other sources automatically.
+   — the script globs `fpga/src/gen/*.sv` alongside the other sources automatically.
 2. Confirm VADJ (J18) is on 1.8 V before connecting anything.
 3. Wire the 5 jumpers per the table in §1.
-4. Set `sw[4:0] = 00000` (RUN off), program the board.
+4. Set `sw[4:0] = 00000` (RUN off), program the board:
+   `vivado -mode batch -source scripts/program_board.tcl -tclargs phase4_loopback_top`
+   (PROG micro-USB J17 connected, board powered).
 5. Internal check first, pair by pair (`sw[2:0] = 0..4`, `sw[4]` stays low): confirm LD3
    (fault) is off and LD0/LD1 read sensible idle levels for each pair before ever running.
 6. Set `sw[4] = 1` (RUN). For each pair in turn (`sw[2:0] = 0..4`):
@@ -85,6 +87,12 @@ simulated; §4 (Results) is a template to fill in while actually running it.
 7. Record the actual readings in §4 below, tagged **[measured on board]**. If anything
    disagrees with the expected result, record that too (symptom, not a guess at the cause)
    and add it to `docs/issues.md` per CLAUDE.md §9.
+
+### Build record (2026-10-19, Windows lab PC, Vivado 2022.1)
+
+Bitstream built with `create_project.tcl -tclargs phase4_loopback_top build` after the
+`.svh` -> `.sv` fix (`docs/issues.md`). Implementation report, **not a measurement**: all
+timing constraints met (WNS +3.702 ns, WHS +0.117 ns), 440 LUTs, 415 FFs, 24 IOBs.
 
 ## 4. Results — PENDING, not yet run
 

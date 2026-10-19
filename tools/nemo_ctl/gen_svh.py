@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate fpga/src/gen/nemo_cfg_pkg.svh from a compile-time test config.
+"""Generate fpga/src/gen/nemo_cfg_pkg.sv from a compile-time test config.
 
 Phase 4 of generic_controller_prompt.md ("Top level with compile-time
 config, no link yet"): the generated package holds one group of localparams
@@ -28,7 +28,7 @@ from .units import UnitsError, quantize_clock, quantize_duration
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = REPO_ROOT / "config" / "phase4_loopback_test.yaml"
-OUT_PATH = REPO_ROOT / "fpga" / "src" / "gen" / "nemo_cfg_pkg.svh"
+OUT_PATH = REPO_ROOT / "fpga" / "src" / "gen" / "nemo_cfg_pkg.sv"
 
 TICK_W = 32  # generous default for a 5-cell bring-up design; see sig_cell.sv's own default
 DATA_FIELD_W = 16  # width of the generated *_DATA localparam (must match phase4_loopback_top.sv's SERIAL_W)

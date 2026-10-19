@@ -252,7 +252,7 @@ cells work on real hardware before any real chip pin is assigned.
 scripts/run_phase4_sim.sh
 ```
 
-This also regenerates `fpga/src/gen/nemo_cfg_pkg.svh` from
+This also regenerates `fpga/src/gen/nemo_cfg_pkg.sv` from
 `config/phase4_loopback_test.yaml` automatically. Expect `ALL TESTS PASSED (21 checks)`.
 
 ### 5.2 Build it in Vivado

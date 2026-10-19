@@ -13,7 +13,7 @@
 # incidentally extends CLAUDE.md §7 item 1's open "verify remaining 15 pairs"
 # task, four pairs' worth, as a side effect of proving the generic cells.
 #
-# Consumed by tools/nemo_ctl/gen_svh.py -> fpga/src/gen/nemo_cfg_pkg.svh.
+# Consumed by tools/nemo_ctl/gen_svh.py -> fpga/src/gen/nemo_cfg_pkg.sv.
 
 pairs:
   - name: test_clock

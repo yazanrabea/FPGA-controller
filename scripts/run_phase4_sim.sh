@@ -11,11 +11,11 @@ source "$(dirname "$0")/sim_lib.sh"
 SRC=fpga/src
 TB=fpga/tb
 
-echo "Regenerating $SRC/gen/nemo_cfg_pkg.svh from config/phase4_loopback_test.yaml..."
+echo "Regenerating $SRC/gen/nemo_cfg_pkg.sv from config/phase4_loopback_test.yaml..."
 (cd tools && "$(sim_python)" -m nemo_ctl.gen_svh)
 echo
 
 echo "=== phase4_loopback_top_tb ==="
 sim_run phase4_loopback_top_tb \
-    "$SRC/gen/nemo_cfg_pkg.svh" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
+    "$SRC/gen/nemo_cfg_pkg.sv" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$SRC/phase4_loopback_top.sv" "$TB/phase4_loopback_top_tb.sv"
