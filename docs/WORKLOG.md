@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Phase 5 runtime link (RTL+Python+CLI done, hardware bring-up pending — EXP-02) | `feature/rahaf-user-manual` | `fpga/src/{uart_tx,uart_rx,link_ctrl,phase5_link_top}.sv`, `fpga/tb/{uart_tb,link_ctrl_tb,phase5_link_top_tb}.sv`, `fpga/constraints/phase5_link_top.xdc`, `tools/nemo_ctl/{link,cli}.py`, `docs/{link_register_map,USER_MANUAL,controller_spec}.md`, `docs/experiments/EXP-02...md`, this file |
+| Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
 
 ---
 
@@ -81,6 +81,10 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Next steps: Rahaf powers the board (VADJ 1V8, jumpers per EXP-01 §1, `sw` all 0) and
   connects PROG J17; program with `program_board.tcl`; run EXP-01 §3; then Phase 6
   steps 6.1-6.5.
+- Session end: a background `git push` was killed by Claude Code (PC low on memory)
+  while it waited on Git Credential Manager. Rahaf then asked to push everything and
+  write a handoff for another agent: `docs/HANDOFF.md` rewritten for the current state
+  (lab PC setup, EXP-01 steps, approved Phase 6 plan with the timing analysis).
 
 ---
 

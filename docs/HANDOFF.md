@@ -1,15 +1,9 @@
-# Handoff — NEMO generic controller, Phases 0-5
+# Handoff — NEMO generic controller (Phases 0-5 built, Phase 6 started, EXP-01 ready to run)
 
-> For a fresh agent picking this up with no prior context. Read this, then
-> `CLAUDE.md` and `docs/WORKLOG.md` (newest entry first) for full detail.
+> For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
+> and `docs/WORKLOG.md` (newest entry first, 2026-10-19) for full detail.
 
-## State as of 2026-10-16, commit `5b045ef` on `main`
-
-Phases 0-4 and Phase 5's **software side** are built, tested, documented, and pushed to
-`main` on `https://github.com/yazanrabea/FPGA-controller.git`. **No phase past 3 has been
-run on real hardware yet** — this environment has no Vivado license and no physical
-ZedBoard. That is the only thing blocking further progress; nothing is unfinished in the
-sense of "not designed yet."
+## State as of 2026-10-19, `main` on `https://github.com/yazanrabea/FPGA-controller.git`
 
 | Phase | What it is | Status |
 |---|---|---|
@@ -17,74 +11,126 @@ sense of "not designed yet."
 | 1 | Config file + Python core | Done |
 | 2 | Interactive CLI wizard | Done |
 | 3 | RTL cells (`sig_cell`/`cap_cell`/`run_ctrl`) | Done, **simulated only** |
-| 4 | `phase4_loopback_top` (compile-time config) | RTL/software done, **hardware step not run** (`docs/experiments/EXP-01...md`) |
-| 5 | `phase5_link_top` (runtime UART link) | RTL/Python/CLI done, **simulated only, hardware step not run** (`docs/experiments/EXP-02...md`) |
-| 6-8 | SIPO/PISO, mode sequencer, chip-ready checklist | Not started |
+| 4 | `phase4_loopback_top` (compile-time config) | **Bitstream now builds in Vivado** (timing met); hardware run EXP-01 **not started** — board wasn't connected yet |
+| 5 | `phase5_link_top` (runtime UART link) | Simulated only; EXP-02 blocked on PMOD pin/voltage (see below) |
+| 6 | SIPO/PISO against Dima's model | **Plan approved; step 6.0 done; 6.1-6.5 not started** |
+| 7-8 | Mode sequencer, chip-ready checklist | Not started |
 
-## The one real blocker
+## Big change since the last handoff: the Windows lab PC
 
-The USB-UART adapter's PMOD pin assignment and bank voltage (3.3V vs VADJ/1.8V) was
-never confirmed against the ZedBoard reference manual, going all the way back to Phase 0
-(`docs/controller_spec.md` §9). `fpga/constraints/phase5_link_top.xdc` deliberately
-leaves `rxd`/`txd` unconstrained because of this. **Do not invent a pin or voltage** —
-this has to be checked against the actual board/manual by someone with physical access,
-then the XDC updated.
+Work now happens on the **Windows 11 lab PC** (`C:\Users\LAB\Desktop\yazan_rahaf\FPGA-controller`),
+which has **Vivado 2022.1** (`C:\Xilinx\Vivado\2022.1`, synthesis license OK) and the
+**ZedBoard physically in the lab**. No Icarus/yosys there.
 
-Phase 4's hardware bring-up (`EXP-01`) has no such blocker — it only needs Vivado + the
-board + jumper wires + a multimeter, no new wiring decision. If whoever picks this up has
-board access but hasn't resolved the PMOD question yet, **run EXP-01 first**, then
-resolve the PMOD question, then run EXP-02.
+- Shell: use Git Bash for the `.sh` scripts. Call Vivado as
+  `cmd //c "C:\\Xilinx\\Vivado\\2022.1\\bin\\vivado.bat" -mode batch -nojournal -nolog -source <tcl> -tclargs ...`.
+- Python: use `python`, not `python3` (`python3` is the Windows Store stub).
+  `pip install -r tools/requirements.txt` has been done.
+- Sims: `scripts/run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh` pick
+  Icarus if installed, else Vivado xsim (`scripts/sim_lib.sh`; force with `SIM=xsim`).
+- `.gitattributes` keeps `*.sh` LF (this PC has `core.autocrlf=true`).
+- **Memory is tight on this PC**: a background `git push` was killed by Claude Code for
+  low memory. Don't leave long jobs idling in the background.
+- **`git push` may stall on Git Credential Manager** (GitHub sign-in window on the lab
+  screen). If a push hangs, ask Rahaf to sign in; don't retry blindly.
+
+## Last verified results (2026-10-19)
+
+- **[simulated, xsim 2022.1]** all 8 testbenches pass via the repo scripts: `sig_cell_tb`
+  28, `cap_cell_tb` 16, `run_ctrl_tb` 9, `integration_tb` 16, `phase4_loopback_top_tb` 21,
+  `uart_tb` 12, `link_ctrl_tb` 22, `phase5_link_top_tb` 7.
+- **[not hardware]** `python -m pytest tools/nemo_ctl/tests`: 101 passed, 1 skipped
+  (expected skip: `test_link.py:382` only runs without pyserial).
+- **[Vivado implementation report, not a measurement]** `phase4_loopback_top`: no errors,
+  no critical warnings, WNS +3.702 ns / WHS +0.117 ns, 440 LUTs / 415 FFs / 24 IOBs.
+- yosys utilization estimate not re-run (not installed on the lab PC).
+
+Fixed this session (detail in `docs/issues.md`): two testbench constructs Icarus accepted
+but xsim rejects; generated package renamed `fpga/src/gen/nemo_cfg_pkg.svh` -> **`.sv`**
+because Vivado synthesis never compiles `.svh` (the first real Vivado build failed on it).
 
 ## What to do next (in order)
 
-1. **If you have Vivado + a ZedBoard**: run `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
-   end to end, filling in its results table with real readings (not simulated guesses).
-2. Confirm the PMOD bank voltage (see above), update the XDC, then run
-   `docs/experiments/EXP-02_phase5_link_bringup.md` the same way — its centerpiece check
-   is changing `test_clock`'s frequency from the PC *while running* and seeing it change
-   on the multimeter/scope, with no re-synthesis.
-3. **If you do NOT have hardware access**: there is no more software work to do on
-   Phases 4/5 — don't invent hardware results or mark either phase "done". Either wait,
-   or move on to designing (not yet building) Phase 6 (SIPO/PISO) per
-   `generic_controller_prompt.md`, clearly marked as unverified/software-only like
-   everything above it.
-4. Whatever you do, **document it as you go** per `CLAUDE.md` §9 — a WORKLOG entry,
-   tag every result `[simulated]` or `[measured on board]`, never claim a hardware
-   result that wasn't actually measured.
-5. Once EXP-01 and EXP-02 both pass on real hardware, update `CLAUDE.md` §5/§7 and
-   `docs/USER_MANUAL.md`'s status table, and only then are Phases 4-5 actually "done"
-   per the project's own rule ("a phase is not done until ... I have followed it
-   successfully myself" — Rahaf has to run it, not just an agent in simulation).
+1. **EXP-01 (Phase 4 hardware run)** — `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`.
+   Rahaf was asked to: put J18 (VADJ) on **1V8**; wire J3-0↔J3-16, J3-1↔J2-17,
+   J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20 (P column); all switches down; connect PROG
+   micro-USB **J17**; power on. Then:
+   - Build if `build/` is missing (git-ignored): `create_project.tcl -tclargs phase4_loopback_top build`.
+   - Program: `scripts/program_board.tcl -tclargs phase4_loopback_top` (prints
+     `no JTAG target found` if the board isn't connected — that's what it printed last time).
+   - Walk Rahaf through EXP-01 §3 pair by pair. **She** reads LEDs/multimeter; you record
+     exactly what she reports in §4 tagged [measured on board]. Never fill §4 yourself.
+2. **Phase 6, steps 6.1-6.5** (plan approved by Rahaf 2026-10-19, recorded in WORKLOG):
+   - **Key finding**: the generic cells meet Dima's timing — no dedicated engines.
+     SIPO load = `rst_sipo` low PULSE; `clk_sipo` CLOCK cycles=136 (starts high -> exactly
+     136 rising edges, ends low); `sipo_in` SERIAL MSB-first, `shift_strobe` = `clk_sipo`
+     `falling_edge`, delay a few ticks *before* `clk_sipo`'s so bit 135 is stable at edge 1;
+     `cs` PULSE after the 136th edge. PISO read = `clk_piso` CLOCK cycles=168 (edge 1 =
+     load, 167 shifts); `shift` PULSE rising inside clk_piso's first low phase, width
+     >= 167 periods; `cap_cell` SERIAL 168 bits, `capture_strobe` = `clk_piso`
+     `falling_edge` (first falling edge samples bit 1 before any shift). Validator rule:
+     clk_piso high time >= 3 ticks + chip/wire delay (2-FF sync latency).
+   - 6.1 `tools/nemo_ctl/sipo_piso.py`: 136-bit frame packer (raw + `sel` slice view per
+     Dima's RTL), 168-bit decoder -> 4 stages x {out1[13:0], tdc_out1[6:0], out0[13:0],
+     tdc_out0[6:0]}, PISO0 first; profile builders; validator rules; pytest.
+   - 6.2 `config/phase6_sipo_piso.yaml` (SIPO_LOAD, PISO_READ) + `gen_svh.py` support;
+     data-change/sampling edges and polarities are config fields marked UNCONFIRMED.
+   - 6.3 `fpga/src/phase6_sipo_piso_top.sv`: `run_ctrl` + `sig_cell` (SERIAL_W=136) +
+     `cap_cell` (CAP_W=168), strobe source/edge selected by config parameters. Sim only,
+     no XDC (no chip-pin -> LA_P map yet).
+   - 6.4 `fpga/tb/phase6_sipo_piso_tb.sv`: our controller + Dima's **unmodified**
+     `fpga/reference/dima_blocks/` (`sipo_wrapper`, `sipo`, `piso2`); stub
+     `ANTENNA_18_SVT_WTN` and `DLY3_X4_18_SVT_WTN` as buffers; drive `phirst` from the TB;
+     chain 4x `piso2` in the TB (PISO3.prev=0, PISOk.prev=PISO(k+1).serial_out, read
+     PISO0). Exit: known frame -> correct `sel[7:0]` + each `sel[23:8]` slice;
+     known out/tdc values -> correct 168-bit decode. Run in **xsim** (and Icarus if present).
+   - 6.5 docs: WORKLOG, issues/decisions, USER_MANUAL section, CLAUDE.md §6/§7.
+   - Known quirks of Dima's model to *document, not fix* (`docs/controller_spec.md` Q1/Q2):
+     `sipo_wrapper`'s reset loads `sel[23:8]` while `parallel_out` is also reset (slice
+     [23:8] never reaches `sel`); `index` overruns after the 7th `phirst`; `sipo_out` is
+     `shift_reg[0]` (echo of `sipo_in`), not a chain output.
+   - Out of scope (deferred to Phase 7, approved): widening the Phase 5 link's 16-bit
+     DATA/CAPTURE registers for 136/168-bit frames.
+3. **EXP-02 (Phase 5 hardware)** — still blocked: the USB-UART adapter's PMOD pin and bank
+   voltage were never confirmed against the ZedBoard reference manual
+   (`docs/controller_spec.md` §9). `phase5_link_top.xdc` leaves `rxd`/`txd` unconstrained
+   on purpose. **Do not invent a pin or voltage.**
 
-## Key files to know about
+## Working rules Rahaf set (2026-10-19)
 
-| Thing | Path |
-|---|---|
-| Shared project context (read first, always) | `CLAUDE.md` |
-| Chronological log — read newest entry first | `docs/WORKLOG.md` |
-| Lab-user-facing manual (setup + every phase's commands) | `docs/USER_MANUAL.md` |
-| Phase 0 spec, pin table, open questions, link-protocol history | `docs/controller_spec.md` |
-| Phase 5's concrete byte-level register map | `docs/link_register_map.md` |
-| Pending hardware procedures | `docs/experiments/EXP-01...md`, `EXP-02...md` |
-| RTL sources / testbenches | `fpga/src/`, `fpga/tb/` |
-| Python config/wizard/link tool | `tools/nemo_ctl/` (see its own `README.md`) |
-| Sim-only CI-equivalent checks | `scripts/run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh`; `python3 -m pytest tools/nemo_ctl/tests` (102 tests) |
+- **Push directly to `main` after each passing step**: commit -> `git pull --rebase origin main`
+  -> `git push origin main`. This replaces the CLAUDE.md §10 PR flow for her work, shared
+  files included (she approved editing scripts, `gen_svh.py`, `CLAUDE.md` directly).
+- **Stop for her approval after each phase** (Phase 6 ends after 6.5).
+- Document every step per CLAUDE.md §9; commit docs with the code change.
 
 ## Things a new agent should NOT do
 
-- Don't invent a PMOD pin number or bank voltage — flag it as TBD and point to the
-  ZedBoard reference manual instead, same as this handoff does.
-- Don't mark a hardware exit criterion met from simulation alone. `[simulated]` and
-  `[measured on board]` are not interchangeable anywhere in this project's docs.
-- Don't touch `CLAUDE.md`, XDCs, or `generic_fmc_*` files outside a PR — they're shared
-  files per `CLAUDE.md` §10.
-- Don't merge to `main` without being explicitly asked — Rahaf and Yazan each review
-  the other's PRs per `CLAUDE.md` §10's branch-per-feature workflow.
+- Don't invent a PMOD pin number, bank voltage, or chip behaviour.
+- Don't mark a hardware exit criterion met from simulation or a Vivado report.
+  `[simulated]` and `[measured on board]` are never interchangeable.
+- Don't program the board until Rahaf confirms VADJ is on 1V8 and the jumpers/switches
+  are set per EXP-01.
+- Don't edit Dima's files in `fpga/reference/dima_blocks/`; stub around them.
+
+## Key files
+
+| Thing | Path |
+|---|---|
+| Shared project context (read first) | `CLAUDE.md` |
+| Chronological log, newest first | `docs/WORKLOG.md` |
+| Lab-user manual | `docs/USER_MANUAL.md` |
+| Phase 0 spec, pin table, open questions Q1-Q9 | `docs/controller_spec.md` |
+| Phase 5 register map | `docs/link_register_map.md` |
+| Hardware procedures | `docs/experiments/EXP-01...md`, `EXP-02...md` |
+| Bugs and fixes | `docs/issues.md` |
+| Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
+| Sims | `scripts/run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh` (`sim_lib.sh`) |
+| The task brief (phases, exit criteria) | `generic_controller_prompt.md` |
+| Dima's SIPO/PISO model | `fpga/reference/dima_blocks/` |
 
 ## Who's who
 
-- **Rahaf** — this session's user, owns `feature/rahaf-*` branches, most recently
-  `feature/rahaf-user-manual` (now merged to `main` as of this handoff).
-- **Yazan** — partner, owns the repo (`github.com/yazanrabea/FPGA-controller`), works on
-  his own `feature/<name>-<topic>` branches per `CLAUDE.md` §10.
+- **Rahaf**: this session's user, at the lab PC with the board.
+- **Yazan**: partner, owns the GitHub repo; works on his own `feature/<name>-<topic>` branches.
 - **Supervisor**: Ilan Lipschutz, ASIC² Lab, Technion, NEMO project.
