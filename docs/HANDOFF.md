@@ -32,7 +32,12 @@ which has **Vivado 2022.1** (`C:\Xilinx\Vivado\2022.1`, synthesis license OK) an
 - **Memory is tight on this PC**: a background `git push` was killed by Claude Code for
   low memory. Don't leave long jobs idling in the background.
 - **`git push` may stall on Git Credential Manager** (GitHub sign-in window on the lab
-  screen). If a push hangs, ask Rahaf to sign in; don't retry blindly.
+  screen). If a push hangs, ask Rahaf to sign in; don't retry blindly. There's no `gh`
+  CLI or SSH key on this PC.
+- **No Git identity is configured on the lab PC**, so commits made here (`d97bb34`,
+  `9f5a8fb`, `5af000d` and this handoff's commit) show the author as
+  `unknown <LAB@ASIC2-PC-003...>`. Before committing, ask Rahaf to set a repo-local
+  identity (`git config user.name/user.email`, not `--global`: the PC is shared).
 
 ## Last verified results (2026-10-19)
 
