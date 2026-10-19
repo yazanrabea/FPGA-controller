@@ -55,7 +55,10 @@ module link_ctrl_tb;
     logic [7:0] resp_bytes[0:255];
     int          resp_count;
     int          mock_busy_cnt;
-    always_ff @(posedge clk or negedge rst_n) begin
+    // Plain `always`, not always_ff: resp_count is also cleared by the tasks below, and
+    // IEEE 1800 forbids a second driver on an always_ff variable (xsim VRFC 10-3818;
+    // Icarus silently allows it). Testbench-only mock, so this costs nothing.
+    always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             tx_busy <= 1'b0;
             mock_busy_cnt <= 0;

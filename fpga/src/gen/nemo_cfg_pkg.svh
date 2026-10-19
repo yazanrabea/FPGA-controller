@@ -4,6 +4,8 @@
 `ifndef NEMO_CFG_PKG_SVH
 `define NEMO_CFG_PKG_SVH
 
+`timescale 1ns / 1ps
+
 package nemo_cfg_pkg;
     localparam int TICK_W = 32;
 

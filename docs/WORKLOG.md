@@ -10,6 +10,62 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-19, Rahaf, branch main
+- Goal: re-run every Phase 3-5 simulation and the Python test suite on the lab PC before
+  starting Phase 6 (SIPO/PISO); propose the Phase 6 plan; then Phase 6 step 6.0 (make the
+  sim flow run on the lab PC).
+- Done:
+  - Lab PC is Windows 11 with **Vivado 2022.1 installed** (`C:\Xilinx\Vivado\2022.1`)
+    but no Icarus Verilog/yosys, so the `scripts/run_phase*.sh` scripts (Homebrew paths)
+    couldn't run here. First run: same file lists, same order, with Vivado's simulator
+    (`xvlog -sv` / `xelab` / `xsim -R`) from a throwaway script outside the repo.
+    Installed `tools/requirements.txt` with pip (`python`, not `python3`: on this PC
+    `python3` is the Windows Store stub).
+  - Step 6.0 (approved by Rahaf), fixes for everything that run turned up:
+    - `scripts/sim_lib.sh` (new): picks Icarus if installed, otherwise Vivado xsim
+      (Git Bash on Windows, native paths via `cygpath`); `SIM=icarus|xsim` forces one.
+      `run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh` now use it;
+      Phase 3 skips the yosys estimate with a message if yosys is missing; Phase 4 uses
+      `python3` only if it really works, else `python`. Also fixed `run_phase4_sim.sh`'s
+      header comment, which pointed at a nonexistent "EXP-05" (it's EXP-01).
+    - `fpga/tb/link_ctrl_tb.sv`: mock uart_tx `always_ff` -> `always` (see issues.md).
+    - `tools/nemo_ctl/gen_svh.py`: emits `` `timescale 1ns / 1ps `` in
+      `nemo_cfg_pkg.svh`, and writes the `// Source:` path with `/` on every OS.
+      `fpga/src/gen/nemo_cfg_pkg.svh` regenerated (only change: the timescale line).
+    - `.gitattributes` (new): `*.sh text eol=lf`. This PC has `core.autocrlf=true`,
+      which would check the scripts out with CRLF and break them in Git Bash.
+    - `docs/USER_MANUAL.md` §1 + troubleshooting, `docs/issues.md`, `CLAUDE.md` §4:
+      the xsim fallback and the Windows notes.
+- Hardware setup: none.
+- Results:
+  - **[not hardware]** `python -m pytest tools/nemo_ctl/tests`: 101 passed, 1 skipped
+    (`test_link.py:382`, only meaningful when pyserial is *not* installed; expected).
+    Same after step 6.0.
+  - **[simulated, xsim 2022.1]** before 6.0: `sig_cell_tb` 28/28, `cap_cell_tb` 16/16,
+    `run_ctrl_tb` 9/9, `integration_tb` 16/16, `uart_tb` 12/12, `phase5_link_top_tb` 7/7;
+    `phase4_loopback_top_tb` and `link_ctrl_tb` failed to *elaborate* (they pass under
+    Icarus).
+  - **[simulated, xsim 2022.1]** after 6.0, through the repo scripts themselves: all 8
+    pass -- the 6 above plus `phase4_loopback_top_tb` 21/21 and `link_ctrl_tb` 22/22.
+  - yosys utilization estimate not run (yosys not installed here).
+- Problems / fixes: see `docs/issues.md`, "Testbenches passed in Icarus but failed to
+  elaborate in Vivado xsim".
+- Decisions:
+  - Rahaf asked for direct pushes to `main` after each passing step (commit,
+    `git pull --rebase origin main`, push), in place of the CLAUDE.md §10 PR flow, and a
+    stop for approval after each phase. That covers the shared files touched here
+    (`CLAUDE.md`, scripts, `gen_svh.py`) too; she approved that explicitly.
+  - Phase 6 plan approved: express SIPO load / PISO read with the existing generic cells
+    (no dedicated engines), compile-time config like Phase 4, testbench against Dima's
+    unmodified blocks. Widening the Phase 5 link's 16-bit DATA/CAPTURE registers for
+    136/168-bit frames is deferred to Phase 7.
+  - ZedBoard is available in the lab, so EXP-01 (Phase 4 hardware run) goes next, built
+    with the Vivado on this PC.
+- Next steps: build the `phase4_loopback_top` bitstream, run EXP-01 with Rahaf at the
+  board; then Phase 6 steps 6.1-6.5.
+
+---
+
 ## 2026-10-16, Rahaf, branch feature/rahaf-user-manual
 - Goal: Phase 5 of `generic_controller_prompt.md` — the runtime link ("implement the
   link chosen in Phase 0 [USB-UART on a PMOD]... Python: `nemo_ctl.link` with

@@ -19,3 +19,10 @@ Format: symptom, suspected cause, fix, confirmation.
 - Cause: 50 ohm input loads the LVCMOS18 pin; 1 Mohm doesn't terminate the jumper-wire line.
 - Fix / practice: use 1 Mohm for true levels and accept ringing on jumper wires; 1 MHz looks clean, 100 MHz looks rounded.
 - Status: open, revisit with proper probing (ground spring, short leads) during scope/ILA verification.
+
+## Testbenches passed in Icarus but failed to elaborate in Vivado xsim
+- Symptom (2026-10-19, first run on the Windows lab PC): `link_ctrl_tb` failed with `VRFC 10-3818: variable 'resp_count' is driven by invalid combination of procedural drivers`; `phase4_loopback_top_tb` failed with `XSIM 43-4100: Module phase4_loopback_top_tb has a timescale but at least one module in design doesn't have timescale`. Both had passed under Icarus Verilog.
+- Cause: Icarus is more lenient than the standard. (1) `fpga/tb/link_ctrl_tb.sv`'s mock uart_tx wrote `resp_count` in an `always_ff` while tasks also cleared it; IEEE 1800 allows only one driver for an `always_ff` variable. (2) The generated `fpga/src/gen/nemo_cfg_pkg.svh` had no `` `timescale `` while every other file does.
+- Fix: plain `always` for that testbench-only mock; `tools/nemo_ctl/gen_svh.py` now emits `` `timescale 1ns / 1ps ``. Also made the sim scripts fall back to xsim (`scripts/sim_lib.sh`) so both simulators get used.
+- Confirmation: all 8 testbenches pass in xsim 2022.1 through `scripts/run_phase{3_sims,4_sim,5_link_sim}.sh` [simulated]. Not yet re-checked under Icarus (not installed on the lab PC); the changes are standard SV that Icarus already accepted in equivalent form.
+- Lesson: run new testbenches in xsim too, not only Icarus.

@@ -61,6 +61,13 @@ hardware. On macOS:
 brew install icarus-verilog yosys
 ```
 
+**On the Windows lab PC** nothing extra is needed: the `scripts/run_phase*.sh` scripts
+fall back to **Vivado 2022.1's own simulator (xsim)** at `C:\Xilinx\Vivado\2022.1` when
+Icarus isn't installed (`scripts/sim_lib.sh` picks the tool; force one with `SIM=icarus`
+or `SIM=xsim`). Run them from **Git Bash**, and use `python` instead of `python3` there
+(on that PC `python3` is only the Windows Store stub). yosys isn't installed on the lab
+PC, so the Phase 3 script skips the utilization estimate.
+
 If you're on an Intel Mac with both an Intel and an Apple-silicon Homebrew installed and
 the Intel one's compiler is broken, use `/opt/homebrew/bin/brew` explicitly (see
 `CLAUDE.md` §4).
@@ -362,6 +369,8 @@ without an actual reading.
 | Wizard says "not understood: ''" repeatedly | You answered blank where the menu needs an actual choice (blank is only valid for optional follow-ups like delay/duty, not the main type menu) | Type a number or a bracketed keyword |
 | `validate` prints nothing | That's success, not a hang — no issues found | — |
 | `iverilog: command not found` | Not installed, or installed under `/opt/homebrew/bin` which isn't on `PATH` | `export PATH="/opt/homebrew/bin:$PATH"` or install it |
+| `ERROR: neither Icarus Verilog nor Vivado xsim found` | Neither simulator is on `PATH` or in its default install folder | Install Icarus (macOS) or run on a PC with Vivado 2022.1 in `C:\Xilinx\Vivado\2022.1` |
+| `python3` prints only `Python` and does nothing (Windows) | Windows Store alias, not a real Python | Use `python` |
 | A testbench's checks pass individually but you're not sure the design is really right | Simulation proves logic, not real voltage levels, timing margins, or signal integrity | That's exactly why Phases 4/5 still need a real hardware run (§5.3/§6.3) — don't treat [simulated] as a substitute for [measured on board] |
 | `link status`/`link run`/... hangs or times out | Wrong `--port`, adapter not actually wired/powered, or `--baud` doesn't match the loaded bitstream's `uart_tx.sv`/`uart_rx.sv` `BAUD` parameter | Double-check the port name and wiring; confirm baud matches (115200 by default) |
 | `link ...` raises `ModuleNotFoundError: No module named 'serial'` | `pyserial` isn't installed | `pip3 install -r tools/requirements.txt` (step §1) |
