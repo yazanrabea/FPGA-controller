@@ -20,6 +20,14 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
+## 2026-10-22, JTAG link J2 (bridge RTL) done [simulated]
+
+- `fpga/src/jtag_link_bridge.sv` + `jtag_link_bscan.sv` (BSCANE2 USER4). `link_frame` sees
+  UART-shaped ports. Testbench 19/19, mutation-checked. Vivado OOC timing met.
+- Scan format + the rules the PC transport (J4) must follow: `docs/link_register_map.md`,
+  "Transport: JTAG over J17".
+- Next: J3 = `LINK` choice in the two link tops + XDC TCK constraints, bitstreams.
+
 ## 2026-10-22, JTAG link J1 (EXP-05) PASS
 
 - PC link = JTAG over J17 (Yazan; plan J1-J5 in `docs/decisions.md`). J1 done: a BSCANE2

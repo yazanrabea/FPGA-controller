@@ -12,3 +12,7 @@ TB=fpga/tb
 
 echo "=== jtag_echo_core_tb (J1: USER1 DR echo) ==="
 sim_run jtag_echo_core_tb "$SRC/jtag_echo_core.sv" "$TB/jtag_echo_core_tb.sv"
+
+echo
+echo "=== jtag_link_bridge_tb (J2: link bytes over USER scans, both directions) ==="
+sim_run jtag_link_bridge_tb "$SRC/jtag_link_bridge.sv" "$TB/jtag_link_bridge_tb.sv"

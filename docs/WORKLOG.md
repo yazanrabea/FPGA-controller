@@ -7,7 +7,49 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link: J1 done (EXP-05 PASS); next J2 (bridge RTL) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link: J1 (EXP-05 PASS) and J2 (bridge RTL, simulated) done; next J3 (link tops) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC), JTAG link J2: bridge RTL, Yazan + Claude, branch main
+- Goal: step J2 (approved by Yazan): the RTL that carries link bytes over USER4 scans and
+  gives `link_frame` the same ports as the UART.
+- Done:
+  - `fpga/src/jtag_link_bridge.sv`:
+    - TCK-domain scan register;
+    - accept-only-if-ready-at-Capture + magic check;
+    - handshake CDC (h_tog / p_tog);
+    - 256-byte down / up FIFOs, down bytes paced one per 32 clk;
+    - the reply builder.
+  - `fpga/src/jtag_link_bscan.sv`: BSCANE2 (USER4) + bridge, for the tops (J3).
+  - `fpga/tb/jtag_link_bridge_tb.sv`: 19 checks, in `scripts/run_jtag_sim.sh`.
+  - Scan format + PC rules: new section "Transport: JTAG over J17" in
+    `docs/link_register_map.md`.
+- Hardware setup: none (no board step in J2).
+- Results:
+  - **[simulated, xsim 2022.1]** `jtag_link_bridge_tb` 19/19:
+    - 600 bytes round trip, with stray scans (0s, 1s, random, fake magic with a bad length)
+      that changed nothing;
+    - back-to-back scans: 3 rejected (ready=0), still no loss;
+    - SEL low ignored;
+    - honouring `free` filled the FIFO exactly; ignoring it set the overflow flag.
+  - `jtag_echo_core_tb` 9/9 (unchanged).
+  - Mutation check (scratch copies, not committed), both caught by the testbench:
+    - accept without the latched ready: the 300-byte back-to-back stream was lost;
+    - no magic check: strays injected 152 bytes.
+  - **[Vivado report, out-of-context synth + route of `jtag_link_bscan`]** timing met:
+    TCK +22.3 ns, 100 MHz +1.21 ns; 2281 LUT, 3134 FF, 48 LUT-RAM.
+- Problems / fixes, during development:
+  - FIFO memories written inside the async-reset block were built as 4096 FFs, and the
+    100 MHz slack was only +0.29 ns. Moved the writes to their own block: 3134 FFs, +1.21 ns.
+  - Two testbench expectations were wrong and the RTL was right:
+    - the B FIFO took 257 bytes, because its pacer hands one byte out at once;
+    - the reply counter already includes test 1's scan.
+- Decisions: the protocol needs no ack field: acceptance is the acknowledgement, decided at
+  Capture.
+- Next steps: J3, a `LINK = UART | JTAG` choice in `phase5_link_top` / `phase7_link_top` +
+  XDC, then bitstreams (possible for the first time: JTAG needs no `rxd`/`txd` pins).
+  After Yazan's OK.
 
 ---
 

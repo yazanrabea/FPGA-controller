@@ -163,3 +163,42 @@ RAM, which takes ~40 ticks (0.4 µs). If step k ends sooner (a fixed step under 
 ticks, or a wait whose condition is already true), step k+1 starts as soon as the copy
 lands and STATUS.late is set. `python -m nemo_ctl.cli seq load` warns about fixed
 steps that are too short; waits can only be caught by the flag.
+
+## Transport: JTAG over J17 (instead of the UART), from 2026-10-22
+
+The frames above are a byte stream; it doesn't matter how the bytes travel. With the JTAG
+transport (`docs/decisions.md`; RTL `fpga/src/jtag_link_bridge.sv`, wrapper
+`fpga/src/jtag_link_bscan.sv`) they ride inside BSCANE2 **USER4** (IR `0x23`) scans over
+the PROG cable, and `link_frame.sv` sees the same `rx_byte`/`tx_byte` ports as with
+`uart_rx`/`uart_tx`.
+
+Every scan is exactly **1024 bits = 128 bytes** (short scans misalign: EXP-05). Byte i =
+bits [8i+7:8i], shifted LSB first; xsdb `-hex` strings are byte-little-endian.
+
+| Byte | PC -> FPGA (TDI, used at Update) | FPGA -> PC (TDO, loaded at Capture) |
+|---|---|---|
+| 0, 1 | magic `4A 4C` ("JL") | magic `6A 6C` ("jl") |
+| 2 | `n_dn`: down data bytes in this scan, 0..124 | flags: bit0 **ready**, bit1 down overflow (sticky) |
+| 3 | 0 | `n_up`: up data bytes offered, 0..120 |
+| 4 | down data byte 0 (data in bytes 4..127) | `free`: down FIFO space (256-byte FIFO, saturates at 255) |
+| 5 | | accepted-scan counter (wraps at 256) |
+| 6, 7 | | 0 |
+| 8..127 | | up data (bytes 8..127) |
+
+Rules (the PC transport, step J4, must follow them):
+1. **A scan is accepted iff its own reply had `ready` = 1** (and its header is valid). So
+   the PC knows from the scan it just did whether the FPGA took it.
+2. **Accepted:**
+   - the FPGA queues the `n_dn` down bytes;
+   - it drops the `n_up` up bytes it offered in that same reply; they're now the PC's.
+3. **Not accepted (`ready` = 0):**
+   - nothing happened: resend the same down bytes later;
+   - ignore the reply's data.
+4. **Down credit:** send at most `free - n_dn`, where both come from the last accepted
+   scan's reply and its own `n_dn`. Extra bytes are dropped and set the overflow flag.
+5. A scan without the `JL` magic (hw_server probing, another tool) is ignored completely.
+6. The FPGA needs ~3 us after an accepted scan to prepare the next reply. A scan that comes
+   sooner gets `ready` = 0. One scan per xsdb `run` (~1.3 ms) always finds it ready.
+
+Throughput, one scan per `run`: up to 124 bytes down and 120 up per ~1.3 ms, about
+95 kB/s each way (EXP-05 measured the raw scan rate).
