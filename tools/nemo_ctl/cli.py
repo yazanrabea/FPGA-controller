@@ -90,6 +90,15 @@ def cmd_gen_template(args: argparse.Namespace) -> int:
     return 0
 
 
+def _fmt_hz(hz: float) -> str:
+    """Frequency with a readable unit. A fixed `MHz:.4f` printed 1 Hz as "0.0000 MHz"
+    (seen in EXP-02 over JTAG, 2026-10-22)."""
+    for unit, scale in (("MHz", 1e6), ("kHz", 1e3)):
+        if hz >= scale:
+            return f"{hz / scale:.4f} {unit}"
+    return f"{hz:.4f} Hz"
+
+
 def _open_link(args: argparse.Namespace):
     if args.jtag:
         from .jtag import open_jtag
@@ -231,7 +240,7 @@ def cmd_link_set_clock(args: argparse.Namespace) -> int:
             lnk.apply()
     finally:
         lnk.close()
-    print(f"requested {q.requested_hz / 1e6:.4f} MHz -> achieved {q.achieved_hz / 1e6:.4f} MHz "
+    print(f"requested {_fmt_hz(q.requested_hz)} -> achieved {_fmt_hz(q.achieved_hz)} "
           f"({q.error_pct:+.2f}%), period={q.period_ticks} ticks, high={q.high_ticks} ticks"
           + (" -- applied" if args.apply else " -- NOT applied yet, run `link apply` (or pass --apply)"))
     return 0

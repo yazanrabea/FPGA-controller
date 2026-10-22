@@ -7,7 +7,31 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link: J1 (EXP-05 PASS), J2-J4 done; next J5 (EXP-02 / EXP-04 over JTAG on the board) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link J1-J4 done; EXP-02 over JTAG PASS; next EXP-04 (Phase 7 over JTAG). | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC, board), J5 part 1: EXP-02 over JTAG, Yazan at the ZedBoard + Claude, branch main
+- Goal: Phase 5's exit criterion on the board over the JTAG link: change a clock from the PC
+  with no re-synthesis and see it on the multimeter.
+- Done:
+  - Programmed `phase5_link_jtag_top`; ran EXP-02 §3 steps 5-9 with `--jtag` (steps 1/4,
+    UART adapter, don't apply).
+  - Fixed the CLI frequency display (`_fmt_hz`, `tools/nemo_ctl/cli.py`, + test).
+  - Docs: EXP-02 §4/§5, `docs/issues.md`, CLAUDE.md §5, HANDOFF.
+- Hardware setup: J18 1V8, EXP-01 jumpers, switches down, J17. Fluke 115 DC V, ground on an
+  SMA shell.
+- Results **[measured on board]** (table in EXP-02 §4):
+  - `link status`: STOPPED.
+  - Readback after set-clock 100 Hz: PARAM_A 1,000,000 / PARAM_B 500,000.
+  - APPLY + RUN: RUNNING, LD4 on, **J3-0 0.9 V**.
+  - **Live, no STOP**: duty 25% -> **0.45 V**; then 1 Hz -> LD0/LD1 blink 1/s; LD4 on throughout.
+  - STOP: LD4 off, J3-0 0 V. LD5 (link error) off.
+  - **[not hardware]** pytest 213 passed, 1 skipped.
+- Problems / fixes: the `0.0000 MHz` display (cosmetic, fixed).
+- Decisions: none.
+- Next steps: J5 part 2, EXP-04: `phase7_link_jtag_top`, a sequence loaded and run from the
+  PC (`cli seq ... --jtag`).
 
 ---
 

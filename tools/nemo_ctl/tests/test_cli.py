@@ -112,3 +112,11 @@ def test_port_and_jtag_are_exclusive():
     result = _run(["link", "status", "--port", "COM3", "--jtag"])
     assert result.returncode != 0
     assert "not allowed with" in result.stderr
+
+
+def test_fmt_hz_keeps_low_frequencies_readable():
+    from nemo_ctl.cli import _fmt_hz
+    assert _fmt_hz(1.0) == "1.0000 Hz"            # was "0.0000 MHz" (EXP-02, 2026-10-22)
+    assert _fmt_hz(100.0) == "100.0000 Hz"
+    assert _fmt_hz(250e3) == "250.0000 kHz"
+    assert _fmt_hz(3.0303e6) == "3.0303 MHz"

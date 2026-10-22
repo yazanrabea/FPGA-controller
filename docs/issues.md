@@ -136,3 +136,9 @@ Format: symptom, suspected cause, fix, confirmation.
 - Confirmation: `seq_engine_tb` 40/40 (it checks COND_AFTER's tick-exact timing), `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27, `phase7_link_top_tb` 21, `jtag_link_e2e_tb` 11 [simulated, xsim]; `phase7_link_jtag_top` rebuilt: timing met, sys clk WNS +0.427 ns [Vivado report].
 - Note: EXP-03 (PASS on the board, 2026-10-22) was measured on the bitstream from before this change. The logic is equivalent and the simulations are unchanged, but strictly the new `phase7_seq_loopback_top` bitstream hasn't been on the board.
 - Side effect: `phase7_seq_loopback_top` rebuilt with the change still meets timing, but WNS went from +0.248 to **+0.100 ns**. Its critical path is the compile-time step-table mux by `step` (WORKLOG review, 2026-10-22), not COND_AFTER, so this is placement variation on an already tight path. Watch item: if it ever fails, register the current step's table entry (like `seq_bank` does).
+
+## `cli link set-clock` printed low frequencies as 0.0000 MHz
+- Symptom (2026-10-22, EXP-02 over JTAG): `--freq 1Hz` printed `requested 0.0000 MHz -> achieved 0.0000 MHz`. The tick counts printed were right (period 100,000,000).
+- Cause: `tools/nemo_ctl/cli.py` always formatted `hz / 1e6` with 4 decimals.
+- Fix: `_fmt_hz()` picks Hz / kHz / MHz. Test `test_fmt_hz_keeps_low_frequencies_readable`.
+- Confirmation: pytest 213 passed, 1 skipped.

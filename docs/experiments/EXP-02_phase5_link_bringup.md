@@ -90,24 +90,55 @@ multimeter/oscilloscope. Everything below through §3 is prepared and simulated;
     frame errors (LD5) or NACKs encountered, even if eventually resolved, in
     `docs/issues.md` per CLAUDE.md §9.
 
-## 4. Results — PENDING, not yet run
+## 4. Results — 2026-10-22, run over **JTAG** (J17), not the UART: PASS [measured on board]
 
-| Step | Expected | Measured | Instrument | Pass/Fail |
+### Transport change (read this first)
+The kit has no USB-UART adapter, so the PC link was moved to the J17 PROG cable
+(`docs/decisions.md`; JTAG plan J1-J5). This run used:
+- `phase5_link_jtag_top` (= `phase5_link_top` with `LINK("JTAG")`, same cells and
+  register map), built and programmed with `scripts/create_project.tcl` /
+  `scripts/program_board.tcl`;
+- `python -m nemo_ctl.cli link ... --jtag` instead of `--port`.
+
+Steps 1 and 4 (UART adapter) don't apply. The UART build (`phase5_link_top`) is still not
+run on hardware, and its `rxd`/`txd` pins are still TBD.
+
+### Setup
+- Yazan at the board, Claude on the lab PC (Vivado 2022.1, xsdb).
+- ZedBoard, J18 on **1V8**; the EXP-01 jumpers (J3-0↔J3-16 ... J3-4↔J2-20); switches all
+  down (`sw[2:0]` = pair 0); PROG micro-USB on J17.
+- Fluke 115 DC V, black probe on an SMA jack's shell.
+- Programmed: `PROGRAMMED: xc7z020_1 with phase5_link_jtag_top.bit (DONE=1)`. Build report:
+  timing met, sys clk WNS +0.206 ns (`docs/WORKLOG.md`, J3).
+
+| Step | Command (from `tools/`) | Expected | Measured | Pass |
 |---|---|---|---|---|
-| UART adapter pin + voltage confirmed | PACKAGE_PIN/IOSTANDARD added to the XDC | — | — | — |
-| `link status` (before RUN) | `STOPPED`, no timeout | — | — | — |
-| Register readback matches what was written | raw bytes == requested ticks | — | — | — |
-| test_clock running at the first configured frequency | DC avg matches configured duty | — | — | — |
-| **Frequency changed live (no STOP, no re-synthesis)** | new DC avg / new period on scope, RUN LED never dropped | — | — | — |
-| `link stop` | LD4 off, pin idle | — | — | — |
-| UART frame-error LED (LD5) | stays off throughout | — | — | — |
+| 5. link alive | `cli link status --jtag` | `STOPPED`, no timeout | `STOPPED` | PASS |
+| 6. write + read back | `cli link set-clock --jtag --cell test_clock --freq 100Hz --duty 50%` (no apply), then `Link.read_reg` | CTRL 03, PARAM_A 1,000,000, PARAM_B 500,000 | CTRL `03`, PARAM_A `40420f00` = 1,000,000, PARAM_B `20a10700` = 500,000, run = False | PASS |
+| 7. APPLY + RUN | `cli link apply --jtag`, `cli link run --jtag`, `cli link status --jtag` | RUNNING; LD4 on; J3-0 ≈0.9 V | `RUNNING`; LD4 on; LD0/LD1/LD2 on, LD3 off; **J3-0 0.9 V** | PASS |
+| **8a. duty changed live** | `cli link set-clock --jtag --cell test_clock --freq 100Hz --duty 25% --apply` (no STOP) | J3-0 ≈0.45 V, LD4 stays on | **J3-0 0.45 V**, LD4 stayed on | **PASS** |
+| **8b. frequency changed live** | `cli link set-clock --jtag --cell test_clock --freq 1Hz --duty 50% --apply` (no STOP) | LD0/LD1 blink 1/s, LD4 on | LD0 and LD1 blink once per second, LD4 on | **PASS** |
+| 9. STOP | `cli link stop --jtag`, `cli link status --jtag` | STOPPED, LD4 off, pin idle 0 V | `STOPPED`; LD4 off; blinking stopped; **J3-0 0 V** | PASS |
+| link error LED (LD5) | | off throughout | off (reported at step 7) | PASS |
 
-**No row above may be filled in without an actual reading taken on real hardware.** Do
-not mark PASS/FAIL from simulation or from what "should" happen — that's §2/§3, not this
-table.
+The multimeter shows the average, so the live change is measured as a duty change (0.9 V ->
+0.45 V). The frequency change was checked by eye at 1 Hz. Frequency on a scope: not done
+(no scope used).
+
+Found during the run: `cli link set-clock` printed 1 Hz as `0.0000 MHz` (fixed format). It
+was cosmetic, the ticks were right. Fixed (`_fmt_hz` in `tools/nemo_ctl/cli.py`, test in
+`test_cli.py`).
 
 ## 5. Conclusion
 
-Not yet reached — depends on §4. If the "frequency changed live" row passes, Phase 5's
-own exit criterion is met and Phase 5 can be marked done per `docs/USER_MANUAL.md`'s
-standing rule (manual section written **and** followed successfully).
+**PASS, 2026-10-22, over the JTAG transport.** Phase 5's exit criterion is met on the board:
+- a clock was configured, started, changed while running (duty: 0.9 V -> 0.45 V on the
+  meter; frequency: 100 Hz -> 1 Hz, seen on the LEDs) and stopped, all from the PC;
+- no re-synthesis or reprogramming in between;
+- RUN never dropped.
+
+This also proves the whole JTAG link (J1-J4) on hardware: PC -> xsdb -> J17 ->
+`jtag_link_bridge` -> `link_frame` -> `link_ctrl`, and back. The reply magic parsed at
+byte 0, which confirms the byte order J4 assumed.
+
+Open: the UART variant on hardware (no adapter); frequency/duty on a scope.
