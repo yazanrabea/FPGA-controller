@@ -23,8 +23,11 @@
 //      masked cell restarts on that tick (sig_cell/cap_cell's atomic apply),
 //      so its delay counts from the step's start.
 //   5. Ending (last step done / timeout fault / abort): RUN low and APPLY
-//      step 0 to every cell in the same tick -> pins go to idle, then to
-//      step 0's idle levels. seq_done / fault / aborted stay set until the
+//      step 0 to every SIG cell in the same tick -> pins go to idle, then to
+//      step 0's idle levels. Cap cells are NOT re-applied, so captured
+//      results (capture_reg) survive for the PC to read until the next
+//      start (cap_cell itself still clears its edge counters when RUN drops,
+//      by its Phase 3 design). seq_done / fault / aborted stay set until the
 //      next start; last_step says where it ended.
 //
 // Timing contract (checked by fpga/tb/seq_engine_tb.sv):
@@ -92,10 +95,12 @@ module seq_engine #(
 
     logic [TICK_W-1:0] step_cnt;     // ticks since this step's apply (0 in the apply cycle)
     logic              apply_pulse;  // one-cycle
-    logic              apply_all;    // with apply_pulse: every cell, not just the mask
+    logic              apply_all;    // with apply_pulse: every sig cell, not just the mask
+    logic              apply_caps;   // with apply_all: every cap cell too (not at the end)
 
     assign sig_apply = apply_pulse ? (apply_all ? {N_SIG{1'b1}} : step_sig_mask) : '0;
-    assign cap_apply = apply_pulse ? (apply_all ? {N_CAP{1'b1}} : step_cap_mask) : '0;
+    assign cap_apply = apply_pulse ? (apply_all ? (apply_caps ? {N_CAP{1'b1}} : '0)
+                                                : step_cap_mask) : '0;
     assign step_start = apply_pulse && (state == S_FIRST || state == S_RUNNING);
     assign busy = (state == S_FIRST) || (state == S_RUNNING);
 
@@ -130,6 +135,7 @@ module seq_engine #(
             run         <= 1'b0;
             apply_pulse <= 1'b0;
             apply_all   <= 1'b0;
+            apply_caps  <= 1'b0;
             seq_done    <= 1'b0;
             fault       <= 1'b0;
             aborted     <= 1'b0;
@@ -137,6 +143,7 @@ module seq_engine #(
         end else begin
             apply_pulse <= 1'b0;
             apply_all   <= 1'b0;
+            apply_caps  <= 1'b0;
             step_cnt    <= step_cnt + 1'b1;
 
             case (state)
@@ -144,6 +151,7 @@ module seq_engine #(
                     // step is 0 since reset: step 0's config is on the step_* bus
                     apply_pulse <= 1'b1;
                     apply_all   <= 1'b1;
+                    apply_caps  <= 1'b1;
                     state       <= S_IDLE;
                 end
 
@@ -156,6 +164,7 @@ module seq_engine #(
                         step_cnt    <= '0;      // 0 in the apply cycle
                         apply_pulse <= 1'b1;
                         apply_all   <= 1'b1;
+                        apply_caps  <= 1'b1;
                         state       <= S_FIRST;
                     end
                 end

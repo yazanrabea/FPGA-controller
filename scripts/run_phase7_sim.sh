@@ -12,3 +12,18 @@ TB=fpga/tb
 echo "=== seq_engine_tb ==="
 sim_run seq_engine_tb \
     "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" "$SRC/seq_engine.sv" "$TB/seq_engine_tb.sv"
+
+# The top's real package runs for seconds (human-speed LEDs); simulate a
+# time-scaled copy instead (same steps, x1e-4 ticks). It's written to the
+# scratch dir, never to fpga/src/gen, so it can't end up in a bitstream.
+echo
+echo "Regenerating $SRC/gen/phase7_cfg_pkg.sv (hardware) and a x1e-4 copy for simulation..."
+(cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --phase7)
+SCALED="$WORK/phase7_cfg_pkg_sim.sv"
+(cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --phase7 --time-scale 1e-4 \
+    --out "$(cd "$(dirname "$SCALED")" && pwd)/$(basename "$SCALED")")
+
+echo "=== phase7_seq_loopback_top_tb ==="
+sim_run phase7_seq_loopback_top_tb \
+    "$SCALED" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" "$SRC/seq_engine.sv" \
+    "$SRC/phase7_seq_loopback_top.sv" "$TB/phase7_seq_loopback_top_tb.sv"

@@ -156,3 +156,52 @@ def test_program_verify_never_continues_after_a_fault():
     with pytest.raises(SequenceError, match="faulted at step 1"):
         program_verify(seq, _pulse_table, "data_in", check=lambda v: False, max_iters=10)
     assert seq.runs == 2
+
+
+# ---------------------------------------------------------------- gen_svh --phase7
+
+import re as _re
+
+
+def _field(text, name, k, w):
+    m = _re.search(rf"localparam logic \[\d+:0\] {name} = \d+'h([0-9a-f]+);", text)
+    assert m, name
+    return (int(m.group(1), 16) >> (k * w)) & ((1 << w) - 1)
+
+
+def test_phase7_package_packs_each_step_at_k_times_w():
+    text, warns = gen_svh.generate_phase7()
+    t = load_sequence(CONFIG)
+    assert "package phase7_cfg_pkg;" in text and "localparam logic [4:0] N_STEPS = 5'd6;" in text
+    for k, st in enumerate(t.steps):
+        assert _field(text, "STEP_SIG_MASK", k, 5) == sum(int(m) << i for i, m in enumerate(st.sig_mask))
+        assert _field(text, "STEP_COND", k, 3) == st.cond
+        assert _field(text, "STEP_COND_ARG", k, 32) == st.cond_arg
+        assert _field(text, "STEP_TIMEOUT", k, 32) == st.timeout
+        assert _field(text, "CLK_PARAM_A", k, 32) == st.sig[0].param_a
+        assert _field(text, "DATA_DATA", k, 16) == st.sig[2].data
+        assert _field(text, "DATA_IN_BITS", k, 32) == st.cap[2].bits
+    # steps past N_STEPS repeat the last one with an empty mask's worth of effect
+    assert _field(text, "STEP_COND_ARG", 15, 32) == t.steps[-1].cond_arg
+    assert "DATA_IN_EXPECT = 16'h00a5;" in text and "DATA_IN_EXPECT_MASK = 16'h00ff;" in text
+
+
+def test_phase7_scaled_copy_is_marked_and_cli_refuses_it_without_out(tmp_path, capsys):
+    text, _ = gen_svh.generate_phase7(scale=1e-4)
+    assert "TIME-SCALED x0.0001: SIMULATION ONLY" in text
+    assert _field(text, "STEP_COND_ARG", 0, 32) == 10_000
+    with pytest.raises(SystemExit):
+        gen_svh.main(["--phase7", "--time-scale", "1e-4"])
+    assert "simulation only" in capsys.readouterr().err
+    out = tmp_path / "pkg.sv"
+    gen_svh.main(["--phase7", "--time-scale", "1e-4", "--out", str(out)])
+    assert "SIMULATION ONLY" in out.read_text()
+
+
+def test_phase7_bad_sequence_writes_nothing(tmp_path, capsys):
+    bad = tmp_path / "bad.yaml"
+    doc = yaml.safe_load(CONFIG.read_text())
+    doc["steps"][2]["until"].pop("timeout")
+    bad.write_text(yaml.safe_dump(doc))
+    with pytest.raises(SequenceError, match="needs a 'timeout'"):
+        gen_svh.generate_phase7(bad)

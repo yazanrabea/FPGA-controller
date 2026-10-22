@@ -226,6 +226,7 @@ module seq_engine_tb;
               $sformatf("sig0 (applied in step 0 only) never restarted: %0d periods, all 10 ticks", p0_periods));
         tick(3);
         check(!run && p1 == 1'b1 && p0 == 1'b0, "after the last step: RUN low, pins back to step 0's idle (sig1=1, sig0=0)");
+        check(cap1_reg == 4'b1011, "cap1's result survives the end of the sequence (cap cells aren't re-applied)");
 
         $display("\n== RUN B: step 3 waits for something that never comes ==");
         // cap0 is in LEVEL mode in step 3, so its edge count stays 0: EDGES >= 1000 never holds
