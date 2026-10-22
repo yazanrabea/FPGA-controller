@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
-| Yazan | Phase 6 SIPO/PISO: 6.1-6.4 done ([simulated], Icarus 12); xsim run + 6.5 open on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1) |
+| Yazan | Phase 6 SIPO/PISO: 6.1-6.5 done ([simulated], Icarus 12); open: xsim run, manual walkthrough, PR review on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1), `docs/USER_MANUAL.md`, `CLAUDE.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -172,6 +172,30 @@ Tag every result **[simulated]** or **[measured on board]**.
   3. Questions for Dima: Q1 as corrected (and how an async reset that loads data was
      synthesized), sipo_in/piso_out edges, chip delay.
   4. Still agree the Phase 6 split with Rahaf: the WORKLOG lists Phase 6 under her too.
+- 6.3/6.4 pushed (`a5588ac`).
+- **Step 6.5 (same session), docs:**
+  - `docs/USER_MANUAL.md`: new **§7 Phase 6** (the two profiles pin by pin, frame fields,
+    UNCONFIRMED fields, `gen_svh --phase6` and what it refuses, building/decoding frames
+    in Python, `run_phase6_sim.sh` and the expected 69 checks, why RUN 3's wrong frame
+    is a pass, the Icarus stand-in, what Phase 6 doesn't do). Status table (Phase 6 row),
+    §1 setup note for Windows + Icarus 12, 4 troubleshooting rows, 4 quick-reference rows.
+    Troubleshooting -> §8, quick reference -> §9 (no cross-references pointed at the old
+    numbers).
+  - Every command in the new §7 was run as written and gave the output shown: good
+    config -> one UNCONFIRMED warning + `wrote ...`; `cs` at 100 us through the real CLI
+    `main()` -> the quoted `error: SIPO_LOAD: cs rises at tick 10000 ...`, exit 1,
+    package file unchanged; the Python snippet's three outputs; `run_phase6_sim.sh` ->
+    `ALL TESTS PASSED (69 checks)` [simulated, Icarus 12].
+  - `CLAUDE.md`: §4 Windows-laptop Icarus 12 note; §5 the corrected Q1 fact, tagged
+    [simulated]; §6 `phase6_sipo_piso_top.sv` row; §7 item 5 rewritten (done in
+    simulation; open items listed).
+  - `tools/nemo_ctl/README.md`: rows for `gen_svh.py` and `sipo_piso.py`. Not fixed, outside
+    Phase 6: that table was already missing `link.py` and still says `types.py` for
+    `pin_types.py`.
+- Phase 6 status: **not done** by the project's rules. It needs (1) the xsim run with
+  Dima's unmodified `sipo_wrapper.sv` on the lab PC, (2) someone other than the author
+  following USER_MANUAL §7 successfully (Rahaf's rule), (3) approval before Phase 7
+  (Rahaf's phase-gate rule). Merge to `main` via PR, reviewed by Rahaf (CLAUDE.md §10).
 
 ---
 

@@ -28,6 +28,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - Tools: **Vivado 2022.1** (RTL project, part `xc7z020clg484-1`, no block design). Project path must not contain `&`.
 - Secondary, local-only tools (not a replacement for Vivado, no bitstream capability): **Icarus Verilog** (`iverilog`/`vvp`) for simulating self-checking testbenches without a Vivado license/license-server, and **yosys** (`synth_xilinx -family xc7`) for a real (synthesized, not hand-counted) LUT/FF/CARRY4 utilization estimate. Installed via `brew` under `/opt/homebrew` — on an Intel-Homebrew (`/usr/local`) machine, use the arm64 `/opt/homebrew/bin/brew` explicitly if both are present and the Intel one's compiler is broken.
 - **Windows lab PC**: has Vivado 2022.1 (`C:\Xilinx\Vivado\2022.1`) and the ZedBoard, but no Icarus/yosys. The `scripts/run_phase*.sh` scripts fall back to Vivado xsim automatically (`scripts/sim_lib.sh`); run them from Git Bash, and use `python`, not `python3` (Windows Store stub). xsim is stricter than Icarus (single driver per `always_ff` variable, no timescale mixing), so a testbench that passes in Icarus should also be run in xsim before it's called done.
+- **Windows laptop without Vivado**: `winget install Icarus.Verilog` (Icarus **12**, to `C:\iverilog\bin`, found by `sim_lib.sh`). Older than the macOS Icarus 13: rejects `return` in tasks (`fpga/tb/uart_tb.sv`), a variable driven by both `assign` and `always_ff` on disjoint bits (Dima's `sipo_wrapper.sv` -> `fpga/tb/sipo_wrapper_icarus_shim.sv`), and `vvp` crashes on `fork ... join_any` + `disable`.
 - Measurement: Fluke 115 multimeter now; Keysight oscilloscope and Vivado ILA next.
 - FMC bank voltage: **LVCMOS18**, and the ZedBoard **J18 (VADJ) jumper must physically be on 1V8**. `IOSTANDARD LVCMOS18` in the XDC does NOT change the real voltage.
 
@@ -38,6 +39,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - Pair 0 (J3-0 to J3-16 with a jumper) verified: static level, 1 MHz 50% clock (internal checker), and ~100 Hz clock read **0.899 V** on the multimeter (ideal 0.9 V).
 - A 1 MHz clock cannot be read on a handheld multimeter (use the ~100 Hz design for that).
 - Checker lessons: `sw[4]` needs a 2-FF synchronizer + ~20 ms settle window; fault latch only after 16 consecutive mismatches; expected value is delayed 2 cycles to match the input synchronizer. **A self-check can lie. Confirm important results with independent measurement.**
+- Dima's `sipo_wrapper.sv` Q1, [simulated] 2026-10-22: right after `rst_sipo`, `sel[23:8]` holds the **previous** load's slice 0 (0 on the first load), because the nonblocking reset branch reads `parallel_out` before `sipo.sv`'s reset clears it. The frame being loaded never shows its slice 0. (Earlier reading "always loads zeros" was wrong; `docs/issues.md`.)
 - Oscilloscope lessons: 50 ohm input absorbs ringing but loads the FPGA pin and the level sags (1.8 V reads ~0.7 V); 1 Mohm shows the true level but rings. Square waves look rounded at 100 MHz on jumper wires; 1 MHz is clean.
 
 ## 6. Files (`fpga/src`, `fpga/constraints`; Vivado project rebuilt by `scripts/create_project.tcl`)
@@ -54,13 +56,14 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `cap_cell.sv` | Generic config-driven capture cell (LEVEL/EDGE_COUNT/PERIOD/SERIAL) for the same controller. One instance per captured chip pin. [simulated] only, `fpga/tb/cap_cell_tb.sv` |
 | `run_ctrl.sv` | Global RUN/STOP + one-cycle APPLY strobe, synchronized command inputs. [simulated] only, `fpga/tb/run_ctrl_tb.sv` |
 | `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.sv` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] only so far (`fpga/tb/phase4_loopback_top_tb.sv`, `scripts/run_phase4_sim.sh`) — **not yet run on hardware**, see `docs/experiments/EXP-01_*.md` |
+| `phase6_sipo_piso_top.sv` | Phase 6: SIPO_LOAD / PISO_READ from generic cells only (`run_ctrl` + 7 `sig_cell`s + 2-FF sync + `cap_cell` CAP_W=168), config from generated `fpga/src/gen/phase6_cfg_pkg.sv` (`gen_svh.py --phase6` + `config/phase6_sipo_piso.yaml`, timing-checked by `tools/nemo_ctl/sipo_piso.py`). **Sim top, no XDC** (no chip-pin map). [simulated] Icarus 12, 69/69, against Dima's RTL (`fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh`); xsim run with Dima's unmodified `sipo_wrapper.sv` pending |
 
 ## 7. Next tasks
 1. Verify remaining 15 pairs (static + clock).
 2. Oscilloscope and Vivado ILA: period, duty, swing, edges, ringing.
 3. Generic per-pin I/O on hardware.
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
-5. SIPO / PISO interfaces (weights in, results out). Start from `fpga/reference/dima_blocks/` (unreviewed) and the explanation + timing diagrams in `docs/session1/`. Partly superseded by the generic controller (`sig_cell`'s SERIAL mode, `cap_cell`'s SERIAL mode) — see `docs/controller_spec.md` Phase 6.
+5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and widening the Phase 5 link for 136/168-bit frames (Phase 7).
 6. Connect and test the real Y-Flash chip.
 7. Generic controller Phase 4 hardware run: `phase4_loopback_top.sv` is written and
    [simulated] (`scripts/run_phase4_sim.sh`), but **needs Vivado + a physical ZedBoard**

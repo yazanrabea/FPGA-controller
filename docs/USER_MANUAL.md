@@ -23,9 +23,11 @@ want to understand *why* it's built this way, read `CLAUDE.md` and
 | 3 | RTL cells (`sig_cell`/`cap_cell`/`run_ctrl`) + testbenches | Done, **simulated only** | §4 below |
 | 4 | Top-level design + compile-time config | RTL/software done, **hardware step not run** | §5 below (build + simulate now; wiring/measuring needs you) |
 | 5 | Runtime link (framed UART protocol, register file, Python client + CLI) | RTL/software done, **simulated only, hardware step not run** | §6 below (talk to it once §5's board is actually built and wired; the link itself needs its own build/wiring too, see §6.1) |
-| 6-8 | SIPO/PISO, mode sequencer, chip-ready checklist | Not started | — |
+| 6 | SIPO load / PISO read as profiles of the generic cells, against Dima's RTL | Python + RTL done, **simulated only (Icarus 12)**; xsim run against Dima's unmodified `sipo_wrapper.sv` not done; no hardware step yet (no chip-pin map) | §7 below |
+| 7-8 | Mode sequencer, chip-ready checklist | Not started | — |
 
-Nothing past Phase 5 exists yet. Phases 4 **and** 5 are **not complete** by this project's
+Nothing past Phase 6 exists yet. Phase 6 is simulation-only by nature until the chip-pin ->
+FMC map exists. Phases 4 **and** 5 are **not complete** by this project's
 own rule ("a phase is not done until ... I have followed it successfully myself") — the
 RTL and simulations are ready for both, but nobody has actually built either in Vivado and
 measured it on the ZedBoard yet. `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
@@ -67,6 +69,13 @@ Icarus isn't installed (`scripts/sim_lib.sh` picks the tool; force one with `SIM
 or `SIM=xsim`). Run them from **Git Bash**, and use `python` instead of `python3` there
 (on that PC `python3` is only the Windows Store stub). yosys isn't installed on the lab
 PC, so the Phase 3 script skips the utilization estimate.
+
+**On a Windows laptop without Vivado**, install Icarus Verilog with
+`winget install Icarus.Verilog` (it goes to `C:\iverilog\bin`, which the scripts find even
+if it's not on `PATH`). That's Icarus **12**, older than the macOS one: it can't elaborate
+`fpga/tb/uart_tb.sv` (Phase 5), and Phase 6 runs need a stand-in for one of Dima's files
+(§7.4). If you have two Pythons and only one has the packages, the scripts use the one
+that can `import yaml`.
 
 If you're on an Intel Mac with both an Intel and an Apple-silicon Homebrew installed and
 the Intel one's compiler is broken, use `/opt/homebrew/bin/brew` explicitly (see
@@ -360,7 +369,114 @@ need an address `docs/link_register_map.md` describes but no helper wraps yet.
 Phase 5) has not been run on real hardware yet** — don't write a PASS/FAIL into EXP-02
 without an actual reading.
 
-## 7. Troubleshooting
+## 7. Phase 6 — SIPO load and PISO read
+
+Loading the chip's 136-bit SIPO frame and reading its 168-bit PISO frame, done with the
+same generic cells as everything else (no special SIPO/PISO hardware), and checked in
+simulation against Dima's own RTL (`fpga/reference/dima_blocks/`). **Simulation only**:
+there's no chip-pin -> FMC map yet, so there's nothing to build or wire. The chip-side
+timing it follows (which clock edges, polarities, delays) is partly **UNCONFIRMED** until
+Dima answers `docs/controller_spec.md` Q1-Q7.
+
+### 7.1 The two profiles
+
+`config/phase6_sipo_piso.yaml` describes both, one setting per chip pin, times from RUN:
+
+| Profile | Pin | Type | What it does (default, 1 MHz) |
+|---|---|---|---|
+| SIPO_LOAD | `rst_sipo` | PULSE, active-low | 100 ns reset at RUN |
+| | `clk_sipo` | CLOCK, 136 cycles | from 1.1 us; exactly 136 rising edges, one per frame bit |
+| | `sipo_in` | SERIAL, 136 bits, MSB first | from 1.08 us (just before clk_sipo); changes on clk_sipo's falling edge |
+| | `cs` | PULSE, active-high | at 137.1 us, after the last clk_sipo edge; its rising edge latches the frame |
+| PISO_READ | `rst_piso` | HIGH | reset held inactive |
+| | `clk_piso` | CLOCK, 168 cycles | from 0; edge 1 loads, edges 2-168 shift |
+| | `shift` | PULSE, active-high | 750 ns to 167.75 us: low for the load edge, high for every shift edge |
+| | `piso_out` | CAPTURE serial, 168 bits | sampled on clk_piso's falling edge; falling edge 1 reads bit 1 before any shift |
+
+The frame to load is under `sipo_in.frame`: `sel_lo` (the 8 bits that become `sel[7:0]`)
+and 8 `slices` of 16 bits (slice k = frame bits `[8+16k +: 16]`; slice k reaches
+`sel[23:8]` after the k-th `phirst` edge, and slice 0 never does, Q1). You can give a raw
+136-bit `data: "0x..."` instead. `testbench.piso_stages` are only the values the
+simulation feeds Dima's PISO.
+
+Fields marked UNCONFIRMED in the file: `sipo_in.data_edge`, `piso_out.edge`,
+`piso_out.chip_delay` (delay from clk_piso to piso_out on the chip, unknown until
+measured), and the polarities.
+
+### 7.2 Generate and check
+
+After any edit to the YAML, from inside `tools/`:
+
+```
+python -m nemo_ctl.gen_svh --phase6
+```
+
+This **checks the timing first** and only then writes `fpga/src/gen/phase6_cfg_pkg.sv`.
+A good config prints one warning (the edges are UNCONFIRMED, that's expected) and
+`wrote ...phase6_cfg_pkg.sv`. A config that would corrupt a frame is refused and nothing
+is written, for example `cs` moved to 100 us:
+
+```
+error: SIPO_LOAD: cs rises at tick 10000, before clk_sipo's last falling edge (tick 13660): parallel_out may latch an incomplete frame
+```
+
+What it checks: 136 / 168 clock cycles; clk_sipo starts after rst_sipo releases; sipo_in
+starts before clk_sipo's first edge; cs after the last clk_sipo edge; shift rises inside
+clk_piso's first low phase and stays high to the end; clk_piso's high time is at least 3
+ticks (FPGA input sync) + `chip_delay`. A polarity different from Dima's RTL only warns
+(the pad might invert it). `python -m nemo_ctl.gen_svh` without `--phase6` still makes the
+Phase 4 package, unchanged.
+
+### 7.3 Build a frame or decode a capture by hand
+
+From inside `tools/`, in Python:
+
+```python
+from nemo_ctl.sipo_piso import pack_sipo_frame, dima_sel_after, decode_piso_frame
+frame = pack_sipo_frame(0xA5, [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888])
+hex(frame)                   # '0x88887777666655554444333322221111a5'
+hex(dima_sel_after(frame, 3))   # '0x4444a5'  = sel[23:0] after 3 phirst edges
+for st in decode_piso_frame(0xfffc02469fc001ab5550155555000102001fffff00):
+    print(st)                # PisoStage(out1=16383, tdc_out1=0, out0=4660, tdc_out0=127) ... PISO0 first
+```
+
+`dima_sel_after(frame, 0, prev_frame=...)`: right after `rst_sipo`, `sel[23:8]` holds the
+*previous* load's slice 0 (0 on the first load), a quirk of Dima's RTL (Q1).
+
+### 7.4 Simulate it
+
+From the repo root (Git Bash on Windows):
+
+```
+scripts/run_phase6_sim.sh
+```
+
+Regenerates the package, then runs `phase6_sipo_piso_tb`: our controller
+(`fpga/src/phase6_sipo_piso_top.sv`) driving Dima's SIPO and four chained PISO stages, in
+three RUNs with 0, 400 and 600 ns of chip delay on piso_out. Expect:
+
+```
+ALL TESTS PASSED (69 checks)
+```
+
+RUN 3 is *meant* to get a wrong frame (600 ns is more than the 470 ns the check allows at
+1 MHz); its check passes when the frame is wrong.
+
+With **Icarus** the script prints `NOTE: Icarus -> using fpga/tb/sipo_wrapper_icarus_shim.sv`:
+Icarus 12 can't elaborate Dima's `sipo_wrapper.sv`, so it uses a copy with one change
+(how `sel` is driven, not what it holds). Only **xsim** (`SIM=xsim scripts/run_phase6_sim.sh`,
+lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run passes.**
+
+### 7.5 What Phase 6 does not do yet
+
+- No hardware: no XDC, the chip pins aren't assigned to FMC pins.
+- Not reachable over the Phase 5 link: its registers are 16 bits wide, the frames are
+  136/168 (deferred to Phase 7).
+- `phirst` comes from the chip's own clock generator; the simulation drives it by hand.
+- Before the first APPLY the controller drives every pin 0, so the chip's active-low
+  resets are *asserted* until the config is applied (open item for Phase 8).
+
+## 8. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -374,9 +490,13 @@ without an actual reading.
 | A testbench's checks pass individually but you're not sure the design is really right | Simulation proves logic, not real voltage levels, timing margins, or signal integrity | That's exactly why Phases 4/5 still need a real hardware run (§5.3/§6.3) — don't treat [simulated] as a substitute for [measured on board] |
 | `link status`/`link run`/... hangs or times out | Wrong `--port`, adapter not actually wired/powered, or `--baud` doesn't match the loaded bitstream's `uart_tx.sv`/`uart_rx.sv` `BAUD` parameter | Double-check the port name and wiring; confirm baud matches (115200 by default) |
 | `link ...` raises `ModuleNotFoundError: No module named 'serial'` | `pyserial` isn't installed | `pip3 install -r tools/requirements.txt` (step §1) |
+| `gen_svh --phase6` prints `error: SIPO_LOAD: ...` / `PISO_READ: ...` and writes nothing | The config's timing would load or read a corrupted frame | Fix the pin the message names (§7.2); the message says which edge/tick it collides with |
+| `sipo_wrapper.sv:49: error: ... Part select is double-driving unresolved wire` | Icarus 12 compiling Dima's original `sipo_wrapper.sv` directly | Use `scripts/run_phase6_sim.sh`, which swaps in the Icarus stand-in (§7.4) |
+| `uart_tb.sv:64: error: Cannot "return" from tasks` | Icarus 12 (Windows winget package) is too old for the Phase 5 testbench | Run Phase 5 sims with Icarus 13 (macOS) or xsim (lab PC) |
+| `ModuleNotFoundError: No module named 'yaml'` from a sim script | An old checkout picking a Python without the packages | `git pull`, or `pip install -r tools/requirements.txt` for that Python |
 | `link.NackError` | The device NACKed — either a bad checksum got through somehow, or you sent `LOAD_MODE` (permanently unimplemented) | Check `--baud` and wiring (a bad checksum from clean code usually means a framing/timing problem, not a logic bug); don't use `LOAD_MODE` |
 
-## 8. Where things live (quick reference)
+## 9. Where things live (quick reference)
 
 | Thing | Path |
 |---|---|
@@ -389,4 +509,8 @@ without an actual reading.
 | Phase 5 link protocol / byte-level register map | `docs/link_register_map.md` |
 | Phase 5 Python client + CLI | `tools/nemo_ctl/link.py`, `nemo_ctl.cli link` |
 | Hardware procedure for Phase 5 | `docs/experiments/EXP-02_phase5_link_bringup.md` |
+| Phase 6 SIPO/PISO config | `config/phase6_sipo_piso.yaml` -> `fpga/src/gen/phase6_cfg_pkg.sv` |
+| Phase 6 frames, timing rules (Python) | `tools/nemo_ctl/sipo_piso.py` |
+| Phase 6 top / testbench / sim script | `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh` |
+| Dima's SIPO/PISO RTL (reference, never edited) | `fpga/reference/dima_blocks/` |
 | Chronological project log | `docs/WORKLOG.md` |

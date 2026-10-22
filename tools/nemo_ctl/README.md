@@ -26,6 +26,8 @@ python3 -m pytest          # from the repo root; pytest.ini points at tools/nemo
 | `excel_io.py` | Excel import/export, one sheet per mode, same columns as the YAML; also a blank template generator. |
 | `wizard.py` | Headless wizard engine (Phase 2): pick mode -> each block -> each input pin, with copy-block-from-another-mode, reset-to-defaults, and a DFT helper menu. Takes `ask`/`tell` callables so the whole flow is scriptable in tests, not just from a real terminal. |
 | `cli.py` | The only file that calls `input()`/`print()` directly. `python3 -m nemo_ctl.cli wizard --mode INFERENCE` (also `validate`, `preview`, `export-excel`, `import-excel`, `gen-template`). |
+| `gen_svh.py` | Generates a top level's compile-time package: `nemo_cfg_pkg.sv` for `phase4_loopback_top` (default), `phase6_cfg_pkg.sv` for `phase6_sipo_piso_top` (`--phase6`, refuses a config that fails `sipo_piso`'s timing checks). `python -m nemo_ctl.gen_svh [--phase6]`. |
+| `sipo_piso.py` | Phase 6: 136-bit SIPO frame pack/unpack + Dima's `sel` behaviour (Q1/Q2 as written), 168-bit PISO frame encode/decode (4 stages, PISO0 first), SIPO_LOAD / PISO_READ timing builders and rules, `config/phase6_sipo_piso.yaml` loader. |
 | `tests/` | pytest suite — run from the repo root with `python3 -m pytest`. |
 
 ## Build a mode interactively
