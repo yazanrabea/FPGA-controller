@@ -8,9 +8,10 @@ Three parts:
    the first bit sent sits at parallel_out[135]. In sipo_wrapper.sv:
      sel[7:0]  = parallel_out[7:0]                (fixed, the last 8 bits sent)
      sel[23:8] = parallel_out[8+16k +: 16]         ("slice k", k = 0..7)
-   Slice 0 is loaded on reset (but parallel_out is also in reset then -> always 0, Q1),
-   slice k (1..7) after the k-th phirst rising edge, and the 8th phirst reads past bit
-   135 (Q2). dima_sel_after() reproduces exactly that, quirks included -- they are
+   The reset branch loads sel[23:8] from parallel_out as it was just *before* the reset
+   (the previous load's slice 0, or 0 on the first load), so the current frame's slice 0
+   never reaches sel (Q1); slice k (1..7) arrives after the k-th phirst rising edge, and
+   the 8th phirst reads past bit 135 (Q2). dima_sel_after() reproduces exactly that, quirks included -- they are
    documented here, not fixed (docs/controller_spec.md Q1/Q2).
 
 2. PISO frame (168 bits = 4 stages x 42, read MSB-first from PISO0.serial_out).
@@ -108,19 +109,22 @@ def sipo_tx_bits(frame: int) -> list[int]:
     return [(frame >> i) & 1 for i in range(SIPO_BITS - 1, -1, -1)]
 
 
-def dima_sel_after(frame: int, phirst_edges: int) -> int:
-    """sel[23:0] of sipo_wrapper.sv after rst_sipo, a full load + cs, and `phirst_edges`
-    phirst rising edges -- Dima's RTL as written, quirks included:
-      0      -> sel[23:8] = 0 (Q1: the reset-time load reads parallel_out while it is
-                itself in reset, so slice 0 never reaches sel)
-      1..7   -> slices[1..7]
+def dima_sel_after(frame: int, phirst_edges: int, prev_frame: int = 0) -> int:
+    """sel[23:0] of sipo_wrapper.sv after rst_sipo, a full load of `frame` + cs, and
+    `phirst_edges` phirst rising edges -- Dima's RTL as written, quirks included:
+      0      -> sel[23:8] = slice 0 of `prev_frame` (Q1). The reset branch's nonblocking
+                `sel[23:8] <= parallel_out[23:8]` reads parallel_out *before* sipo.sv's
+                own reset clears it, i.e. what the previous cs latched (0 if none). Slice 0
+                of the frame being loaded never reaches sel.
+                (Seen in phase6_sipo_piso_tb RUN 2, 2026-10-22.)
+      1..7   -> slices[1..7] of `frame`
       >= 8   -> DimaModelUndefined (Q2: index runs past WIDTH=136, never wraps)
     """
     f = unpack_sipo_frame(frame)
     if phirst_edges < 0:
         raise FrameError(f"phirst_edges must be >= 0, got {phirst_edges}")
     if phirst_edges == 0:
-        hi = 0
+        hi = unpack_sipo_frame(prev_frame).slices[0]
     elif phirst_edges < N_SLICES:
         hi = f.slices[phirst_edges]
     else:

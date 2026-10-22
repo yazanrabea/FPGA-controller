@@ -241,7 +241,8 @@ def generate_phase6(config_path: Path | None = None) -> tuple[str, tuple[str, ..
         "",
         "    // ---- Phase 6.4 testbench vectors ----",
         "    // sipo_wrapper sel[23:0] after rst_sipo + load + cs + n phirst edges, Dima's RTL",
-        "    // as written (n=0: sel[23:8]=0, Q1; n>=8 undefined, Q2).",
+        "    // as written, for a FIRST load. n=0: sel[23:8] = the previous load's slice 0",
+        "    // (0 here, none before), never this frame's (Q1); n>=8 undefined (Q2).",
     ]
     for n in range(8):
         lines.append(f"    localparam logic [23:0] SIPO_TB_SEL_AFTER_{n} = "

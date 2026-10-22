@@ -55,7 +55,11 @@ def test_shifting_tx_bits_through_sipo_sv_rebuilds_the_frame():
 
 
 def test_dima_sel_reproduces_q1_and_q2():
-    assert dima_sel_after(FRAME, 0) == 0xA5  # Q1: slice 0 never reaches sel[23:8]
+    assert dima_sel_after(FRAME, 0) == 0xA5  # Q1, first load: nothing latched before
+    other = pack_sipo_frame(0x3C, [0xBEEF] + [0] * 7)
+    # Q1, reload: sel[23:8] gets the PREVIOUS load's slice 0, never this frame's
+    assert dima_sel_after(FRAME, 0, prev_frame=other) == (0xBEEF << 8) | 0xA5
+    assert dima_sel_after(other, 0, prev_frame=FRAME) == (SLICES[0] << 8) | 0x3C
     for k in range(1, 8):
         assert dima_sel_after(FRAME, k) == (SLICES[k] << 8) | 0xA5
     with pytest.raises(DimaModelUndefined):

@@ -3,14 +3,14 @@
 #
 # Picks a simulator so the same scripts work on the macOS laptops (Homebrew
 # Icarus Verilog) and on the Windows lab PC (Vivado 2022.1 xsim, Git Bash):
-#   1. Icarus (iverilog/vvp) on PATH or under /opt/homebrew
+#   1. Icarus (iverilog/vvp) on PATH, under /opt/homebrew, or C:/iverilog/bin (Windows installer)
 #   2. otherwise Vivado xsim (xvlog/xelab/xsim) on PATH or under C:/Xilinx/Vivado/2022.1
 # Force one with SIM=icarus or SIM=xsim.
 #
 # Usage inside a script:
 #   source "$(dirname "$0")/sim_lib.sh"
 #   sim_run <tb_top_module> <source files...>
-#   PYTHON=$(sim_python)      # python3 if it really works, else python
+#   PYTHON=$(sim_python)      # python3 if it can import yaml, else python
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
@@ -25,7 +25,7 @@ _find() {   # _find <name> <fallback dir...>: print the first existing executabl
 }
 
 if [ -z "${SIM:-}" ]; then
-    if [ -n "$(_find iverilog /opt/homebrew/bin)" ]; then SIM=icarus
+    if [ -n "$(_find iverilog /opt/homebrew/bin /c/iverilog/bin)" ]; then SIM=icarus
     elif [ -n "$(_find xvlog.bat /c/Xilinx/Vivado/2022.1/bin)$(_find xvlog /c/Xilinx/Vivado/2022.1/bin /tools/Xilinx/Vivado/2022.1/bin)" ]; then SIM=xsim
     else echo "ERROR: neither Icarus Verilog nor Vivado xsim found (see CLAUDE.md §4)" >&2; exit 1
     fi
@@ -50,8 +50,8 @@ _xsim_tool() {   # _xsim_tool <xvlog|xelab|xsim> args...
 sim_run() {
     local top=$1; shift
     if [ "$SIM" = icarus ]; then
-        "$(_find iverilog /opt/homebrew/bin)" -g2012 -o "$WORK/$top.vvp" "$@"
-        "$(_find vvp /opt/homebrew/bin)" "$WORK/$top.vvp"
+        "$(_find iverilog /opt/homebrew/bin /c/iverilog/bin)" -g2012 -o "$WORK/$top.vvp" "$@"
+        "$(_find vvp /opt/homebrew/bin /c/iverilog/bin)" "$WORK/$top.vvp"
     else
         local d="$WORK/$top" f srcs=()
         mkdir -p "$d"
@@ -70,6 +70,6 @@ sim_run() {
     fi
 }
 
-sim_python() {
-    if python3 -c 'import sys' >/dev/null 2>&1; then echo python3; else echo python; fi
+sim_python() {   # the interpreter that has the tools/requirements.txt packages
+    if python3 -c 'import yaml' >/dev/null 2>&1; then echo python3; else echo python; fi
 }

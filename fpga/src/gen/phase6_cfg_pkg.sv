@@ -92,7 +92,8 @@ package phase6_cfg_pkg;
 
     // ---- Phase 6.4 testbench vectors ----
     // sipo_wrapper sel[23:0] after rst_sipo + load + cs + n phirst edges, Dima's RTL
-    // as written (n=0: sel[23:8]=0, Q1; n>=8 undefined, Q2).
+    // as written, for a FIRST load. n=0: sel[23:8] = the previous load's slice 0
+    // (0 here, none before), never this frame's (Q1); n>=8 undefined (Q2).
     localparam logic [23:0] SIPO_TB_SEL_AFTER_0 = 24'h0000a5;
     localparam logic [23:0] SIPO_TB_SEL_AFTER_1 = 24'h2222a5;
     localparam logic [23:0] SIPO_TB_SEL_AFTER_2 = 24'h3333a5;

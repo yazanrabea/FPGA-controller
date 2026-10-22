@@ -24,3 +24,9 @@ Each entry: date, decision, reason, rejected options.
 - Reason: the timing analysis (2026-10-19) showed the generic cells meet Dima's RTL timing, so no dedicated engine is needed. A separate package leaves `nemo_cfg_pkg.sv` and Phase 4 byte-identical. Checking before generating means a profile that would load or read a corrupted frame can't reach the RTL.
 - UNCONFIRMED choices are config fields, not hard-coded: `sipo_in.data_edge`, `piso_out.edge`, `piso_out.chip_delay`, and the rst/cs/shift polarities. A polarity different from Dima's RTL only warns, because the pad might invert (Q6). `piso_out.edge: rising` is an error, not a warning: with 168 clk_piso cycles, rising edge 1 is the load, so bit 1 can only be read on falling edge 1.
 - Rejected: dedicated SIPO/PISO engines; extending `nemo_cfg_pkg.sv`'s Phase 4 `pairs` schema to 136/168-bit SERIAL (would touch the Phase 4 build that EXP-01 is about to test on hardware); computing the delays inside the generator from a frequency alone (hides the per-pin timing the config is supposed to show).
+
+## Phase 6 sims on Yazan's laptop: Icarus 12 from winget, with a one-change sipo_wrapper stand-in (2026-10-22, Yazan)
+- Decision: installed Icarus Verilog 12 (`winget install Icarus.Verilog`, hash verified by winget) to simulate 6.3/6.4 off the lab PC. Because it can't elaborate Dima's `sipo_wrapper.sv`, Icarus runs use `fpga/tb/sipo_wrapper_icarus_shim.sv` (his module, only the `sel` driver split); xsim runs use his original file.
+- Reason: lets Phase 6 be simulated now instead of waiting for lab time; the stand-in changes how `sel` is driven, not what it holds, and the original is still the reference.
+- Rejected: editing `fpga/reference/dima_blocks/` (rule: stub around Dima's files, never edit them); waiting for the lab PC; installing full Vivado (tens of GB) just for xsim.
+- Consequence: Phase 6 isn't "done" until `run_phase6_sim.sh` also passes in xsim with the unmodified `sipo_wrapper.sv`.

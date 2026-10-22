@@ -199,6 +199,11 @@ de-duplicated:
    <= parallel_out[23:8]`, but `parallel_out` resets to zero on the same `rst_n`, so slice 0
    loads zeros; the first `phi_R` then jumps straight to bits `[39:24]`. Bug, or is slice 0
    intentionally meant to land at `[39:24]`?
+   **Correction (2026-10-22, `phase6_sipo_piso_tb`, docs/issues.md):** "loads zeros" only
+   holds for the first load. Both resets are nonblocking, so the reset branch copies
+   `parallel_out` as it was *before* the reset: `sel[23:8]` starts at the **previous** load's
+   slice 0. The current frame's slice 0 still never reaches `sel`. Also ask: an async reset
+   that loads data, not a constant, isn't a normal reset flop; how was this synthesized?
 2. **Q2 — index never wraps.** `index` in `sipo_wrapper.sv` runs 24→40→...→136 and is never
    reset; after the 7th `phi_R` it reads `[135:120]` (OK), the 8th would read `[151:136]`,
    past `WIDTH=136` (undefined). How many `phi_R` cycles happen per inference, and must

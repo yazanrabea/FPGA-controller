@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
-| Yazan | Phase 6 SIPO/PISO: 6.1 + 6.2 done (Python) on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `docs/WORKLOG.md`, `docs/decisions.md` |
+| Yazan | Phase 6 SIPO/PISO: 6.1-6.4 done ([simulated], Icarus 12); xsim run + 6.5 open on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1) |
 
 ---
 
@@ -105,10 +105,73 @@ Tag every result **[simulated]** or **[measured on board]**.
   with the editor.
 - Decisions (6.2): see `docs/decisions.md`, "Phase 6: SIPO/PISO as profiles of the
   generic cells, in their own config package".
-- Next steps: 6.3 `fpga/src/phase6_sipo_piso_top.sv` and 6.4
-  `fpga/tb/phase6_sipo_piso_tb.sv` (our controller + Dima's unmodified blocks). Both need
-  xsim (lab PC) or Icarus/Vivado installed on this laptop before they can be called done.
-  Still agree the split with Rahaf first: the WORKLOG lists Phase 6 under her too.
+- 6.2 pushed (`c3296c9`).
+- **Steps 6.3 + 6.4 (same session):**
+  - Tooling: installed **Icarus Verilog 12** on this laptop (`winget install Icarus.Verilog`,
+    v12.2022.06.11, to `C:\iverilogin`). `scripts/sim_lib.sh`: also looks for Icarus in
+    `/c/iverilog/bin`; `sim_python` now picks the interpreter that can `import yaml`
+    (this laptop's `python3` is 3.13 without the packages). Baseline under Icarus 12:
+    Phase 3 28/16/9/16 and Phase 4 21/21 pass; **Phase 5 `uart_tb` doesn't elaborate**
+    (`return` in a task, unsupported by Icarus 12; not changed, see `docs/issues.md`).
+  - `fpga/src/phase6_sipo_piso_top.sv` (new, 6.3): `run_ctrl` + 7 `sig_cell`s (rst_sipo,
+    clk_sipo, sipo_in with SERIAL_W=136, cs, rst_piso, clk_piso, shift) + 2-FF sync +
+    `cap_cell` CAP_W=168 on piso_out, all from `phase6_cfg_pkg`. sipo_in's shift_strobe and
+    piso_out's capture_strobe are clk_sipo/clk_piso falling_edge (rising if the package's
+    `*_ON_FALLING` = 0). Chip pins are plain ports: **simulation top, no XDC** (no
+    chip-pin -> LA_P map yet).
+  - `fpga/tb/phase6_sipo_piso_tb.sv` (new, 6.4): the top driving Dima's `sipo_wrapper`
+    (+ `sipo`) and four chained `piso2` (PISO3.prev=0 ... read PISO0); `phirst` and a lumped
+    transport delay on piso_out (chip delay) from the TB. One APPLY, three RUNs: chip delay
+    0 ns, 400 ns (both must pass), 600 ns (must corrupt the frame: rule limit is
+    50 - 3 ticks = 470 ns). Per RUN: 136 clk_sipo / 1 cs / 168 clk_piso rising edges,
+    rst_sipo released before clk_sipo edge 1, sipo_in as sampled == frame, Dima's
+    `parallel_out` == frame, `sel` before/after each of 7 phirst edges, Q2 on the 8th,
+    shift=0 at clk_piso edge 1 and 1 at the other 167, captured frame == `PISO_TB_FRAME`,
+    all pins idle after STOP.
+  - `fpga/tb/tower_cell_stubs.sv` (new): `ANTENNA_18_SVT_WTN` (sink),
+    `DLY3_X4_18_SVT_WTN` (zero-delay buffer).
+  - `fpga/tb/sipo_wrapper_icarus_shim.sv` (new): Icarus 12 can't elaborate Dima's
+    `sipo_wrapper.sv` (`sel` driven by an assign and an always_ff); this is his module
+    with only that driver split. Used **only** when SIM=icarus; xsim gets the original.
+  - `scripts/run_phase6_sim.sh` (new): regenerates `phase6_cfg_pkg.sv`, then runs the TB
+    with Dima's `piso.sv` / `sipo.sv` straight from `fpga/reference/dima_blocks/`.
+  - `tools/nemo_ctl/sipo_piso.py`: `dima_sel_after(frame, n, prev_frame=0)`, Q1 corrected
+    (below). `gen_svh.py`: comment on `SIPO_TB_SEL_AFTER_*` updated. Test added for the
+    reload case.
+- Results (6.3/6.4):
+  - **[simulated, Icarus 12, Dima's `piso.sv`/`sipo.sv` unmodified, `sipo_wrapper` via the
+    one-change stand-in]** `scripts/run_phase6_sim.sh`: **69/69 checks pass**. RUN 1
+    and 2 capture `168'hfffc02469fc001ab5550155555000102001fffff00` == `PISO_TB_FRAME`;
+    RUN 3 (600 ns) captures `7ffe01234fe000d5aaa80aaaaa800081000fffff80` (the expected frame
+    shifted by one bit), as `check_piso_read` predicts. Dima's `parallel_out` ==
+    `136'h88887777666655554444333322221111a5` every RUN.
+  - **[not hardware]** pytest 144 passed, 1 skipped. Phase 3/4 sims unchanged (above).
+  - **Not run:** xsim, so neither the run against Dima's unmodified `sipo_wrapper.sv` nor
+    xsim's stricter checks have happened yet.
+- Problems / fixes (6.3/6.4), detail in `docs/issues.md`:
+  - **Q1 is not what we thought** (finding about Dima's RTL): on a reload, `sel[23:8]`
+    before the first phirst is the *previous* load's slice 0 (RUN 2: `1111a5`), not 0.
+    The nonblocking reset branch reads `parallel_out` before `sipo.sv`'s reset clears it.
+    Model, TB and `docs/controller_spec.md` Q1 corrected; my first TB expectation (always
+    0) was wrong.
+  - **Before the first APPLY, rst_sipo/rst_piso are 0 (chip resets asserted)**: the
+    `sig_cell` reset value. Probably the safe state, but it disagrees with the spec's
+    "idle HIGH"; open for Phase 8's power-up checklist. My first TB check expected high;
+    changed to check and record the actual behaviour.
+  - Icarus 12 `vvp` crashed on `fork ... join_any` + `disable`; replaced with a polling loop.
+  - Two scripting slips of mine (a file-list edit that didn't apply, a sed quoting error),
+    both caught by re-running; neither reached a commit.
+- Decisions: `docs/decisions.md`, "Phase 6 sims on Yazan's laptop: Icarus 12 from winget,
+  with a one-change sipo_wrapper stand-in".
+- What a pass looks like on hardware: nothing yet. This top has no pins until the chip-pin
+  -> FMC map exists; Phase 6 has no hardware exit criterion of its own.
+- Next steps:
+  1. Run `scripts/run_phase6_sim.sh` with `SIM=xsim` on the lab PC (uses Dima's unmodified
+     `sipo_wrapper.sv`). Phase 6 isn't done until that passes too.
+  2. 6.5: USER_MANUAL Phase 6 section, CLAUDE.md §6/§7 (new files, Q1 correction).
+  3. Questions for Dima: Q1 as corrected (and how an async reset that loads data was
+     synthesized), sipo_in/piso_out edges, chip delay.
+  4. Still agree the Phase 6 split with Rahaf: the WORKLOG lists Phase 6 under her too.
 
 ---
 
