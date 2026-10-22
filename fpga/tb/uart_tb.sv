@@ -55,18 +55,22 @@ module uart_tb;
     endtask
 
     task automatic wait_for_rx_byte(output logic [7:0] got, output logic got_err);
-        got = 8'h00; got_err = 1'b0;
-        for (int i = 0; i < 20000; i++) begin
+        // loop flag instead of `return` inside the task: Icarus 12 rejects return in tasks
+        logic found;
+        got = 8'h00; got_err = 1'b0; found = 1'b0;
+        for (int i = 0; i < 20000 && !found; i++) begin
             tick(1);
             if (rx_valid) begin
                 got = rx_data;
                 got_err = rx_frame_error;
-                return;
+                found = 1'b1;
             end
         end
-        $display("  FAIL: timed out waiting for a received byte");
-        fails++;
-        checks++;
+        if (!found) begin
+            $display("  FAIL: timed out waiting for a received byte");
+            fails++;
+            checks++;
+        end
     endtask
 
     initial begin
@@ -108,8 +112,10 @@ module uart_tb;
         // ---- 3. several distinct bytes back to back ----
         $display("\n-- several bytes back to back --");
         begin
-            logic [7:0] pattern[4] = '{8'h00, 8'hFF, 8'h55, 8'hAA};
+            // element by element: Icarus 12 doesn't support a whole-array initializer here
+            logic [7:0] pattern[4];
             logic [7:0] got; logic err;
+            pattern[0] = 8'h00; pattern[1] = 8'hFF; pattern[2] = 8'h55; pattern[3] = 8'hAA;
             for (int i = 0; i < 4; i++) begin
                 while (tx_busy) tick(1);
                 send_byte(pattern[i]);

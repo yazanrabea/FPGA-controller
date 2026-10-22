@@ -125,13 +125,13 @@ module link_ctrl_tb;
     endtask
 
     task automatic wait_for_response(int expected_total_bytes);
+        // loop flag instead of `return` inside the task: Icarus 12 rejects return in tasks
         resp_count = 0;
-        for (int i = 0; i < 20000; i++) begin
-            tick(1);
-            if (resp_count >= expected_total_bytes) return;
+        for (int i = 0; i < 20000 && resp_count < expected_total_bytes; i++) tick(1);
+        if (resp_count < expected_total_bytes) begin
+            $display("  FAIL: timed out waiting for a %0d-byte response (got %0d bytes)", expected_total_bytes, resp_count);
+            fails++; checks++;
         end
-        $display("  FAIL: timed out waiting for a %0d-byte response (got %0d bytes)", expected_total_bytes, resp_count);
-        fails++; checks++;
     endtask
 
     task automatic reset_dut();

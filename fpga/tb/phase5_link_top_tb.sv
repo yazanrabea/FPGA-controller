@@ -109,34 +109,37 @@ module phase5_link_top_tb;
     logic [7:0] resp_bytes[0:31];
     int          resp_count;
     task automatic pc_wait_for_response(int expected_total_bytes);
+        // loop flag instead of `return` inside the task: Icarus 12 rejects return in tasks
         resp_count = 0;
-        for (int i = 0; i < 400_000; i++) begin
+        for (int i = 0; i < 400_000 && resp_count < expected_total_bytes; i++) begin
             tick(1);
             if (pc_rx_valid) begin
                 resp_bytes[resp_count] = pc_rx_data;
                 resp_count = resp_count + 1;
-                if (resp_count >= expected_total_bytes) return;
             end
         end
-        $display("  FAIL: timed out waiting for a %0d-byte response (got %0d bytes)", expected_total_bytes, resp_count);
-        fails++; checks++;
+        if (resp_count < expected_total_bytes) begin
+            $display("  FAIL: timed out waiting for a %0d-byte response (got %0d bytes)", expected_total_bytes, resp_count);
+            fails++; checks++;
+        end
     endtask
 
     // measure the period of a loopback pin in ticks, by watching fmc_pins directly
     task automatic measure_period_ticks(int pin_idx, output int period_ticks, input int max_ticks);
         int t_rise1, t_rise2;
         logic prev;
+        // loop flag instead of `return` inside the task: Icarus 12 rejects return in tasks
         t_rise1 = -1; t_rise2 = -1;
         prev = fmc_pins[pin_idx];
-        for (int i = 0; i < max_ticks; i++) begin
+        period_ticks = -1;
+        for (int i = 0; i < max_ticks && t_rise2 < 0; i++) begin
             tick(1);
             if (fmc_pins[pin_idx] && !prev) begin
                 if (t_rise1 < 0) t_rise1 = i;
-                else begin t_rise2 = i; period_ticks = t_rise2 - t_rise1; return; end
+                else begin t_rise2 = i; period_ticks = t_rise2 - t_rise1; end
             end
             prev = fmc_pins[pin_idx];
         end
-        period_ticks = -1;
     endtask
 
     initial begin
