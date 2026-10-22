@@ -25,27 +25,28 @@ module link_ctrl_tb;
 
     logic run_set, run_clear, apply_cmd, run;
 
-    logic [2:0]  sig_cfg_type[N_SIG];
-    logic         sig_cfg_idle_level[N_SIG];
-    logic         sig_cfg_msb_first[N_SIG];
-    logic [31:0] sig_cfg_delay[N_SIG];
-    logic [31:0] sig_cfg_param_a[N_SIG];
-    logic [31:0] sig_cfg_param_b[N_SIG];
-    logic [31:0] sig_cfg_cycles[N_SIG];
-    logic [15:0] sig_cfg_data[N_SIG];
-    logic [31:0] sig_cfg_bits[N_SIG];
+    // packed 2-D, matching link_ctrl.sv's ports (Phase 7 round 2; Icarus 12 can't do unpacked-array ports)
+    logic [N_SIG-1:0][2:0]  sig_cfg_type;
+    logic [N_SIG-1:0]       sig_cfg_idle_level;
+    logic [N_SIG-1:0]       sig_cfg_msb_first;
+    logic [N_SIG-1:0][31:0] sig_cfg_delay;
+    logic [N_SIG-1:0][31:0] sig_cfg_param_a;
+    logic [N_SIG-1:0][31:0] sig_cfg_param_b;
+    logic [N_SIG-1:0][31:0] sig_cfg_cycles;
+    logic [N_SIG-1:0][15:0] sig_cfg_data;
+    logic [N_SIG-1:0][31:0] sig_cfg_bits;
 
-    logic [1:0]  cap_cfg_mode[N_CAP];
-    logic         cap_cfg_msb_first[N_CAP];
-    logic [31:0] cap_cfg_bits[N_CAP];
+    logic [N_CAP-1:0][1:0]  cap_cfg_mode;
+    logic [N_CAP-1:0]       cap_cfg_msb_first;
+    logic [N_CAP-1:0][31:0] cap_cfg_bits;
 
-    logic         cap_level_out[N_CAP];
-    logic         cap_period_valid[N_CAP];
-    logic         cap_done[N_CAP];
-    logic [31:0] cap_edge_count[N_CAP];
-    logic [31:0] cap_period_ticks[N_CAP];
-    logic [31:0] cap_high_ticks[N_CAP];
-    logic [15:0] cap_capture_reg[N_CAP];
+    logic [N_CAP-1:0]       cap_level_out;
+    logic [N_CAP-1:0]       cap_period_valid;
+    logic [N_CAP-1:0]       cap_done;
+    logic [N_CAP-1:0][31:0] cap_edge_count;
+    logic [N_CAP-1:0][31:0] cap_period_ticks;
+    logic [N_CAP-1:0][31:0] cap_high_ticks;
+    logic [N_CAP-1:0][15:0] cap_capture_reg;
 
     link_ctrl #(.N_SIG(N_SIG), .N_CAP(N_CAP)) dut (.*);
 
@@ -165,7 +166,9 @@ module link_ctrl_tb;
         clear_fbuf();
         fbuf[0] = 8'h78; fbuf[1] = 8'h56; fbuf[2] = 8'h34; fbuf[3] = 8'h12;  // 0x12345678 LE
         send_frame(8'h01, 16'h0010 + 5, 4);
-        tick(2);
+        // tick(8), was tick(2): since Phase 7 round 2 a write lands LEN+4 ticks after its
+        // checksum (FIFO + checksum check + one byte per tick on the bus, link_frame.sv)
+        tick(8);
         check(sig_cfg_param_a[0] == 32'h12345678, $sformatf("sig_cfg_param_a[0]=0x%08h", sig_cfg_param_a[0]));
         clear_fbuf();
         send_frame(8'h02, 16'h0010 + 5, 4);
@@ -178,7 +181,9 @@ module link_ctrl_tb;
         // type=CLOCK(3)=3'b011, idle_level=0, msb_first=1 -> bits: msb(4)=1,idle(3)=0,type[2:0]=011 -> 8'b0001_0011
         clear_fbuf(); fbuf[0] = 8'b0001_0011;
         send_frame(8'h01, 16'h0010, 1);
-        tick(2);
+        // tick(8), was tick(2): since Phase 7 round 2 a write lands LEN+4 ticks after its
+        // checksum (FIFO + checksum check + one byte per tick on the bus, link_frame.sv)
+        tick(8);
         check(sig_cfg_type[0] == 3'd3, "cfg_type decoded as CLOCK");
         check(sig_cfg_idle_level[0] == 1'b0, "cfg_idle_level decoded as 0");
         check(sig_cfg_msb_first[0] == 1'b1, "cfg_msb_first decoded as 1");
@@ -235,7 +240,9 @@ module link_ctrl_tb;
         // mode=PERIOD(2)=2'b10, msb_first=1 -> bits: msb(2)=1, mode[1:0]=10 -> 8'b0000_0110
         clear_fbuf(); fbuf[0] = 8'b0000_0110;
         send_frame(8'h01, 16'h0100 + 24 * 2 /* cell 2 */, 1);
-        tick(2);
+        // tick(8), was tick(2): since Phase 7 round 2 a write lands LEN+4 ticks after its
+        // checksum (FIFO + checksum check + one byte per tick on the bus, link_frame.sv)
+        tick(8);
         check(cap_cfg_mode[2] == 2'd2, "cap_cfg_mode[2] decoded as PERIOD");
         check(cap_cfg_msb_first[2] == 1'b1, "cap_cfg_msb_first[2] decoded as 1");
 

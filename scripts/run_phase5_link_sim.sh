@@ -18,11 +18,11 @@ echo
 
 echo "=== link_ctrl_tb (frame parser + register file + command dispatch) ==="
 sim_run link_ctrl_tb \
-    "$SRC/link_ctrl.sv" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
+    "$SRC/link_frame.sv" "$SRC/link_ctrl.sv" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$TB/link_ctrl_tb.sv"
 echo
 
 echo "=== phase5_link_top_tb (real UART bit timing, end to end, exit criterion) ==="
 sim_run phase5_link_top_tb \
-    "$SRC/uart_rx.sv" "$SRC/uart_tx.sv" "$SRC/link_ctrl.sv" "$SRC/run_ctrl.sv" \
+    "$SRC/uart_rx.sv" "$SRC/uart_tx.sv" "$SRC/link_frame.sv" "$SRC/link_ctrl.sv" "$SRC/run_ctrl.sv" \
     "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" "$SRC/phase5_link_top.sv" "$TB/phase5_link_top_tb.sv"

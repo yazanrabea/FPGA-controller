@@ -75,27 +75,28 @@ module phase5_link_top (
     logic run, apply;
     logic run_set, run_clear, apply_cmd;
 
-    logic [2:0]  sig_cfg_type[N_SIG];
-    logic         sig_cfg_idle_level[N_SIG];
-    logic         sig_cfg_msb_first[N_SIG];
-    logic [31:0] sig_cfg_delay[N_SIG];
-    logic [31:0] sig_cfg_param_a[N_SIG];
-    logic [31:0] sig_cfg_param_b[N_SIG];
-    logic [31:0] sig_cfg_cycles[N_SIG];
-    logic [15:0] sig_cfg_data[N_SIG];
-    logic [31:0] sig_cfg_bits[N_SIG];
+    // packed 2-D, matching link_ctrl.sv's ports; wire because each element has its own driver
+    wire  [N_SIG-1:0][2:0]  sig_cfg_type;
+    wire  [N_SIG-1:0]       sig_cfg_idle_level;
+    wire  [N_SIG-1:0]       sig_cfg_msb_first;
+    wire  [N_SIG-1:0][31:0] sig_cfg_delay;
+    wire  [N_SIG-1:0][31:0] sig_cfg_param_a;
+    wire  [N_SIG-1:0][31:0] sig_cfg_param_b;
+    wire  [N_SIG-1:0][31:0] sig_cfg_cycles;
+    wire  [N_SIG-1:0][15:0] sig_cfg_data;
+    wire  [N_SIG-1:0][31:0] sig_cfg_bits;
 
-    logic [1:0]  cap_cfg_mode[N_CAP];
-    logic         cap_cfg_msb_first[N_CAP];
-    logic [31:0] cap_cfg_bits[N_CAP];
+    wire  [N_CAP-1:0][1:0]  cap_cfg_mode;
+    wire  [N_CAP-1:0]       cap_cfg_msb_first;
+    wire  [N_CAP-1:0][31:0] cap_cfg_bits;
 
-    logic         cap_level_out[N_CAP];
-    logic         cap_period_valid[N_CAP];
-    logic         cap_done[N_CAP];
-    logic [31:0] cap_edge_count[N_CAP];
-    logic [31:0] cap_period_ticks[N_CAP];
-    logic [31:0] cap_high_ticks[N_CAP];
-    logic [15:0] cap_capture_reg[N_CAP];
+    wire  [N_CAP-1:0]       cap_level_out;
+    wire  [N_CAP-1:0]       cap_period_valid;
+    wire  [N_CAP-1:0]       cap_done;
+    wire  [N_CAP-1:0][31:0] cap_edge_count;
+    wire  [N_CAP-1:0][31:0] cap_period_ticks;
+    wire  [N_CAP-1:0][31:0] cap_high_ticks;
+    wire  [N_CAP-1:0][15:0] cap_capture_reg;
 
     link_ctrl #(.N_SIG(N_SIG), .N_CAP(N_CAP)) u_link_ctrl (
         .clk(clk), .rst_n(rst_n),
