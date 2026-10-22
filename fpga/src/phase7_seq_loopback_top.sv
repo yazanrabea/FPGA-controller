@@ -88,7 +88,7 @@ module phase7_seq_loopback_top #(
     logic [NC*TW-1:0] cap_edges;
 
     seq_engine #(.N_SIG(NS), .N_CAP(NC), .TICK_W(TW), .STEP_W(SW)) u_engine (
-        .clk(clk), .rst_n(rst_n), .start(start), .abort(abort),
+        .clk(clk), .rst_n(rst_n), .start(start), .abort(abort), .preload(1'b0),
         .n_steps(phase7_cfg_pkg::N_STEPS),
         .step_sig_mask(phase7_cfg_pkg::STEP_SIG_MASK[step*NS +: NS]),
         .step_cap_mask(phase7_cfg_pkg::STEP_CAP_MASK[step*NC +: NC]),
@@ -99,7 +99,9 @@ module phase7_seq_loopback_top #(
         .sig_done(sig_done), .cap_done(cap_done), .cap_level(cap_level), .cap_edges(cap_edges),
         .step(step), .run(run), .sig_apply(sig_apply), .cap_apply(cap_apply),
         .busy(busy), .seq_done(seq_done), .fault(fault), .aborted(aborted),
-        .last_step(last_step), .step_start(step_start)
+        .last_step(last_step), .step_start(step_start),
+        // compile-time table: every step is always there, so no prefetch and never LATE
+        .fetch_step(), .fetch_ready(1'b1), .apply_tick(), .late()
     );
 
     // ---- 5 sig cells, config = the current step's entry ----

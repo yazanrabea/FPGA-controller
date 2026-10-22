@@ -54,15 +54,27 @@ module seq_engine_tb;
     logic [2*TW-1:0] cap_edges_v;
 
     seq_engine #(.N_SIG(2), .N_CAP(2), .TICK_W(TW), .STEP_W(4)) dut (
-        .clk(clk), .rst_n(rst_n), .start(start), .abort(abort), .n_steps(n_steps),
+        .clk(clk), .rst_n(rst_n), .start(start), .abort(abort), .preload(1'b0), .n_steps(n_steps),
         .step_sig_mask(t_sig_mask[step]), .step_cap_mask(t_cap_mask[step]),
         .step_cond(t_cond[step]), .step_cond_cell(t_cell[step]),
         .step_cond_arg(t_arg[step]), .step_timeout(t_timeout[step]),
         .sig_done(sig_done_v), .cap_done(cap_done_v), .cap_level(cap_level_v), .cap_edges(cap_edges_v),
         .step(step), .run(run), .sig_apply(sig_apply), .cap_apply(cap_apply),
         .busy(busy), .seq_done(seq_done), .fault(fault), .aborted(aborted),
-        .last_step(last_step), .step_start(step_start)
+        .last_step(last_step), .step_start(step_start),
+        .fetch_step(fetch_step), .fetch_ready(fetch_ready), .apply_tick(), .late(late)
     );
+
+    // ---- model of a next-step bank: fetch_step's entry is there `bank_lat` ticks after
+    //      fetch_step changes. bank_lat = 0 -> always ready (a compile-time table). ----
+    logic [3:0] fetch_step, bank_tgt = '0;
+    logic fetch_ready, late;
+    int bank_lat = 0, bank_cnt = 0;
+    always @(posedge clk) begin
+        if (fetch_step != bank_tgt) begin bank_tgt <= fetch_step; bank_cnt <= bank_lat; end
+        else if (bank_cnt > 0) bank_cnt <= bank_cnt - 1;
+    end
+    assign fetch_ready = (bank_lat == 0) || (fetch_step == bank_tgt && bank_cnt == 0);
 
     // ---- cells ----
     logic p0, p1, r0, f0;
@@ -182,9 +194,11 @@ module seq_engine_tb;
         start = 1; tick(1); start = 0;
     endtask
 
+    // Really idle: not busy, not reloading step 0 (S_RELOAD isn't "busy"), and no START
+    // latched for later. dut.state 1 = S_IDLE.
     task automatic wait_idle(input int max_cycles);
         int k;
-        for (k = 0; k < max_cycles && (busy || start); k++) tick(1);
+        for (k = 0; k < max_cycles && (busy || start || dut.state != 1 || dut.start_q); k++) tick(1);
     endtask
 
     initial begin
@@ -266,7 +280,52 @@ module seq_engine_tb;
         pulse_start();
         wait_idle(50);
         tick(2);
-        check(seq_done && last_step == 0 && n_apply == 1 && !run, "1-step, 1-tick sequence completes");
+        check(seq_done && last_step == 0 && n_apply == 1 && !run,
+              $sformatf("1-step, 1-tick sequence completes (done=%0b last=%0d starts=%0d run=%0b state=%0d)",
+                        seq_done, last_step, n_apply, run, dut.state));
+
+        $display("\n== RUN F: bank needs 20 ticks per step (longer than step 0's 7) ==");
+        n_steps = 7; t_arg[0] = 7; bank_lat = 20;
+        clear_mon();
+        pulse_start();
+        wait_idle(4000);
+        tick(3);
+        check(seq_done && !fault && n_apply == 7, $sformatf("sequence still completes, 7 steps (%0d)", n_apply));
+        check(late, "LATE set: step 1 couldn't start on time");
+        check(apply_cyc[1] - apply_cyc[0] > 7,
+              $sformatf("step 1 started after its bank fetch, not at 7 ticks (%0d)", apply_cyc[1] - apply_cyc[0]));
+        check(cap1_reg == 4'b1011, "captures still right after late boundaries");
+
+        $display("\n== RUN G: bank needs 5 ticks (shorter than step 0's 7) ==");
+        bank_lat = 5;
+        clear_mon();
+        pulse_start();
+        wait_idle(4000);
+        tick(3);
+        check(apply_cyc[1] - apply_cyc[0] == 7, $sformatf("step 0 still exactly 7 ticks (%0d)", apply_cyc[1] - apply_cyc[0]));
+        check(seq_done && late, "LATE set anyway: the 1-tick step 5 can't be fetched in time");
+        check(apply_cyc[6] - apply_cyc[5] > 1, $sformatf("step 6 started late (%0d ticks after step 5)", apply_cyc[6] - apply_cyc[5]));
+
+        $display("\n== RUN H: with an always-ready table LATE stays clear ==");
+        bank_lat = 0;
+        clear_mon();
+        pulse_start();
+        wait_idle(4000);
+        tick(3);
+        check(seq_done && !late, "no LATE when every step is always available");
+
+        $display("\n== RUN I: START during the end-of-run reload still runs ==");
+        bank_lat = 30;
+        n_steps = 1; t_arg[0] = 3;
+        clear_mon();
+        pulse_start();
+        while (!busy) tick(1);
+        while (busy) tick(1);
+        pulse_start();          // engine is reloading step 0 for ~30 ticks now
+        wait_idle(200);
+        while (busy || dut.state != 1) tick(1);
+        check(n_apply == 2 && seq_done, $sformatf("both STARTs ran (%0d step starts)", n_apply));
+        bank_lat = 0;
 
         $display("\n================================================");
         if (fails == 0) $display("ALL TESTS PASSED (%0d checks)", checks);
