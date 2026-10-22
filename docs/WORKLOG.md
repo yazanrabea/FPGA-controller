@@ -7,7 +7,37 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link: J1 (EXP-05 PASS), J2 + J3 done (simulated, bitstreams built); next J4 (Python transport) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link: J1 (EXP-05 PASS), J2-J4 done; next J5 (EXP-02 / EXP-04 over JTAG on the board) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC), JTAG link J4: Python transport, Yazan + Claude, branch main
+- Goal: step J4 (Yazan: "continue"): the PC side of the JTAG link, so `Link` / `SeqLink` /
+  the CLI work over J17.
+- Done:
+  - `tools/nemo_ctl/jtag.py`: scan format, `JtagTransport` (the transport rules), `XsdbScanPort`,
+    `open_jtag()`.
+  - `scripts/jtag_server.tcl`: runs inside xsdb, holds `jtag lock`, serves `S <hex>` scans on
+    127.0.0.1 (OS-chosen port, announced as `READY <port>`).
+  - `tools/nemo_ctl/cli.py`: `--jtag` as the alternative to `--port` for `link ...` and
+    `seq ...`.
+  - Tests: `tools/nemo_ctl/tests/test_jtag.py` (16; a Python model of the bridge in front of
+    the existing Phase 5 / Phase 7 frame fakes) + 2 in `test_cli.py`.
+  - Docs: USER_MANUAL §6.4, `tools/nemo_ctl/README.md`.
+- Hardware setup: board still running `jtag_echo_top` (USER4) from J1, J17 connected.
+- Results:
+  - **[not hardware]** pytest: 212 passed, 1 skipped (194 + 16 + 2).
+  - **[measured on board]** `XsdbScanPort` against `jtag_echo_top`: server up in 6.0 s;
+    scan 2 = ~scan 1; 200 scans through Python + socket + xsdb all echoed, **1.18 ms/scan,
+    ~109 kB/s**. (The echo check doesn't prove byte 0's position; J5 will, via the `jl` magic.)
+- Problems / fixes: one test expectation was wrong. `write()` returns when the bridge has
+  accepted the bytes, so the test now does a `status()` round trip before checking the
+  registers.
+- Decisions: Python talks to xsdb over a local TCP socket served by a Tcl script inside xsdb,
+  rather than driving an interactive xsdb prompt (whose output buffering is unreliable).
+- Next steps: J5 on the board: program `phase5_link_jtag_top`, run EXP-02 over JTAG (change
+  a clock from the PC, see it on the multimeter), then `phase7_link_jtag_top` + EXP-04.
+  After Yazan's OK.
 
 ---
 

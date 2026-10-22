@@ -20,6 +20,14 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
+## 2026-10-22, JTAG link J4 (Python transport) done
+
+- `tools/nemo_ctl/jtag.py` + `scripts/jtag_server.tcl` (xsdb). CLI: `--jtag` instead of
+  `--port`. Manual: USER_MANUAL §6.4. pytest 212 passed, 1 skipped.
+- Checked on the board against the J1 echo design: 1.18 ms/scan, ~109 kB/s through Python.
+- Next: **J5 = EXP-02 / EXP-04 over JTAG on the board** (bitstreams `phase5_link_jtag_top`,
+  `phase7_link_jtag_top` are built; `build/` is git-ignored, rebuild if missing).
+
 ## 2026-10-22, JTAG link J3 (link tops) done [simulated + bitstreams]
 
 - `phase5_link_jtag_top` / `phase7_link_jtag_top` (+ XDCs): the existing link tops with

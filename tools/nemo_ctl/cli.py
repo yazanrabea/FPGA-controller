@@ -91,12 +91,18 @@ def cmd_gen_template(args: argparse.Namespace) -> int:
 
 
 def _open_link(args: argparse.Namespace):
+    if args.jtag:
+        from .jtag import open_jtag
+        return open_jtag(timeout=args.timeout)
     return open_serial(args.port, baud=args.baud, timeout=args.timeout)
 
 
 def _open_seqlink(args: argparse.Namespace):
-    """SeqLink on the serial port (tests replace this function)."""
+    """SeqLink on the serial port or over JTAG (tests replace this function)."""
     from .link import SeqLink, SerialTransport
+    if args.jtag:
+        from .jtag import open_jtag
+        return open_jtag(timeout=args.timeout, link_cls=SeqLink)
     return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout))
 
 
@@ -379,9 +385,15 @@ def build_parser() -> argparse.ArgumentParser:
     # needs actual hardware (a programmed board + a confirmed serial port) -- see
     # docs/USER_MANUAL.md section 6 and docs/experiments/EXP-02.
     link_common = argparse.ArgumentParser(add_help=False)
-    link_common.add_argument("--port", required=True,
-                              help="serial device for the USB-UART adapter, e.g. /dev/ttyUSB0 "
-                                   "or /dev/tty.usbserial-XXXX (macOS) or COM3 (Windows)")
+    link_where = link_common.add_mutually_exclusive_group(required=True)
+    link_where.add_argument("--port",
+                            help="serial device for the USB-UART adapter, e.g. /dev/ttyUSB0 "
+                                 "or /dev/tty.usbserial-XXXX (macOS) or COM3 (Windows)")
+    link_where.add_argument("--jtag", action="store_true",
+                            help="use the JTAG link over the ZedBoard's J17 PROG cable instead "
+                                 "(needs Vivado's xsdb and a JTAG link bitstream: "
+                                 "phase5_link_jtag_top for `link`, phase7_link_jtag_top for `seq`; "
+                                 "docs/link_register_map.md 'Transport: JTAG over J17')")
     link_common.add_argument("--baud", type=int, default=115_200,
                               help="must match uart_tx.sv/uart_rx.sv's BAUD on the loaded "
                                    "bitstream (default: 115200)")

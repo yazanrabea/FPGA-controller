@@ -99,3 +99,16 @@ def test_wizard_subcommand_over_piped_stdin(tmp_path):
     assert "Done building mode 'INFERENCE'" in result.stdout
     assert f"Saved {cfg_path}" in result.stdout
     assert cfg_path.exists()
+
+
+def test_link_and_seq_offer_jtag():
+    # JTAG link step J4: --jtag is the alternative to --port (docs/link_register_map.md)
+    for argv in (["link", "status", "--help"], ["seq", "status", "--help"]):
+        result = _run(argv)
+        assert result.returncode == 0 and "--jtag" in result.stdout and "J17" in result.stdout
+
+
+def test_port_and_jtag_are_exclusive():
+    result = _run(["link", "status", "--port", "COM3", "--jtag"])
+    assert result.returncode != 0
+    assert "not allowed with" in result.stderr

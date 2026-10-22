@@ -370,6 +370,36 @@ need an address `docs/link_register_map.md` describes but no helper wraps yet.
 Phase 5) has not been run on real hardware yet** — don't write a PASS/FAIL into EXP-02
 without an actual reading.
 
+### 6.4 Over the JTAG cable instead of a UART (J17)
+
+The kit has no USB-UART adapter, so the link can also run over the **J17 PROG cable**
+(`docs/decisions.md`, 2026-10-22). Same commands, same register map; only the transport
+changes.
+
+1. Build and program the JTAG version of the top (no `rxd`/`txd` pins needed):
+   ```
+   vivado -mode batch -source scripts/create_project.tcl -tclargs phase5_link_jtag_top build
+   vivado -mode batch -source scripts/program_board.tcl -tclargs phase5_link_jtag_top
+   ```
+   (Phase 7 sequencer: `phase7_link_jtag_top`, then `nemo_ctl.cli seq ... --jtag`.)
+2. Use `--jtag` instead of `--port` (from `tools/`):
+   ```
+   python -m nemo_ctl.cli link status --jtag
+   python -m nemo_ctl.cli link set-clock --jtag --cell test_clock --freq 100Hz --apply
+   ```
+   - The first command takes ~6 s: it starts Vivado's `xsdb`, which runs
+     `scripts/jtag_server.tcl` and holds the cable.
+   - On the lab PC xsdb is found automatically. Elsewhere, set `XSDB=` to its path or put
+     Vivado 2022.1's `bin` on PATH.
+3. While the link runs, close Vivado's Hardware Manager. Both want the cable, and the
+   server takes it exclusively (`jtag lock`). Reprogramming the board ends the session.
+
+From Python: `nemo_ctl.jtag.open_jtag()` returns a `Link`; for the sequencer,
+`open_jtag(link_cls=SeqLink)`.
+
+If it says *"no bridge reply ... is a JTAG link top loaded?"*: the board is running another
+design. Program `phase5_link_jtag_top` or `phase7_link_jtag_top`.
+
 ## 7. Phase 6 — SIPO load and PISO read
 
 Loading the chip's 136-bit SIPO frame and reading its 168-bit PISO frame, done with the
