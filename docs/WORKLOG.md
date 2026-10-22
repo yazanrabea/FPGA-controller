@@ -196,6 +196,13 @@ Tag every result **[simulated]** or **[measured on board]**.
   Dima's unmodified `sipo_wrapper.sv` on the lab PC, (2) someone other than the author
   following USER_MANUAL §7 successfully (Rahaf's rule), (3) approval before Phase 7
   (Rahaf's phase-gate rule). Merge to `main` via PR, reviewed by Rahaf (CLAUDE.md §10).
+- `docs/questions_for_dima_2026-10-22.md` (new): draft, **not sent**. Our current
+  SIPO/PISO sequence, for Dima to confirm, plus 16 questions: Q1 as corrected (and how a
+  data-loading async reset synthesized), Q2/Q3, sipo_in/cs/PISO timing, clk_piso ->
+  piso_out delay (sets max clk_piso), Q5 column mapping, reset polarity, power-up state
+  (resets asserted until APPLY), 1.8 V levels / max clocks, rst_sipo pad, and short
+  carry-overs Q4/Q6/Q10. Wording checked against the generated numbers (cs is 1 us after
+  the 136th rising edge).
 
 ---
 
