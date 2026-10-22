@@ -337,3 +337,48 @@ class Link:
             offset = idx * CAP_STRIDE + _CAP_STATUS_OFFSET
             out[cell] = CapCellStatus.decode(self.read_capture_raw(offset, _CAP_STATUS_LEN))
         return out
+
+
+# ======================================================================================
+# Link v2 (Phase 7 round 2): phase7_link_top.sv. See docs/link_register_map.md, "v2".
+# Same frame format and commands as Phase 5, a different register map behind them:
+#   RUN = START the loaded sequence, STOP = ABORT it, APPLY = re-apply step 0 (idle state)
+# ======================================================================================
+
+V2_SCRATCH = 0x0000
+V2_STATUS = 0x0003      # R: see V2Status; a write of any value clears TABLE_REJECTED
+V2_STEP = 0x0004        # R: current step
+V2_LAST_STEP = 0x0005   # R: step the last run ended on
+V2_N_STEPS = 0x0006     # R/W: number of steps in the table (1..16); write ignored while busy
+V2_CAP_BASE = 0x0100    # cap cell k's results at V2_CAP_BASE + k * stride (READ_CAPTURE offset)
+V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * ENTRY_BYTES (write-only)
+# byte offsets inside one cap cell's result block
+V2_CAP_FLAGS, V2_CAP_EDGES, V2_CAP_PERIOD, V2_CAP_HIGH, V2_CAP_DATA = 0, 1, 5, 9, 13
+
+
+def v2_cap_bytes(target) -> int:
+    """Bytes of the widest capture register in the target."""
+    return max((c.cap_w + 7) // 8 for c in target.cap_cells)
+
+
+def v2_cap_stride(target) -> int:
+    """Bytes per cap cell in the v2 capture region: flags + 3 counters + the widest
+    capture register, rounded up to 8."""
+    return -(-(V2_CAP_DATA + v2_cap_bytes(target)) // 8) * 8
+
+
+@dataclass(frozen=True)
+class V2Status:
+    """The v2 STATUS byte, bit 0 first."""
+    run: bool
+    busy: bool
+    done: bool
+    fault: bool
+    aborted: bool
+    late: bool            # a step boundary had to wait for the bank (not tick-exact)
+    table_rejected: bool  # a table / N_STEPS write arrived while busy and was ignored
+    rx_overflow: bool     # the link's input FIFO dropped a byte (sticky until reset)
+
+    @classmethod
+    def decode(cls, b: int) -> "V2Status":
+        return cls(*(bool(b >> i & 1) for i in range(8)))

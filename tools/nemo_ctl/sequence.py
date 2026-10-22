@@ -483,3 +483,111 @@ def main(argv: list[str] | None = None) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+# ======================================================================================
+# Phase 7 round 2: step-table entry layout (link v2, seq_bank.sv)
+# ======================================================================================
+
+ENTRY_BYTES = 256  # address stride per step in the table RAM (power of 2)
+
+
+@dataclass(frozen=True)
+class EntryLayout:
+    """Byte offsets of one step's entry in the link-written table (little-endian
+    fields). The single source for the PC encoder (`encode_step`), the generated
+    phase7_link_pkg (FPGA field extraction) and the tests' fake device.
+
+    Header: SIG_MASK (ceil(N_SIG/8) B), CAP_MASK (ceil(N_CAP/8) B), COND (1), COND_CELL (1),
+            COND_ARG (4), TIMEOUT (4).
+    Per sig cell, in target order: CTRL (1: type[2:0], idle[3], msb_first[4]), DELAY,
+            PARAM_A, PARAM_B, CYCLES, BITS (4 each), DATA (ceil(serial_w/8) bytes, already
+            justified the way sig_cell expects).
+    Per cap cell: CTRL (1: mode[1:0], msb_first[2]), BITS (4).
+    """
+    target: Target
+    sig_mask: int
+    cap_mask: int
+    cond: int
+    cond_cell: int
+    cond_arg: int
+    timeout: int
+    hdr_bytes: int
+    sig_base: tuple[int, ...]
+    cap_base: tuple[int, ...]
+    used_bytes: int
+
+    SIG_CTRL, SIG_DELAY, SIG_PARAM_A, SIG_PARAM_B, SIG_CYCLES, SIG_BITS, SIG_DATA = 0, 1, 5, 9, 13, 17, 21
+    CAP_CTRL, CAP_BITS = 0, 1
+    CAP_SIZE = 5
+
+    def sig_size(self, i: int) -> int:
+        return self.SIG_DATA + (self.target.sig_cells[i].serial_w + 7) // 8
+
+
+def entry_layout(target: Target = PHASE7_LOOPBACK) -> EntryLayout:
+    sm = (len(target.sig_cells) + 7) // 8
+    cm = (len(target.cap_cells) + 7) // 8
+    sig_mask, cap_mask = 0, sm
+    cond = sm + cm
+    cond_cell, cond_arg = cond + 1, cond + 2
+    timeout = cond_arg + 4
+    hdr = timeout + 4
+    sig_base, off = [], hdr
+    for c in target.sig_cells:
+        sig_base.append(off)
+        off += EntryLayout.SIG_DATA + (c.serial_w + 7) // 8
+    cap_base = []
+    for _ in target.cap_cells:
+        cap_base.append(off)
+        off += EntryLayout.CAP_SIZE
+    if off > ENTRY_BYTES:
+        raise SequenceError(f"{target.name}: a step entry needs {off} bytes, more than {ENTRY_BYTES}")
+    return EntryLayout(target, sig_mask, cap_mask, cond, cond_cell, cond_arg, timeout, hdr,
+                       tuple(sig_base), tuple(cap_base), off)
+
+
+def encode_step(st: Step, lay: EntryLayout) -> bytes:
+    """One compiled Step -> its entry bytes (lay.used_bytes long)."""
+    b = bytearray(lay.used_bytes)
+
+    def put(off: int, value: int, n: int) -> None:
+        b[off:off + n] = int(value).to_bytes(n, "little")
+
+    tg = lay.target
+    put(lay.sig_mask, sum(int(m) << i for i, m in enumerate(st.sig_mask)), lay.cap_mask - lay.sig_mask)
+    put(lay.cap_mask, sum(int(m) << i for i, m in enumerate(st.cap_mask)), lay.cond - lay.cap_mask)
+    put(lay.cond, st.cond, 1)
+    put(lay.cond_cell, st.cond_cell, 1)
+    put(lay.cond_arg, st.cond_arg, 4)
+    put(lay.timeout, st.timeout, 4)
+    for i, c in enumerate(st.sig):
+        o = lay.sig_base[i]
+        put(o + lay.SIG_CTRL, (c.type & 7) | (c.idle << 3) | (c.msb_first << 4), 1)
+        put(o + lay.SIG_DELAY, c.delay, 4)
+        put(o + lay.SIG_PARAM_A, c.param_a, 4)
+        put(o + lay.SIG_PARAM_B, c.param_b, 4)
+        put(o + lay.SIG_CYCLES, c.cycles, 4)
+        put(o + lay.SIG_BITS, c.bits, 4)
+        put(o + lay.SIG_DATA, c.data, (tg.sig_cells[i].serial_w + 7) // 8)
+    for i, c in enumerate(st.cap):
+        o = lay.cap_base[i]
+        put(o + lay.CAP_CTRL, (c.mode & 3) | (c.msb_first << 2), 1)
+        put(o + lay.CAP_BITS, c.bits, 4)
+    return bytes(b)
+
+
+def link_late_warnings(table: StepTable, lay: EntryLayout | None = None) -> list[str]:
+    """Fixed-duration steps too short for the link top's bank (seq_bank.sv) to copy the
+    next step in time (ceil(used/4) + 3 ticks): the next step will start LATE (the
+    STATUS LATE bit shows it). A WAIT step can cause the same if its condition is met
+    within that time, e.g. a level that is already right (ends on tick 3); that can't
+    be known before running, so it isn't warned about here; LATE reports it."""
+    lay = lay or entry_layout(table.target)
+    copy_ticks = (lay.used_bytes + 3) // 4 + 3
+    return [
+        f"step {k + 1} ({table.steps[k + 1].name}) will start late over the link: step {k} "
+        f"({st.name}) lasts {st.cond_arg} ticks, the bank needs ~{copy_ticks} to fetch the next one"
+        for k, st in enumerate(table.steps[:-1])
+        if st.cond == COND["after"] and st.cond_arg < copy_ticks
+    ]
