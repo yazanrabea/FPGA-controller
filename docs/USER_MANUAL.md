@@ -24,7 +24,7 @@ want to understand *why* it's built this way, read `CLAUDE.md` and
 | 4 | Top-level design + compile-time config | RTL/software done, **hardware step not run** | §5 below (build + simulate now; wiring/measuring needs you) |
 | 5 | Runtime link (framed UART protocol, register file, Python client + CLI) | RTL/software done, **simulated only, hardware step not run** | §6 below (talk to it once §5's board is actually built and wired; the link itself needs its own build/wiring too, see §6.1) |
 | 6 | SIPO load / PISO read as profiles of the generic cells, against Dima's RTL | Python + RTL done, **simulated only (Icarus 12)**; xsim run against Dima's unmodified `sipo_wrapper.sv` not done; no hardware step yet (no chip-pin map) | §7 below |
-| 7 | Mode sequencer: a mode as an ordered list of steps, run by an FPGA step engine | Engine + loopback bring-up top done, **simulated only (Icarus 12)**; hardware run EXP-03 not done; link v2 (step table over UART, 136/168-bit frames) not started | §8 below |
+| 7 | Mode sequencer: a mode as an ordered list of steps, run by an FPGA step engine | Round 1 (compile-time table) and round 2 (table over the UART link, `cli seq`) done, **simulated only (Icarus 12)**; EXP-03 / EXP-04 on the board not done (EXP-04 also needs the UART pin, EXP-02) | §8 below |
 | 8 | Chip-ready checklist | Not started | — |
 
 Nothing past Phase 7 exists yet. Phase 6 is simulation-only by nature until the chip-pin ->
@@ -471,8 +471,9 @@ lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run p
 ### 7.5 What Phase 6 does not do yet
 
 - No hardware: no XDC, the chip pins aren't assigned to FMC pins.
-- Not reachable over the Phase 5 link: its registers are 16 bits wide, the frames are
-  136/168 (Phase 7 round 2, not built yet; see §8).
+- Not reachable over a link yet. The Phase 5 link's registers are 16 bits wide. Link
+  v2 (§8.6) sizes its fields from each cell's width, so it can carry 136/168-bit
+  frames, but no top connects the SIPO/PISO cells to it yet (that needs the chip-pin map).
 - `phirst` comes from the chip's own clock generator; the simulation drives it by hand.
 - Before the first APPLY the controller drives every pin 0, so the chip's active-low
   resets are *asserted* until the config is applied (open item for Phase 8).
@@ -566,8 +567,54 @@ FAULT at step 4.
 `nemo_ctl.sequence.program_verify(seq, build, read_cell, check, max_iters)` repeats
 pulse → read → compare: `build(i)` makes iteration i's step table (e.g. a longer pulse each
 time), `check(value)` says when the read-back value is good. It stops at the first pass,
-after `max_iters`, or immediately if the sequencer FAULTs. It is tested against a mock;
-connecting it to the board needs the link v2 work (not built yet).
+after `max_iters`, or immediately if the sequencer FAULTs. Pass it a
+`nemo_ctl.link.SeqLink` to run it on the board (§8.6); the tests run it against a mock
+and against a fake of the link.
+
+### 8.6 Run a sequence from the PC (link v2)
+
+Round 1's top (§8.4) has its sequence compiled into the bitstream. `phase7_link_top`
+instead takes the sequence over the USB-UART link, so you can change and rerun it without
+rebuilding: same 5 loopback pairs and jumpers, same cells. **It hasn't been run on the
+board yet**, and it can't be until the adapter's PMOD pin and voltage are confirmed
+(EXP-02; the XDC leaves `rxd`/`txd` unconstrained on purpose). Procedure:
+`docs/experiments/EXP-04_phase7_link_sequencer.md`.
+
+From inside `tools/` (replace `COM5` with your adapter's port):
+
+```
+python -m nemo_ctl.cli seq load ../config/phase7_seq_loopback.yaml --port COM5
+python -m nemo_ctl.cli seq run --wait 10 --port COM5
+python -m nemo_ctl.cli seq read data_in --port COM5
+python -m nemo_ctl.cli seq status --port COM5
+python -m nemo_ctl.cli seq stop --port COM5
+```
+
+- `load` runs the same checks as §8.2 first (a bad sequence never reaches the port),
+  prints the step summary, sends every step, then APPLY: the pins go to the new step 0.
+  It's refused while a sequence is running (`seq stop` first).
+- `run --wait N` starts it and waits up to N seconds, then prints how it ended, e.g.
+  `STATUS: done late; step 0, last step 5`. It exits 1 on a FAULT or a timeout.
+- `read` prints a capture cell's result, e.g. `data_in: capture 0xA5, edges 0, level 0`.
+- **`late`** in the status means at least one step started a little late. While a step
+  runs, the FPGA copies the next one out of memory, which takes about 0.4 µs. A step that
+  ends sooner, like the demo's `confirm` step (its level is already right, so it ends
+  after 30 ns), delays the next one by that copy time. `load` warns about fixed steps
+  that are too short; it can't know ahead of time when a wait will end.
+
+In Python the same thing is `SeqLink`, which is what `program_verify` takes:
+
+```python
+from nemo_ctl.link import SeqLink, SerialTransport
+from nemo_ctl.sequence import load_sequence
+seq = SeqLink(SerialTransport("COM5"))
+seq.load(load_sequence("../config/phase7_seq_loopback.yaml"))
+seq.start(); print(seq.wait(10)); print(hex(seq.read_capture("data_in")))
+```
+
+Simulation (no board needed): `scripts/run_phase7_sim.sh` ends with
+`phase7_link_top_tb`, a mock PC loading and running the demo over real bit-serial UART
+(`ALL TESTS PASSED (21 checks)`). The register map is in `docs/link_register_map.md` (v2).
 
 ## 9. Troubleshooting
 
@@ -590,6 +637,8 @@ connecting it to the board needs the link v2 work (not built yet).
 | `error: ... step 0 must set every cell` from `nemo_ctl.sequence` / `gen_svh --phase7` | Step 0 is also the idle state, so it must give every cell a setting | Add the missing cells to step 0's `set:` / `capture:` |
 | `gen_svh --phase7 --time-scale ...` says `give --out` | A time-scaled table is for simulation only | Add `--out <file outside fpga/src/gen>`, or drop `--time-scale` for the hardware package |
 | EXP-03: LD5 (FAULT) on with every jumper in | A wait timed out: a loopback isn't reading back (loose jumper, wrong header row, VADJ not 1V8) | LD0–LD2 show which step; check that step's jumper |
+| `seq load` raises `device refused the table` | A sequence was still running, so the board ignored the writes | `seq stop`, then load again |
+| `seq run --wait` prints `late` | A step ended before the next one could be fetched (~0.4 µs) | Expected for very short steps (the demo's `confirm`); lengthen the step if exact timing there matters |
 | `link.NackError` | The device NACKed — either a bad checksum got through somehow, or you sent `LOAD_MODE` (permanently unimplemented) | Check `--baud` and wiring (a bad checksum from clean code usually means a framing/timing problem, not a logic bug); don't use `LOAD_MODE` |
 
 ## 10. Where things live (quick reference)
@@ -613,4 +662,6 @@ connecting it to the board needs the link v2 work (not built yet).
 | Phase 7 step format, checks, program-verify (Python) | `tools/nemo_ctl/sequence.py` |
 | Phase 7 engine / top / XDC / sims | `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`, `fpga/constraints/phase7_seq_loopback_top.xdc`, `scripts/run_phase7_sim.sh` |
 | Hardware procedure for Phase 7 | `docs/experiments/EXP-03_phase7_sequencer_loopback.md` |
+| Phase 7 link v2: top / bank / frame engine | `fpga/src/phase7_link_top.sv`, `fpga/src/seq_bank.sv`, `fpga/src/link_frame.sv`, `fpga/src/gen/phase7_link_pkg.sv` |
+| Phase 7 link v2: Python / CLI / procedure | `tools/nemo_ctl/link.py` (`SeqLink`), `nemo_ctl.cli seq`, `docs/experiments/EXP-04_phase7_link_sequencer.md` |
 | Chronological project log | `docs/WORKLOG.md` |

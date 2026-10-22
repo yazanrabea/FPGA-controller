@@ -58,6 +58,9 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.sv` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] only so far (`fpga/tb/phase4_loopback_top_tb.sv`, `scripts/run_phase4_sim.sh`) — **not yet run on hardware**, see `docs/experiments/EXP-01_*.md` |
 | `phase6_sipo_piso_top.sv` | Phase 6: SIPO_LOAD / PISO_READ from generic cells only (`run_ctrl` + 7 `sig_cell`s + 2-FF sync + `cap_cell` CAP_W=168), config from generated `fpga/src/gen/phase6_cfg_pkg.sv` (`gen_svh.py --phase6` + `config/phase6_sipo_piso.yaml`, timing-checked by `tools/nemo_ctl/sipo_piso.py`). **Sim top, no XDC** (no chip-pin map). [simulated] Icarus 12, 69/69, against Dima's RTL (`fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh`); xsim run with Dima's unmodified `sipo_wrapper.sv` pending |
 | `seq_engine.sv` | Phase 7 step sequencer: walks a step table (from outside: package or RAM), APPLYs only each step's cells, ends a step after N ticks or on done/captured/edges/level with timeout -> FAULT; preloads step 0 after reset. [simulated] `fpga/tb/seq_engine_tb.sv` 31/31 |
+| `link_frame.sv` | Framed UART protocol engine (parser/responder, byte register bus with 1-tick read latency, 16-byte input FIFO), shared by `link_ctrl.sv` (Phase 5 register file, packed ports) and `phase7_link_top.sv`. [simulated] Phase 5 tbs 12/22/7 under Icarus 12 |
+| `seq_bank.sv` | Phase 7 round 2: link-written step-table RAM (block RAM, 4 byte lanes) + prefetched next-step bank (~40 ticks per step); `seq_engine` waits and sets LATE if a step ends sooner. [simulated] `fpga/tb/seq_bank_tb.sv` 10/10 |
+| `phase7_link_top.sv` / `.xdc` | Phase 7 round 2: the sequencer with its table loaded over UART (link v2 map, `docs/link_register_map.md`), RUN=start, STOP=abort, APPLY=idle state; same 5 loopback cells/pins as `phase7_seq_loopback_top`; rxd/txd unconstrained (EXP-02). Layout from `gen_svh.py --phase7-link`. PC side: `link.SeqLink`, `cli seq`. [simulated] `phase7_link_top_tb` 21/21 over real UART, **not on hardware**: `docs/experiments/EXP-04_*.md` |
 | `phase7_seq_loopback_top.sv` / `.xdc` | Phase 7 bring-up: `seq_engine` + 5 sig/5 cap cells on loopback pairs 0-4, compile-time table `fpga/src/gen/phase7_cfg_pkg.sv` (`gen_svh.py --phase7` + `config/phase7_seq_loopback.yaml`); `sw[4]` start/abort, LEDs step/busy/done/fault/match/aborted. Same pins as Phase 4 + PULLDOWN on LA16-20_P. [simulated] 27/27 (`scripts/run_phase7_sim.sh`), **not yet on hardware**: `docs/experiments/EXP-03_*.md` |
 
 ## 7. Next tasks
@@ -65,17 +68,17 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 2. Oscilloscope and Vivado ILA: period, duty, swing, edges, ringing.
 3. Generic per-pin I/O on hardware.
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
-5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and widening the Phase 5 link for 136/168-bit frames (Phase 7 round 2, item 8).
+5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and a link top that carries the 136/168-bit frames (link v2 sizes fields per cell, but no top wires the SIPO/PISO cells to it yet).
 6. Connect and test the real Y-Flash chip.
 7. Generic controller Phase 4 hardware run: `phase4_loopback_top.sv` is written and
    [simulated] (`scripts/run_phase4_sim.sh`), but **needs Vivado + a physical ZedBoard**
    (neither available where it was built) to actually synthesize, program, and measure —
    see `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` for the exact
    procedure. This is the actual Phase 4 exit criterion; nothing above it counts as done.
-8. Generic controller Phase 7 (mode sequencer): engine + loopback top done [simulated];
-   open: EXP-03 on the board (`docs/experiments/EXP-03_*.md`), then link v2 (step table
-   over UART, 136/168-bit DATA/CAPTURE) and real chip sequences (INFERENCE/WRITE) once the
-   chip-pin map and Dima's answers exist.
+8. Generic controller Phase 7 (mode sequencer): round 1 (compile-time table) and round 2
+   (table over UART, `cli seq`, program-verify over the link) done [simulated]; open:
+   EXP-03 on the board, EXP-04 (needs the UART pin, EXP-02), xsim runs of Phases 5-7, and
+   real chip sequences (INFERENCE/WRITE) once the chip-pin map and Dima's answers exist.
 
 ## 8. Coding and answer rules for Claude
 - Provide clean, **synthesizable**, modular Verilog/SystemVerilog with inline comments about timing/logic.

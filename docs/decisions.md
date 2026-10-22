@@ -52,3 +52,20 @@ Each entry: date, decision, reason, rejected options.
 - Reason: Yazan's call, so both partners work from one up-to-date `main`. `origin/main` had not moved, so it's a clean fast-forward. Rahaf's own working rule (2026-10-19) is also direct pushes to `main` after each passing step.
 - Consequences: this skips CLAUDE.md §10's PR review. Rahaf should still review the Phase 6/7 changes on `main` (PR #1's description lists what to check). As with Phases 3-5 already on `main`, Phases 6 and 7 are **[simulated] only**: not built in Vivado, not run on the board. `main` is "builds in simulation", not "tested on the board", for everything after Phase 2.
 - Rejected: waiting for the reviews (Yazan chose not to); a merge commit (nothing to merge, fast-forward keeps history linear).
+
+## Phase 7 round 2: step table in block RAM with a prefetched next-step bank (2026-10-22, Yazan)
+- Decision: the link-written step table lives in RAM (`seq_bank.sv`: 4 byte lanes, registered read, so it infers block RAM). While step k runs, step k+1 is copied into a register bank (4 bytes/tick, ~40 ticks for the loopback entry), and the cells take their config from that bank. If a step ends before the copy lands, the engine waits and sets a sticky LATE flag.
+- Reason: chosen by Yazan from the two options presented. It scales to the real chip (22 cells, 136-bit SIPO frame, 16 steps would need tens of thousands of flip-flops as a register table), and keeps step boundaries tick-exact for every step longer than ~0.4 µs.
+- Rejected: a flip-flop table read directly like round 1's package (always exact, but ~18k FFs for 5 cells and far too big for the chip).
+- Consequence: very short steps (fixed < ~40 ticks, or a wait whose condition is already true) delay the next one by the copy time. `cli seq load` warns about short fixed steps; STATUS.LATE reports the rest. The demo's `confirm` step triggers it on purpose.
+
+## Phase 7 round 2: shared frame engine, Phase 5 refactored onto it (2026-10-22, Yazan)
+- Decision: `link_ctrl.sv`'s parser/responder moved to `fpga/src/link_frame.sv` (byte-wide register bus, 1-tick read latency, input FIFO). Phase 5's register file stays in `link_ctrl.sv`, its map unchanged, with packed 2-D ports. The three Phase 5 testbenches were made Icarus-12-compatible (behaviour-preserving) and pass unchanged checks.
+- Reason: chosen by Yazan; one parser for both link tops, a bus a block RAM can sit behind, and Phase 5 testable on the Windows laptop.
+- Rejected: a second, copied parser for round 2.
+- Consequence: Phase 5 writes now land LEN+4 ticks after the checksum instead of 2 (invisible over UART); `link_ctrl_tb`'s three post-write waits were lengthened accordingly (`docs/issues.md`). Needs re-checking in xsim on the lab PC.
+
+## Link v2 command meanings (2026-10-22, Yazan)
+- Decision: on `phase7_link_top` the existing commands keep their frames but mean sequence operations: RUN = start, STOP = abort, APPLY = re-apply step 0 with RUN low. No new command codes.
+- Reason: the Phase 5 Python client and frame format stay usable as is; the meanings are the natural ones for a sequencer.
+- Rejected: new CMD codes (protocol change for no gain); control bits in a register (one more write per operation).

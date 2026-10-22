@@ -99,3 +99,67 @@ nothing because unimplemented" and "did nothing because it succeeded trivially."
 full config") is not a separate `CMD` — it's `WRITE_REG` to `SCRATCH` (0x0000) followed by
 `READ_REG` from the same address, confirming the whole UART+framing path round-trips a
 byte correctly before anything that actually touches a cell is tried.
+
+## Frame engine changes in Phase 7 round 2 (apply to both maps)
+
+The parser/responder now lives in `fpga/src/link_frame.sv`, shared by `link_ctrl.sv`
+(the Phase 5 map above) and `phase7_link_top.sv` (v2 below). The frame format and the
+commands are unchanged. What changed:
+- A WRITE_REG takes effect **LEN+4 ticks** after its checksum byte (one byte per tick on
+  the internal register bus) instead of 2. That can't be seen over UART.
+- A 16-byte input FIFO sits in front of the parser, so bytes arriving while a write or
+  read is still being handled are kept, not dropped. If it overflows, a sticky
+  `rx_overflow` is set (v2: STATUS bit 7).
+- LEN larger than the top's buffer (128 B for Phase 5, 255 B for v2) gets a NACK.
+- A read is answered only once the previous response has been fully sent.
+
+## v2: `phase7_link_top.sv` (Phase 7 round 2, step sequencer)
+
+Same frames and commands, a different register map. The FPGA holds a **step table**
+(up to 16 steps) and runs it with `seq_engine.sv`; the Python client is
+`tools/nemo_ctl/link.py` `SeqLink`, the command line `python -m nemo_ctl.cli seq ...`.
+Cells: the same 5 loopback pairs as Phase 4/7 (target `PHASE7_LOOPBACK` in
+`tools/nemo_ctl/sequence.py`). The UART pins are still unconstrained (EXP-02).
+
+| CMD | Meaning in v2 |
+|---|---|
+| `RUN` (0x05) | START the loaded sequence (ignored while one is running) |
+| `STOP` (0x06) | ABORT it: RUN low, pins back to step 0 |
+| `APPLY` (0x04) | re-apply step 0 with RUN low (the idle state), e.g. right after loading a table |
+| `STATUS` (0x07) | returns the STATUS byte below |
+| `WRITE_REG` / `READ_REG` / `READ_CAPTURE` | as before, on the map below |
+| `LOAD_MODE` (0x03) | NACK (still reserved) |
+
+| Addr | Name | Access | Meaning |
+|---|---|---|---|
+| 0x0000 | `SCRATCH` | R/W | echo test |
+| 0x0003 | `STATUS` | R; W clears bit 6 | bit0 run, bit1 busy, bit2 done, bit3 fault (a wait timed out), bit4 aborted, bit5 late (a step boundary waited for the prefetch, so it wasn't tick-exact), bit6 table_rejected (a table or N_STEPS write arrived while busy and was ignored), bit7 rx_overflow (sticky until reset). Bits 2-5 stay set until the next START |
+| 0x0004 | `STEP` | R | current step |
+| 0x0005 | `LAST_STEP` | R | step the last run ended on (done / fault / abort) |
+| 0x0006 | `N_STEPS` | R/W | steps in the table, 1..16 (0 -> 1, >16 -> 16); write refused while busy |
+| 0x0100 + 16·k | cap cell k results | R | `READ_CAPTURE` offset 16·k (stride = 13 + widest capture, rounded up to 8: 16 here). +0 flags (bit0 level, bit2 done), +1..+4 edge count (LE), +5..+12 reserved (period/high time not wired on this top, read 0), +13.. capture register (LE, 2 bytes here) |
+| 0x1000 + 256·k | step k's entry | W only (reads 0) | 148 bytes used of 256, layout below; refused while busy |
+
+**Step entry layout** (single source: `sequence.entry_layout()`, generated into
+`fpga/src/gen/phase7_link_pkg.sv`; little-endian):
+
+| Offset | Field |
+|---|---|
+| 0 | SIG_MASK: bit i = sig cell i re-applied at this step |
+| 1 | CAP_MASK: bit i = cap cell i re-armed |
+| 2 | COND: 0 after, 1 done, 2 captured, 3 edges, 4 level |
+| 3 | COND_CELL |
+| 4..7 | COND_ARG (after: ticks; edges: count; level: 0/1) |
+| 8..11 | TIMEOUT (ticks; required for wait steps) |
+| 12 + per sig cell | CTRL (type[2:0], idle[3], msb_first[4]), DELAY, PARAM_A, PARAM_B, CYCLES, BITS (4 B each), DATA (ceil(SERIAL_W/8) B, already justified the way `sig_cell` expects). 22 B per 1-bit cell, 23 B for `data` (16 bits). Blocks at 12, 34, 56, 79, 101 |
+| per cap cell | CTRL (mode[1:0], msb_first[2]), BITS (4 B). Blocks at 123, 128, 133, 138, 143 |
+
+Every step's entry holds every cell's config *in effect* during that step; only the
+masked cells are re-applied at the step's start. Step 0 must apply all cells (the
+compiler enforces it). One step's entry fits one WRITE_REG frame (148 ≤ 255).
+
+**Timing over the link:** while step k runs, `seq_bank.sv` copies step k+1 out of the
+RAM, which takes ~40 ticks (0.4 µs). If step k ends sooner (a fixed step under ~40
+ticks, or a wait whose condition is already true), step k+1 starts as soon as the copy
+lands and STATUS.late is set. `python -m nemo_ctl.cli seq load` warns about fixed
+steps that are too short; waits can only be caught by the flag.

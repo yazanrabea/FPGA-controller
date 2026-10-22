@@ -14,7 +14,7 @@
 | 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met); **EXP-01 on the board not run** |
 | 5 | `phase5_link_top` (runtime UART link) | Simulated only; **EXP-02 blocked**: PMOD pin and bank voltage never confirmed |
 | 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated, Icarus 12]** 69/69; **xsim run with Dima's unmodified `sipo_wrapper.sv` not done**; no hardware step (no chip-pin map) |
-| 7 | Mode sequencer (step engine), round 1 | Engine + loopback top done **[simulated, Icarus 12]** 31/31 + 27/27; **EXP-03 on the board not run, no Vivado build yet**; round 2 (link v2) not started |
+| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) on `main`; round 2 (table over UART, `cli seq`) on **`feature/yazan-phase7-link-v2`, not merged**. All **[simulated, Icarus 12]**: engine 40, bank 10, round-1 top 27, link top 21 (real UART). **EXP-03 / EXP-04 on the board not run, no Vivado build of either top**; EXP-04 also needs the UART pin (EXP-02) |
 | 8 | Chip-ready checklist | Not started (needs Dima's answers + chip-pin map) |
 
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
@@ -36,6 +36,12 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
   -> `gen_svh.py --phase7` -> `fpga/src/gen/phase7_cfg_pkg.sv`, `scripts/run_phase7_sim.sh`,
   `docs/experiments/EXP-03_phase7_sequencer_loopback.md`. Design decision: the sequencer
   runs on the FPGA (tick-exact), not in Python.
+- **Phase 7 round 2** (USER_MANUAL §8.6, branch `feature/yazan-phase7-link-v2`):
+  - `fpga/src/link_frame.sv`: the frame parser, split out of `link_ctrl.sv` and shared by both link tops. It writes onto a byte bus a RAM can sit behind, with a 16-byte input FIFO.
+  - Phase 5: `link_ctrl.sv` now has packed ports, and its testbenches now run under Icarus 12. Writes land LEN+4 ticks after the checksum.
+  - `fpga/src/seq_bank.sv`: the step-table RAM plus the prefetched next-step bank (~40 ticks per step). `seq_engine.sv` waits for it and sets LATE when it has to.
+  - `fpga/src/phase7_link_top.sv` + `.xdc` (register map v2, `docs/link_register_map.md`).
+  - `gen_svh.py --phase7-link` for the layout package; `link.SeqLink`; `python -m nemo_ctl.cli seq ...`; `docs/experiments/EXP-04_*.md`.
 - `docs/questions_for_dima_2026-10-22.md`: 16 questions, **drafted, not sent yet**.
 
 ## Machines
@@ -53,26 +59,30 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
   - Two Pythons: `python` (3.10) has the packages, `python3` (3.13) doesn't. `sim_python` picks the one that can import `yaml`.
   - GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe`, signed in as `yazanrabea`.
 
-## Last verified results (2026-10-22, Yazan's laptop, before the push to `main`)
+## Last verified results (2026-10-22, Yazan's laptop, branch `feature/yazan-phase7-link-v2`)
 
-- **[not hardware]** `python -m pytest tools/nemo_ctl/tests` (from `tools/`): 176 passed,
+- **[not hardware]** `python -m pytest tools/nemo_ctl/tests` (from `tools/`): 194 passed,
   1 skipped (expected skip: `test_link.py`, only runs without pyserial).
 - **[simulated, Icarus 12]**:
   - Phase 3 `sig_cell_tb` 28, `cap_cell_tb` 16, `run_ctrl_tb` 9, `integration_tb` 16
   - Phase 4 `phase4_loopback_top_tb` 21
+  - Phase 5 `uart_tb` 12, `link_ctrl_tb` 22, `phase5_link_top_tb` 7 (refactored link)
   - Phase 6 `phase6_sipo_piso_tb` 69 (with the `sipo_wrapper` stand-in)
-  - Phase 7 `seq_engine_tb` 31, `phase7_seq_loopback_top_tb` 27 (time-scaled ×1e-4 package)
-  - Phase 5 doesn't elaborate under Icarus 12.
-- **[simulated, xsim 2022.1, 2026-10-19 on the lab PC]** Phases 3-5, all 8 testbenches.
-  **Phases 6 and 7 have never been run in xsim.**
-- Generated packages (`nemo_cfg_pkg.sv`, `phase6_cfg_pkg.sv`, `phase7_cfg_pkg.sv`) regenerate
-  byte-identical from their YAML.
+  - Phase 7 `seq_engine_tb` 40, `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27,
+    `phase7_link_top_tb` 21 (time-scaled ×1e-4 tables)
+- **[simulated, xsim 2022.1, 2026-10-19 on the lab PC]** Phases 3-5 *before* the round-2
+  refactor. **Phases 6 and 7, and the refactored Phase 5, have never been run in xsim.**
+- Generated packages (`nemo_cfg_pkg.sv`, `phase6_cfg_pkg.sv`, `phase7_cfg_pkg.sv`,
+  `phase7_link_pkg.sv`) regenerate byte-identical.
 
 ## What to do next (in order)
 
-1. **Lab PC, xsim:** `SIM=xsim scripts/run_phase6_sim.sh` and `SIM=xsim scripts/run_phase7_sim.sh`.
-   These are the first runs against Dima's unmodified `sipo_wrapper.sv`, and the first xsim
-   runs of Phases 6/7 (xsim is stricter). Phase 6 isn't done until this passes.
+0. **Decide about merging** `feature/yazan-phase7-link-v2` into `main` (ask Yazan; Rahaf should
+   review it, especially the Phase 5 refactor).
+1. **Lab PC, xsim:** `SIM=xsim scripts/run_phase5_link_sim.sh`, `run_phase6_sim.sh` and
+   `run_phase7_sim.sh`. These are the first xsim runs of the refactored Phase 5 link and of
+   Phases 6/7 (xsim is stricter), and the first run against Dima's unmodified `sipo_wrapper.sv`.
+   Phase 6 isn't done until it passes.
 2. **Lab PC, Vivado:** rebuild `phase4_loopback_top` once
    (`create_project.tcl -tclargs phase4_loopback_top build`). `create_project.tcl` globs
    `fpga/src/*.sv` and `fpga/src/gen/*.sv`, so the Phase 6/7 tops and packages are now part
@@ -88,11 +98,11 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
    That's Phase 7's hardware exit criterion.
 5. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`) after the team
    reads them. The answers unblock Phase 8 and the real INFERENCE/WRITE sequences.
-6. **Phase 7 round 2, link v2** (not started; can be done off the board): step table and
-   136/168-bit DATA/CAPTURE over the UART link, `link_ctrl.sv` + `tools/nemo_ctl/link.py`
-   + `program_verify` bound to the real link. Hardware test still needs **EXP-02 unblocked**:
-   confirm the PMOD pin and bank voltage in the ZedBoard reference manual
-   (`docs/controller_spec.md` §9). **Do not invent a pin or voltage.**
+6. **Unblock EXP-02 / EXP-04:** confirm the USB-UART adapter's PMOD pin and bank voltage in
+   the ZedBoard reference manual (`docs/controller_spec.md` §9) and add them to
+   `phase5_link_top.xdc` and `phase7_link_top.xdc`. **Do not invent a pin or voltage.** Then
+   EXP-02 (Phase 5) and EXP-04 (`cli seq` on the board, including a changed sequence without
+   re-synthesis).
 7. Bring-up backlog (CLAUDE.md §7): verify LA pairs 5-15, scope/ILA measurements.
 
 ## Working rules
@@ -127,8 +137,8 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 | Lab-user manual (Phase 6 = §7, Phase 7 = §8) | `docs/USER_MANUAL.md` |
 | Phase 0 spec, pin table, open questions Q1-Q10 | `docs/controller_spec.md` |
 | Questions for Dima (draft) | `docs/questions_for_dima_2026-10-22.md` |
-| Phase 5 register map | `docs/link_register_map.md` |
-| Hardware procedures | `docs/experiments/EXP-01_*.md`, `EXP-02_*.md`, `EXP-03_*.md` |
+| Link register maps (Phase 5 and v2) | `docs/link_register_map.md` |
+| Hardware procedures | `docs/experiments/EXP-01_*.md` ... `EXP-04_*.md` |
 | Bugs and fixes / decisions | `docs/issues.md`, `docs/decisions.md` |
 | Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
 | Sims | `scripts/run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh`, `run_phase6_sim.sh`, `run_phase7_sim.sh` (`sim_lib.sh`) |
