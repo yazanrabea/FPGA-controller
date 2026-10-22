@@ -246,11 +246,24 @@ module phase4_loopback_top (
     );
 
     // ---- test_serial: sticky "last capture matched the known pattern" ----
+    // The two sides hold a partial (BITS < 16) frame at OPPOSITE ends of their 16-bit
+    // registers: sig_cell sends msb_first data MSB-justified (gen_svh packs 0xA5 as 16'hA500)
+    // but cap_cell's msb_first capture lands at the bottom [BITS-1:0] (lsb_first: the reverse,
+    // see cap_cell.sv). So compare the BITS meaningful bits of each, not [7:0] of both --
+    // that compared 0xA5 against 0x00 and kept LD2 off on the board (EXP-01, docs/issues.md).
+    localparam int          SER_B    = nemo_cfg_pkg::TEST_SERIAL_BITS;
+    localparam logic [15:0] SER_MASK = 16'((32'h1 << SER_B) - 1);
+    localparam logic [15:0] SER_EXP  = nemo_cfg_pkg::TEST_SERIAL_MSB_FIRST
+                                       ? 16'(nemo_cfg_pkg::TEST_SERIAL_DATA >> (16 - SER_B))
+                                       : (nemo_cfg_pkg::TEST_SERIAL_DATA & SER_MASK);
+    logic [15:0] ser_got;
+    assign ser_got = nemo_cfg_pkg::TEST_SERIAL_MSB_FIRST ? (capture_reg_serial & SER_MASK)
+                                                         : 16'(capture_reg_serial >> (16 - SER_B));
     logic serial_ok;
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) serial_ok <= 1'b0;
         else if (!sw[4]) serial_ok <= 1'b0;  // same sw[4]-clears convention as the earlier designs' LD3
-        else if (cap_done_vec[2]) serial_ok <= (capture_reg_serial[7:0] == nemo_cfg_pkg::TEST_SERIAL_DATA[7:0]);
+        else if (cap_done_vec[2]) serial_ok <= (ser_got == SER_EXP);
     end
 
     // ---- live match + sticky fault latch for the 4 level-comparable pairs

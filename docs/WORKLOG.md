@@ -6,8 +6,44 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | EXP-01 (Phase 4 hardware run). Phase 6 was done by Yazan (merged to `main` 2026-10-22), so it's off this row; review it. | `main` (direct pushes, per Rahaf) | `docs/experiments/EXP-01*` |
-| Yazan | Lab PC (via Claude): xsim runs + Vivado builds of Phases 4-7, round-2 review; next EXP-01/EXP-03 with someone at the board. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
+| Yazan | EXP-01 done on the board (PASS); next EXP-03 (same wiring) and the JTAG-link plan. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC, board), Yazan at the ZedBoard + Claude, branch main
+- Goal: EXP-01, Phase 4 on the board (Phase 4's hardware exit criterion). Yazan also chose
+  the PC-link option: JTAG over J17 (`docs/decisions.md`).
+- Done:
+  - Programmed `phase4_loopback_top` with `scripts/program_board.tcl` and ran EXP-01 §3
+    pair by pair, Yazan reading the LEDs and the multimeter, Claude recording.
+  - Found and fixed a SERIAL checker bug (LD2 compared 0xA5 with 0x00):
+    `fpga/src/phase4_loopback_top.sv`; new `fpga/tb/phase4_serial_tb.sv` (time-scaled,
+    jumper in / jumper pulled) run by `scripts/run_phase4_sim.sh`. Rebuilt, reprogrammed,
+    pair 2 rerun on the board.
+  - Docs: EXP-01 results + conclusion, `docs/pin_verification.md` (new EXP-01 column),
+    `docs/issues.md` (the bug + one open LD3 transient), `docs/decisions.md` (JTAG link),
+    CLAUDE.md §3/§5/§6/§7.
+- Hardware setup: ZedBoard, J18 (VADJ) on **1V8** (confirmed by Yazan before programming,
+  and by the 1.8 V reading on J3-4). Jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19,
+  J3-4↔J2-20 (P column). PROG micro-USB on J17. First attempt: no JTAG target and no Digilent
+  USB device in Windows at all; Yazan fixed the cable. Fluke 115 on DC V, black probe on the
+  outer shell of an SMA jack on the HTG-FMC board.
+- Results **[measured on board]** (full tables in EXP-01 §4):
+  - RUN off: all pairs LD0=LD1=0, LD3 off, LD2 on except SERIAL (held cleared, expected). PASS.
+  - Pair 0 CLOCK 100 Hz: 0.9 V at J3-0 and J3-16; LD0/LD1 blinking on a phone slow-mo video; LD3 off. PASS.
+  - Pair 1 PULSE: 5 blinks on LD0 and LD1, LD3 off. PASS (count; width/spacing not timed).
+  - Pair 2 SERIAL: first bitstream LD2 never on (checker bug); fixed bitstream LD2 on. PASS after fix.
+  - Pair 3 LOW: 0 V at J3-3, LD0=LD1=0, LD2 on. PASS.
+  - Pair 4 HIGH: 1.8 V at J3-4, LD0=LD1=1, LD2 on. LD3 was on once (cause unknown); retest
+    30 s untouched + the same switch flips: off. PASS on retest.
+  - **[simulated, xsim]** `phase4_loopback_top_tb` 21/21, `phase4_serial_tb` 2/2 (the old RTL fails both).
+  - **[Vivado report]** fixed bitstream: WNS +4.001 ns / WHS +0.190 ns.
+- Problems / fixes: SERIAL checker compare (fixed, confirmed on the board); LD3 transient on
+  pair 4 (open, suspected jumper bumped). Both in `docs/issues.md`.
+- Decisions: PC link = JTAG over J17 (Yazan); plan to be approved before any RTL.
+- Next steps: EXP-03 on the same wiring (bitstream built); JTAG link plan for approval;
+  scope measurements of frequency/duty/edges (CLAUDE.md §7 item 2).
 
 ---
 

@@ -108,3 +108,16 @@ Format: symptom, suspected cause, fix, confirmation.
 - Confirmation: `phase5_link_top` meets timing, WNS +0.238 ns, 0 failing endpoints [Vivado implementation report, not a measurement]; `run_phase5_link_sim.sh` in xsim `uart_tb` 12, `link_ctrl_tb` 22, `phase5_link_top_tb` 7 [simulated].
 - Still tight: the worst path (9 levels) is now the 376-byte register-file read mux. If it fails after a change, register the address decode or make the register file a RAM.
 - Lesson: run every new top through Vivado synthesis + routing (`report_timing_summary`) before calling it ready for the board, even when it can't make a bitstream yet.
+
+## EXP-01: SERIAL checker (LD2) compared the wrong byte, never confirmed a good capture
+- Symptom (2026-10-22, EXP-01 on the board): pair 2 (SERIAL 0xA5), `sw[4]` up for ~2 s: LD0/LD1 blinked the pattern (4 separate 1s), but LD2 (`serial_ok`) never came on. LD3 doesn't cover this pair.
+- Cause: `fpga/src/phase4_loopback_top.sv` compared `capture_reg_serial[7:0] == TEST_SERIAL_DATA[7:0]`. The two sides hold a partial (8-of-16-bit) frame at opposite ends: `gen_svh.py` packs MSB-first send data MSB-justified (`16'hA500`), while `cap_cell`'s MSB-first capture lands at the bottom (`[7:0]`, documented in `cap_cell.sv`). So it compared 0xA5 with 0x00. It also *passed* with the jumper pulled (0x00 == 0x00). `phase4_loopback_top_tb` only checked the first bit: a full frame at the 10 Hz strobe is 80M ticks, so nothing simulated the compare.
+- Fix: compare the BITS meaningful bits of each side, for either bit order (`SER_EXP` / `ser_got`). New `fpga/tb/phase4_serial_tb.sv`, run by `run_phase4_sim.sh` against a temp copy of the package with the strobe at 1 MHz: jumper in -> LD2 on, jumper pulled -> LD2 off. The old RTL fails both cases of it.
+- Confirmation: `phase4_serial_tb` 2/2 and `phase4_loopback_top_tb` 21/21 [simulated, xsim]; rebuilt bitstream (WNS +4.001 ns), reprogrammed, pair 2 rerun: LD2 on [measured on board].
+- Lesson: a checker on the board needs its own end-to-end test, time-scaled if needed. The board run found what the testbench couldn't reach.
+
+## EXP-01: one LD3 (fault latch) transient on pair 4, cause not found (open)
+- Symptom (2026-10-22): reading pair 4 (HIGH) with RUN on, LD3 was on; it had been off at the pair 3 reading just before. It cleared when `sw[4]` was toggled.
+- Checked: the latch counts mismatches of the *selected* pair only (16 consecutive ticks = 160 ns); `sel` falls back to pair 0 for `sw[3:0]` >= 5, so passing through other switch values shouldn't set it. Retest on the fixed bitstream: `sw[2:0]`=100, RUN on, nothing touched for 30 s: off; then 100 -> 011 -> 100: still off.
+- Suspected: a brief real dropout on a jumper (e.g. bumped while flipping the nearby switches). Not proven.
+- Status: open. Watch LD3 in EXP-03 (same jumpers); if it comes back, wiggle-test the jumpers one by one with the pair selected.

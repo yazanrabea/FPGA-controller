@@ -11,7 +11,7 @@
 | 1 | Config file + Python core | Done |
 | 2 | Interactive CLI wizard | Done |
 | 3 | RTL cells `sig_cell` / `cap_cell` / `run_ctrl` | Done, **simulated only** |
-| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met, rebuilt 2026-10-22 with the Phase 6/7 files in the project); **EXP-01 on the board not run** |
+| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met, rebuilt 2026-10-22 with the Phase 6/7 files in the project); **EXP-01 PASS on the board 2026-10-22** (found + fixed a SERIAL checker bug) |
 | 5 | `phase5_link_top` (runtime UART link) | Simulated (Icarus + xsim). Vivado route **failed timing by 6.1 ns until 2026-10-22's `link_ctrl.sv` fix**, now met (+0.238 ns). **EXP-02 blocked**: no PC-link pin/adapter yet |
 | 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated]** 69/69 in Icarus 12 *and* xsim 2022.1 (xsim with Dima's unmodified `sipo_wrapper.sv`, 2026-10-22); no hardware step (no chip-pin map) |
 | 7 | Mode sequencer (step engine) | Round 1 (compile-time table) and round 2 (table over UART, `cli seq`), both on `main` (round 2 merged 2026-10-22 without Rahaf's review, at Yazan's request). All **[simulated]** in Icarus 12 and xsim 2022.1: engine 40, bank 10, round-1 top 27, link top 21 (real UART). Vivado: `phase7_seq_loopback_top` bitstream built (WNS +0.248 ns); `phase7_link_top` routes and meets timing (+0.334 ns, no bitstream: no UART pins). **EXP-03 / EXP-04 on the board not run**; EXP-04 also needs the UART pin (EXP-02) |
@@ -19,6 +19,16 @@
 
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
+
+## 2026-10-22, at the board: EXP-01 PASS
+
+- Phase 4's hardware exit criterion is met: all 5 signal types on pairs 0-4 [measured on board].
+- The board run found a bug no simulation reached: the SERIAL checker compared 0xA5 with 0x00.
+  Fixed, with a new time-scaled `fpga/tb/phase4_serial_tb.sv`.
+- Open: one unexplained LD3 transient on pair 4 (`docs/issues.md`); watch LD3 in EXP-03.
+- Board setup that worked: J18 on 1V8; PROG micro-USB on J17 (a bad cable shows up as *no
+  Digilent USB device in Windows*, not as a Vivado error); multimeter ground on an SMA shell.
+- PC link: **JTAG over J17 chosen by Yazan** (`docs/decisions.md`); plan not yet approved, no RTL.
 
 ## 2026-10-22, lab PC session (handoff steps 1-2 done)
 
@@ -92,7 +102,7 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 2. ~~Lab PC, Vivado rebuild~~ **done 2026-10-22**: `phase4_loopback_top` and
    `phase7_seq_loopback_top` bitstreams build (in `build/`, git-ignored: rebuild with
    `create_project.tcl -tclargs <top> build` if missing).
-3. **EXP-01** (Phase 4 on the board): `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**
+3. ~~**EXP-01**~~ **done 2026-10-22, PASS** (`docs/experiments/EXP-01_*.md`). Kept for reference: `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**
    (it was last seen on **2V5**, 2026-10-22: move it with SW8 off),
    jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20 (P column), switches down,
    PROG USB J17. Program with `scripts/program_board.tcl -tclargs phase4_loopback_top`. The

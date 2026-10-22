@@ -19,3 +19,17 @@ echo "=== phase4_loopback_top_tb ==="
 sim_run phase4_loopback_top_tb \
     "$SRC/gen/nemo_cfg_pkg.sv" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$SRC/phase4_loopback_top.sv" "$TB/phase4_loopback_top_tb.sv"
+
+# The SERIAL pair end to end (phase4_loopback_top_tb can't reach it: 80M ticks per frame
+# at the real 10 Hz strobe). Same RTL, a temp copy of the package with the strobe at 1 MHz.
+# It lives in $WORK only, so it can never end up in a bitstream.
+echo
+echo "=== phase4_serial_tb (SERIAL pair end to end, strobe x1e5 faster) ==="
+FAST="$WORK/nemo_cfg_pkg_fast.sv"
+sed -E -e 's/(SERIAL_STROBE_PERIOD = )[0-9]+;/\1100;/' -e 's/(SERIAL_STROBE_HIGH   = )[0-9]+;/\150;/' \
+    "$SRC/gen/nemo_cfg_pkg.sv" > "$FAST"
+grep -q "SERIAL_STROBE_PERIOD = 100;" "$FAST" && grep -q "SERIAL_STROBE_HIGH   = 50;" "$FAST" \
+    || { echo "ERROR: couldn't speed up the serial strobe in $FAST (package format changed?)"; exit 1; }
+sim_run phase4_serial_tb \
+    "$FAST" "$SRC/run_ctrl.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
+    "$SRC/phase4_loopback_top.sv" "$TB/phase4_serial_tb.sv"

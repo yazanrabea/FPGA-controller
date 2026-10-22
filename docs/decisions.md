@@ -74,3 +74,9 @@ Each entry: date, decision, reason, rejected options.
 - Decision: fast-forward `main` to `feature/yazan-phase7-link-v2` at Yazan's request, as was done for Phases 6/7 round 1.
 - Reason: Yazan's call; `origin/main` had not moved, so it's a clean fast-forward.
 - Consequences: round 2 changes Phase 5's link code (`link_ctrl.sv` split onto `link_frame.sv`, packed ports, writes now LEN+4 ticks after the checksum, three Phase 5 testbenches edited). Rahaf should review that on `main`, and it must be re-run in xsim on the lab PC. Everything in round 2 is **[simulated] only**.
+
+## PC link for EXP-02 / EXP-04: JTAG over J17 (option c)
+- Decision (Yazan, 2026-10-22): carry the link's bytes over the J17 JTAG/USB cable (the one already used for programming) instead of a USB-UART adapter on Pmod JA.
+- Reason: the kit has no 3.3 V USB-UART adapter (`docs/controller_spec.md` §9), and J17 needs no new wiring, pins or voltage decision.
+- Rejected for now: (a) USB-UART adapter on Pmod JA (needs hardware we don't have; still the cheapest switch later, since `link_frame.sv` stays the same); (b) the onboard J14 USB-UART via the ARM PS (needs a block design + software, against CLAUDE.md §4's no-block-design rule).
+- Status: design plan to be approved before any RTL is written.

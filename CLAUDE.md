@@ -17,7 +17,7 @@ Target ASIC data path: `SIPO in -> Y-Flash array -> TDC/DSA -> PISO out`.
 
 ## 3. Goals
 1. **Prepare the setup**: FPGA controller and its interface to the chip (pins, clocks, phases, SIPO/PISO). *In progress.*
-2. **Verify the setup**: prove every signal on the pins is correct, by on-board self-test and by independent measurement. *Pair 0 done.*
+2. **Verify the setup**: prove every signal on the pins is correct, by on-board self-test and by independent measurement. *Pair 0 done; pairs 0-4 done with the generic controller (EXP-01, 2026-10-22).*
 3. **Test the chip and package**: connect the real chip, program weights, compute, read back results, check that it works. *Next.*
 
 Learning goals: emerging memory / processing-in-memory for ANN accelerators; hands-on FPGA work for experimental characterization.
@@ -37,6 +37,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - Pair convention in all bring-up designs: **output pin i = LAi_P, input pin i+16 = LA(i+16)_P**, i = 0..15, selected by `sw[3:0]`; `sw[4]` enables/sets drive.
 - The **SMA jacks are unusable** for GPIO: they are wired to transceiver lanes, XC7Z020 has no GTX, and only 4 of 38 reach the FPGA (clock inputs only). Use J2/J3 headers.
 - Pair 0 (J3-0 to J3-16 with a jumper) verified: static level, 1 MHz 50% clock (internal checker), and ~100 Hz clock read **0.899 V** on the multimeter (ideal 0.9 V).
+- Pairs 0-4 verified with the generic controller (`phase4_loopback_top`, EXP-01, 2026-10-22): CLOCK 100 Hz read **0.9 V** at both J3-0 and J3-16; PULSE x5 counted; SERIAL 0xA5 captured; LOW **0 V** at J3-3; HIGH **1.8 V** at J3-4 (so VADJ really is 1.8 V). Multimeter ground: the outer shell of an SMA jack on the HTG board. Frequency/duty/width not yet measured (needs the scope).
 - A 1 MHz clock cannot be read on a handheld multimeter (use the ~100 Hz design for that).
 - Checker lessons: `sw[4]` needs a 2-FF synchronizer + ~20 ms settle window; fault latch only after 16 consecutive mismatches; expected value is delayed 2 cycles to match the input synchronizer. **A self-check can lie. Confirm important results with independent measurement.**
 - Dima's `sipo_wrapper.sv` Q1, [simulated] 2026-10-22: right after `rst_sipo`, `sel[23:8]` holds the **previous** load's slice 0 (0 on the first load), because the nonblocking reset branch reads `parallel_out` before `sipo.sv`'s reset clears it. The frame being loaded never shows its slice 0. (Earlier reading "always loads zeros" was wrong; `docs/issues.md`.)
@@ -55,7 +56,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `sig_cell.sv` | Generic config-driven signal cell (LOW/HIGH/PULSE/CLOCK/SERIAL) for the controller in `generic_controller_prompt.md`/`docs/controller_spec.md`. One instance per driven chip pin. [simulated] only, `fpga/tb/sig_cell_tb.sv` |
 | `cap_cell.sv` | Generic config-driven capture cell (LEVEL/EDGE_COUNT/PERIOD/SERIAL) for the same controller. One instance per captured chip pin. [simulated] only, `fpga/tb/cap_cell_tb.sv` |
 | `run_ctrl.sv` | Global RUN/STOP + one-cycle APPLY strobe, synchronized command inputs. [simulated] only, `fpga/tb/run_ctrl_tb.sv` |
-| `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.sv` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] only so far (`fpga/tb/phase4_loopback_top_tb.sv`, `scripts/run_phase4_sim.sh`) — **not yet run on hardware**, see `docs/experiments/EXP-01_*.md` |
+| `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.sv` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] (`fpga/tb/phase4_loopback_top_tb.sv`, `phase4_serial_tb.sv`, `scripts/run_phase4_sim.sh`) and **[measured on board]: EXP-01 PASS 2026-10-22** (`docs/experiments/EXP-01_*.md`) |
 | `phase6_sipo_piso_top.sv` | Phase 6: SIPO_LOAD / PISO_READ from generic cells only (`run_ctrl` + 7 `sig_cell`s + 2-FF sync + `cap_cell` CAP_W=168), config from generated `fpga/src/gen/phase6_cfg_pkg.sv` (`gen_svh.py --phase6` + `config/phase6_sipo_piso.yaml`, timing-checked by `tools/nemo_ctl/sipo_piso.py`). **Sim top, no XDC** (no chip-pin map). [simulated] Icarus 12, 69/69, against Dima's RTL (`fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh`); xsim run with Dima's unmodified `sipo_wrapper.sv` pending |
 | `seq_engine.sv` | Phase 7 step sequencer: walks a step table (from outside: package or RAM), APPLYs only each step's cells, ends a step after N ticks or on done/captured/edges/level with timeout -> FAULT; preloads step 0 after reset. [simulated] `fpga/tb/seq_engine_tb.sv` 31/31 |
 | `link_frame.sv` | Framed UART protocol engine (parser/responder, byte register bus with 1-tick read latency, 16-byte input FIFO), shared by `link_ctrl.sv` (Phase 5 register file, packed ports) and `phase7_link_top.sv`. [simulated] Phase 5 tbs 12/22/7 under Icarus 12 |
@@ -70,14 +71,12 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
 5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and a link top that carries the 136/168-bit frames (link v2 sizes fields per cell, but no top wires the SIPO/PISO cells to it yet).
 6. Connect and test the real Y-Flash chip.
-7. Generic controller Phase 4 hardware run: `phase4_loopback_top.sv` is written and
-   [simulated] (`scripts/run_phase4_sim.sh`), but **needs Vivado + a physical ZedBoard**
-   (neither available where it was built) to actually synthesize, program, and measure —
-   see `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` for the exact
-   procedure. This is the actual Phase 4 exit criterion; nothing above it counts as done.
+7. ~~Generic controller Phase 4 hardware run~~ **done 2026-10-22**: EXP-01 PASS on the
+   board (`docs/experiments/EXP-01_phase4_generic_controller_bringup.md`). It found and
+   fixed a SERIAL checker bug; one LD3 transient on pair 4 is still unexplained (`docs/issues.md`).
 8. Generic controller Phase 7 (mode sequencer): round 1 (compile-time table) and round 2
    (table over UART, `cli seq`, program-verify over the link) done [simulated]; open:
-   EXP-03 on the board, EXP-04 (needs the UART pin, EXP-02), xsim runs of Phases 5-7, and
+   EXP-03 on the board, EXP-04 (needs the PC link: JTAG over J17 chosen 2026-10-22, `docs/decisions.md`), and
    real chip sequences (INFERENCE/WRITE) once the chip-pin map and Dima's answers exist.
 
 ## 8. Coding and answer rules for Claude
