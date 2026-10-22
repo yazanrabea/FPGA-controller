@@ -89,7 +89,79 @@ WNS +0.248 ns / WHS +0.167 ns (worst path `u_engine/step_reg` -> `step_reg`, 9 l
 PACKAGE_PIN/IOSTANDARD lines as `phase4_loopback_top.xdc`), plus PULLDOWN on LA16-20_P.
 The testbenches pass in xsim 2022.1 too (`run_phase7_sim.sh`), [simulated].
 
-## 5. Results — PENDING, not yet run
+## 5. Results — 2026-10-22, lab PC: PASS, [measured on board]
+
+### Run record
+
+- Yazan at the board, Claude on the lab PC. Same wiring as EXP-01 (run just before, PASS):
+  J18 on 1V8, jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20, PROG on J17.
+  Switches all down before programming (confirmed by Yazan).
+- Programmed `phase7_seq_loopback_top.bit` (built 2026-10-22, see the build record above):
+  `PROGRAMMED: xc7z020_1 ... (DONE=1)`.
+- Multimeter: Fluke 115, DC V, black probe on an SMA jack's outer shell (as in EXP-01).
+
+### Step 4: before START (`sw[4]` down)
+
+| Point | Signal | Reading | Expected | Pass |
+|---|---|---|---|---|
+| J3-1 | `rst` | 1.8 V | ≈1.8 V (step 0 preloaded, HIGH) | PASS |
+| J3-0 | `clk` | 0 V | ≈0 V | PASS |
+| J3-2 | `data` | 0 V | ≈0 V | PASS |
+| J3-3 | `cs` | 0 V | ≈0 V | PASS |
+| J3-4 | `en` | 0 V | ≈0 V | PASS |
+| LD0-LD7 | | all off | all off | PASS |
+
+### Run 1: full sequence (`sw[4]` up)
+
+Final LEDs reported by Yazan: **on LD0, LD2, LD4, LD6; off LD1, LD3, LD5, LD7**.
+
+| LED | Meaning | Reading | Expected | Pass |
+|---|---|---|---|---|
+| LD2-LD0 | last step | 1 0 1 = step 5 | 101 (5) | PASS |
+| LD3 | busy | off | off | PASS |
+| LD4 | done | on | on | PASS |
+| LD5 | FAULT | off | off | PASS |
+| LD6 | `data_in` captured 0xA5 | on | on | PASS |
+| LD7 | aborted | off | off | PASS |
+
+Repeat of Run 1 (`sw[4]` down ~1 s, then up) with the multimeter on **J3-4 (`en`)**: went
+from 0 V to **1.8 V** during the run, then **back to 0 V** when it ended (expected: HIGH in
+steps 3-5, back to step 0's LOW after the last step). PASS. Timing of the change and the step
+order on LD0-LD2 were not reported.
+
+### Run 2: fault (J2-20 jumper end pulled)
+
+`sw[4]` down, jumper end pulled out of J2-20 (J3-4 end left in), `sw[4]` up, ~5 s.
+Final LEDs reported by Yazan: **on LD2, LD5, LD6; others off**.
+
+| LED | Meaning | Reading | Expected | Pass |
+|---|---|---|---|---|
+| LD2-LD0 | step it ended on | 1 0 0 = step 4 | 100 (4) | PASS |
+| LD5 | FAULT | on | on (step 4's 100 ms `en_in == 1` wait timed out) | PASS |
+| LD4 | done | off | off | PASS |
+| LD3 | busy | off | off | PASS |
+| LD7 | aborted | off | off | PASS |
+| LD6 | `data_in` captured 0xA5 | on | on: set in step 2, before the fault (the procedure didn't list it) | PASS |
+
+J3-4 after the fault: not measured.
+
+### Run 3: abort during step 2
+
+Jumper put back into J2-20. `sw[4]` down, then up (START); `sw[4]` down during step 2
+(the 4 Hz clock). Final LEDs reported by Yazan: **on LD1, LD7; others off**.
+
+| LED | Meaning | Reading | Expected | Pass |
+|---|---|---|---|---|
+| LD2-LD0 | step it ended on | 0 1 0 = step 2 | 010 (2) | PASS |
+| LD7 | aborted | on | on | PASS |
+| LD3 | busy | off | off | PASS |
+| LD4 | done | off | off | PASS |
+| LD5 | FAULT | off | off | PASS |
+| LD6 | `data_in` captured 0xA5 | off | off: the abort cut step 2's 8-bit capture short, and LD6 clears on START | PASS |
+
+J3-0 after the abort: not measured.
+
+
 
 | Check | Expected | Measured | Instrument | Pass/Fail |
 |---|---|---|---|---|
@@ -109,4 +181,17 @@ The testbenches pass in xsim 2022.1 too (`run_phase7_sim.sh`), [simulated].
 
 ## 6. Conclusion
 
-Not yet reached. Depends on §5.
+**PASS, 2026-10-22.** `seq_engine` ran the 6-step compile-time sequence on the board end to
+end (Run 1), stopped with FAULT at the right step when a chip response was missing (Run 2),
+and stopped cleanly on ABORT (Run 3). Before START, every pin sat at step 0's level, `rst`
+HIGH at 1.8 V, not at `sig_cell`'s reset value 0, so the preload works on hardware. This is
+Phase 7's hardware exit criterion (`generic_controller_prompt.md` §3, "[measured on board]
+with loopback").
+
+Measured independently of the LEDs: the step 0 levels (multimeter, all 5 pins) and `en` on
+J3-4 going 0 -> 1.8 V -> 0 V during Run 1. The LD3 transient from EXP-01 (`docs/issues.md`)
+was not seen; LD3 here means busy, so the fault latch of EXP-01 isn't in this design.
+
+Not covered (open): step durations and the 4 Hz clock / pulse widths were not timed (needs
+the scope or ILA); the step order was not read during the runs; EXP-04 (the same sequence
+loaded from the PC) needs the PC link (JTAG over J17, `docs/decisions.md`).

@@ -20,7 +20,9 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
-## 2026-10-22, at the board: EXP-01 PASS
+## 2026-10-22, at the board: EXP-01 PASS, EXP-03 PASS
+
+- **EXP-03 PASS** (Phase 7's hardware exit criterion): full sequence, FAULT, ABORT; `rst` preloaded HIGH before START.
 
 - Phase 4's hardware exit criterion is met: all 5 signal types on pairs 0-4 [measured on board].
 - The board run found a bug no simulation reached: the SERIAL checker compared 0xA5 with 0x00.
@@ -108,7 +110,7 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
    PROG USB J17. Program with `scripts/program_board.tcl -tclargs phase4_loopback_top`. The
    person at the board reads the LEDs and meters; you record exactly what they report, tagged
    [measured on board]. Never fill a results table yourself.
-4. **EXP-03** (Phase 7 on the board, same jumpers): program `phase7_seq_loopback_top` (built), then the
+4. ~~**EXP-03**~~ **done 2026-10-22, PASS**. Kept for reference: program `phase7_seq_loopback_top` (built), then the
    3 runs in `docs/experiments/EXP-03_*.md`: full sequence, J2-20 pulled → FAULT, abort.
    That's Phase 7's hardware exit criterion.
 5. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`) after the team

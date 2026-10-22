@@ -7,7 +7,27 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | EXP-01 done on the board (PASS); next EXP-03 (same wiring) and the JTAG-link plan. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | EXP-01 + EXP-03 done on the board (PASS); next: JTAG-link plan (J1-J5) for approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC, board), EXP-03, Yazan at the ZedBoard + Claude, branch main
+- Goal: EXP-03, Phase 7's hardware exit criterion, on the EXP-01 wiring.
+- Done: programmed `phase7_seq_loopback_top` (built earlier today); ran EXP-03 §4 steps 4-7.
+  No code changed. Docs: EXP-03 §5/§6, CLAUDE.md §5/§7, HANDOFF.
+- Hardware setup: unchanged from EXP-01 (J18 1V8, the 5 jumpers, J17); switches all down
+  before programming. Fluke 115 DC V, ground on an SMA shell.
+- Results **[measured on board]** (tables in EXP-03 §5):
+  - Before START: J3-1 `rst` 1.8 V, J3-0/2/3/4 0 V, all LEDs off. PASS.
+  - Run 1: final LD0/LD2/LD4/LD6 on (step 5, done, 0xA5 captured), LD1/LD3/LD5/LD7 off;
+    repeat with the meter on J3-4: 0 -> 1.8 V -> 0 V. PASS.
+  - Run 2 (J2-20 end pulled): LD2/LD5/LD6 on = stopped at step 4 with FAULT. PASS.
+  - Run 3 (abort in step 2): LD1/LD7 on = step 2, aborted. PASS.
+  - Not measured: step durations, clock/pulse widths (scope), the step order during runs.
+- Problems / fixes: none. The EXP-01 LD3 transient was not seen (this design has no fault latch on LD3).
+- Decisions: none.
+- Next steps: the JTAG-link plan (J1-J5) for approval, then EXP-02/EXP-04 over JTAG; scope
+  measurements; LA pairs 5-15.
 
 ---
 

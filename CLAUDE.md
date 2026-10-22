@@ -38,6 +38,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - The **SMA jacks are unusable** for GPIO: they are wired to transceiver lanes, XC7Z020 has no GTX, and only 4 of 38 reach the FPGA (clock inputs only). Use J2/J3 headers.
 - Pair 0 (J3-0 to J3-16 with a jumper) verified: static level, 1 MHz 50% clock (internal checker), and ~100 Hz clock read **0.899 V** on the multimeter (ideal 0.9 V).
 - Pairs 0-4 verified with the generic controller (`phase4_loopback_top`, EXP-01, 2026-10-22): CLOCK 100 Hz read **0.9 V** at both J3-0 and J3-16; PULSE x5 counted; SERIAL 0xA5 captured; LOW **0 V** at J3-3; HIGH **1.8 V** at J3-4 (so VADJ really is 1.8 V). Multimeter ground: the outer shell of an SMA jack on the HTG board. Frequency/duty/width not yet measured (needs the scope).
+- Phase 7 sequencer verified on the same 5 pairs (`phase7_seq_loopback_top`, EXP-03, 2026-10-22): full 6-step sequence, FAULT on a missing response (J2-20 pulled), ABORT mid-sequence; before START `rst` sits at **1.8 V** (step 0 preloaded), the others at 0 V.
 - A 1 MHz clock cannot be read on a handheld multimeter (use the ~100 Hz design for that).
 - Checker lessons: `sw[4]` needs a 2-FF synchronizer + ~20 ms settle window; fault latch only after 16 consecutive mismatches; expected value is delayed 2 cycles to match the input synchronizer. **A self-check can lie. Confirm important results with independent measurement.**
 - Dima's `sipo_wrapper.sv` Q1, [simulated] 2026-10-22: right after `rst_sipo`, `sel[23:8]` holds the **previous** load's slice 0 (0 on the first load), because the nonblocking reset branch reads `parallel_out` before `sipo.sv`'s reset clears it. The frame being loaded never shows its slice 0. (Earlier reading "always loads zeros" was wrong; `docs/issues.md`.)
@@ -76,7 +77,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
    fixed a SERIAL checker bug; one LD3 transient on pair 4 is still unexplained (`docs/issues.md`).
 8. Generic controller Phase 7 (mode sequencer): round 1 (compile-time table) and round 2
    (table over UART, `cli seq`, program-verify over the link) done [simulated]; open:
-   EXP-03 on the board, EXP-04 (needs the PC link: JTAG over J17 chosen 2026-10-22, `docs/decisions.md`), and
+   ~~EXP-03 on the board~~ (**PASS 2026-10-22**), EXP-04 (needs the PC link: JTAG over J17 chosen 2026-10-22, `docs/decisions.md`), and
    real chip sequences (INFERENCE/WRITE) once the chip-pin map and Dima's answers exist.
 
 ## 8. Coding and answer rules for Claude
