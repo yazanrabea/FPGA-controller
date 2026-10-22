@@ -7,6 +7,62 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
+| Yazan | Phase 6 SIPO/PISO, starting with 6.1 (Python) on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `docs/WORKLOG.md` |
+
+---
+
+## 2026-10-22, Yazan, branch feature/yazan-phase6-sipo-piso
+- Goal: start Phase 6 (SIPO/PISO against Dima's model) with step 6.1 of the plan approved
+  2026-10-19 (`docs/HANDOFF.md`): the Python frame packer/decoder, timing profile builders
+  and validator rules. Done on Yazan's laptop: Python only, no Vivado/Icarus/yosys.
+- Done:
+  - `tools/nemo_ctl/sipo_piso.py` (new):
+    - SIPO: `pack_sipo_frame(sel_lo, slices)` / `unpack_sipo_frame` for the 136-bit
+      `parallel_out` (`sel[7:0]` = bits [7:0], slice k = bits [8+16k +: 16], k = 0..7);
+      `sipo_tx_bits` (transmit order, bit 135 first); `dima_sel_after(frame, n)` gives
+      `sipo_wrapper.sv`'s `sel[23:0]` after n `phirst` edges **with Dima's quirks as
+      written**: n=0 -> `sel[23:8]`=0 (Q1), n=1..7 -> slice n, n>=8 -> `DimaModelUndefined` (Q2).
+    - PISO: `PisoStage(out1, tdc_out1, out0, tdc_out0)` with `piso.sv`'s stage layout
+      ([41:28], [27:21], [20:7], [6:0]); `encode_piso_frame` / `decode_piso_frame` for the
+      168-bit frame, PISO0 first, first bit received = bit 167 (what `cap_cell` CAP_W=168
+      msb_first leaves in `capture_reg`).
+    - Profiles in ticks: `build_sipo_load(freq, ...)` (rst_sipo low pulse at RUN; clk_sipo
+      136 cycles starting 1 us after reset releases; sipo_in 2 ticks before clk_sipo; cs one
+      period after the 136th rising edge) and `build_piso_read(freq, ...)` (clk_piso 168
+      cycles; shift rises mid first low phase, width 167 periods).
+    - Rules: `check_sipo_load` (136 cycles, clock starts after reset releases, sipo_in
+      starts before rising edge 1, cs after the last falling edge) and `check_piso_read`
+      (168 cycles, shift rises in the first low phase, shift still high at the last
+      falling edge, clk_piso high time >= 3 ticks of FPGA sync latency + `chip_delay_ticks`).
+  - `tools/nemo_ctl/tests/test_sipo_piso.py` (new, 23 tests): round trips, field
+    placement against Dima's RTL, Q1/Q2 behaviour, and a **tick-level Python model** of
+    sig_cell/cap_cell pin timing driving `sipo.sv`/the 4-stage `piso2` chain. The model
+    shows the default profiles load/read the right frame at 100 kHz, 1 MHz and 10 MHz,
+    and that each profile the rules reject really corrupts the frame (late sipo_in,
+    early cs, early/short shift, too-short clk_piso high time).
+- Hardware setup: none.
+- Results:
+  - **[not hardware, not RTL simulation]** `python -m pytest tools/nemo_ctl/tests`:
+    124 passed, 1 skipped (101 existing + 23 new; same expected skip as before).
+    The tick-level model is my reading of the RTL, written in Python. It is **not** a
+    simulation of the real `.sv` files. That is step 6.4 (xsim).
+- Problems / fixes: two of my own test-model mistakes, fixed before commit. (1) The model
+  missed clk_piso's rising edge 1 when `clk_delay=0` because it started at tick 1; pins
+  idle low before RUN, so tick -1 is now treated as 0. (2) A test that set shift to rise
+  on the same tick as the load edge: that is a genuine race with no defined outcome (the
+  rule rejects it, correctly), so the test now uses shift already high before edge 1.
+- Decisions:
+  - Data-change/sampling edges are not parameters of the 6.1 builders; the profiles
+    implement the falling-edge convention from the approved plan. They become config
+    fields (marked UNCONFIRMED) in 6.2's YAML, as planned.
+  - The capture rule uses 3 ticks of FPGA latency (2-FF sync + cap_cell input register),
+    1 more than the tick model strictly needs: margin for the output/input IOB registers.
+  - Working on a feature branch, not pushing to `main` directly: Rahaf's direct-to-main
+    rule was for her work; this is Yazan's laptop and the WORKLOG still lists Phase 6
+    under Rahaf.
+- Next steps: agree with Rahaf who takes 6.2-6.5. 6.2 (YAML + `gen_svh.py`) can be done
+  without an HDL simulator; 6.3/6.4 (RTL top + testbench against Dima's blocks) need xsim
+  (lab PC, or Vivado/Icarus installed on this laptop) before they can be called done.
 
 ---
 
