@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
-| Yazan | Phase 6 SIPO/PISO: 6.1-6.5 done ([simulated], Icarus 12); open: xsim run, manual walkthrough, PR review on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1), `docs/USER_MANUAL.md`, `CLAUDE.md`, `tools/nemo_ctl/README.md` |
+| Yazan | Phase 6 SIPO/PISO: 6.1-6.5 done ([simulated], Icarus 12); open: xsim run, manual walkthrough, PR #1 review on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1), `docs/USER_MANUAL.md`, `CLAUDE.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -203,6 +203,12 @@ Tag every result **[simulated]** or **[measured on board]**.
   (resets asserted until APPLY), 1.8 V levels / max clocks, rst_sipo pad, and short
   carry-overs Q4/Q6/Q10. Wording checked against the generated numbers (cs is 1 us after
   the 136th rising edge).
+- Opened **PR #1** (`feature/yazan-phase6-sipo-piso` -> `main`,
+  https://github.com/yazanrabea/FPGA-controller/pull/1), review requested from Rahaf
+  (`RahafAburaya`). Installed GitHub CLI on this laptop for it (`winget install GitHub.cli`,
+  v2.103.0; signed in as `yazanrabea`). The PR checklist lists what's still open: xsim run,
+  a Vivado rebuild of Phase 4, the Icarus 12 `uart_tb` limit, the manual walkthrough, and
+  Phase 6 approval.
 
 ---
 
