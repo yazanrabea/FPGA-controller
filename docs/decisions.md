@@ -30,3 +30,19 @@ Each entry: date, decision, reason, rejected options.
 - Reason: lets Phase 6 be simulated now instead of waiting for lab time; the stand-in changes how `sel` is driven, not what it holds, and the original is still the reference.
 - Rejected: editing `fpga/reference/dima_blocks/` (rule: stub around Dima's files, never edit them); waiting for the lab PC; installing full Vivado (tens of GB) just for xsim.
 - Consequence: Phase 6 isn't "done" until `run_phase6_sim.sh` also passes in xsim with the unmodified `sipo_wrapper.sv`.
+
+## Phase 7: the step sequencer runs on the FPGA, not in Python (2026-10-22, Yazan)
+- Decision: `fpga/src/seq_engine.sv` walks the step table in hardware. At each boundary it APPLYs only that step's cells (unlisted cells keep running); a step ends after an exact tick count or on a cell event (done / captured / edge count / level) with a timeout that FAULTs to idle. Python builds and checks the table (`tools/nemo_ctl/sequence.py`) and runs the program-verify loop on top (`program_verify`).
+- Reason: step boundaries are tick-exact and repeatable, and a sequence can be tested on the board now with a compile-time table, without waiting for the UART link (EXP-02 is blocked on the PMOD pin/voltage). Chosen by Yazan from the two options presented.
+- Rejected: a Python-only sequencer over the link (millisecond, jittery gaps between steps; untestable on hardware until EXP-02).
+- Details decided with it: step 0 must set every cell and is also the idle state (preloaded after reset with RUN low, which fixes Phase 6's "resets asserted before APPLY" for any top using the engine); the end/fault/abort re-apply touches sig cells only so captures survive (`docs/issues.md`); every wait step must have a timeout; waits are ignored for a step's first 2 ticks.
+
+## Phase 7 round 1 scope: engine + loopback top; link v2 later (2026-10-22, Yazan)
+- Decision: this round is 7.1 Python + 7.2 engine + 7.3 loopback top/XDC/EXP-03 + docs. Writing the step table over the link and widening DATA/CAPTURE to 136/168 bits (deferred from Phase 6) is the next round.
+- Reason: link v2 can't be tested on hardware until EXP-02 is unblocked, and it touches the Phase 5 files.
+- Also: Yazan started Phase 7 before PR #1 (Phase 6) was reviewed, overriding Rahaf's "stop for approval after each phase" rule for this phase. Branch `feature/yazan-phase7-sequencer` is cut from the Phase 6 branch, so it carries Phase 6 until #1 merges.
+
+## PULLDOWN on the Phase 7 loopback inputs (2026-10-22, Yazan)
+- Decision: `phase7_seq_loopback_top.xdc` adds `PULLDOWN true` on LA16–LA20_P; pin numbers and IOSTANDARD lines are identical to Phase 4's (diffed).
+- Reason: EXP-03's fault test pulls a jumper; without a pull the input floats and the test is not deterministic.
+- Rejected: changing the other designs' XDCs (not needed there; one XDC per top, no physical pin moved).

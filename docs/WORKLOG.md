@@ -8,7 +8,82 @@ Tag every result **[simulated]** or **[measured on board]**.
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
 | Yazan | Phase 6 SIPO/PISO: 6.1-6.5 done ([simulated], Icarus 12); open: xsim run, manual walkthrough, PR #1 review on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1), `docs/USER_MANUAL.md`, `CLAUDE.md`, `tools/nemo_ctl/README.md` |
-| Yazan | Phase 7 mode sequencer: step engine + loopback top (link v2 deferred) | `feature/yazan-phase7-sequencer` (from the Phase 6 branch) | `tools/nemo_ctl/sequence.py`, `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`, `fpga/constraints/phase7_seq_loopback_top.xdc`, `config/phase7_seq_loopback.yaml`, new tests/tb, `docs/experiments/EXP-03_*` |
+| Yazan | Phase 7 mode sequencer: engine + loopback top done [simulated]; open: EXP-03, link v2 | `feature/yazan-phase7-sequencer` (from the Phase 6 branch) | `tools/nemo_ctl/sequence.py`, `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`, `fpga/constraints/phase7_seq_loopback_top.xdc`, `config/phase7_seq_loopback.yaml`, `tools/nemo_ctl/gen_svh.py`, new tests/tb, `scripts/run_phase7_sim.sh`, `docs/experiments/EXP-03_*`, docs |
+
+---
+
+## 2026-10-22 (later), Yazan, branch feature/yazan-phase7-sequencer
+- Goal: Phase 7, mode sequencer (`generic_controller_prompt.md` §3): a mode as an ordered
+  list of steps, each = pin config + duration or "wait until capture condition";
+  program-verify loop driven from Python; exit [simulated] then [measured on board] with
+  loopback.
+- **Process:** Yazan asked to start Phase 7 while PR #1 (Phase 6) is still unreviewed,
+  overriding Rahaf's "stop for approval after each phase" for this phase. Branch cut from
+  `feature/yazan-phase6-sipo-piso`. Two decisions put to Yazan before any code (CLAUDE.md §8:
+  plan first): sequencer in **FPGA hardware** (chosen) vs Python-only; scope **engine +
+  loopback top this round, link v2 later** (chosen). See `docs/decisions.md`.
+- Done:
+  - **7.1** `tools/nemo_ctl/sequence.py` (new): step format `set` / `capture` / `until`
+    (`after`, `done`, `captured`, `edges`, `level`, + `timeout`); a `Target` describing a
+    top's cells (`PHASE7_LOOPBACK`: sig `clk rst data cs en` on FMC 0-4, cap `clk_in ...
+    en_in` on 16-20, data shifts on clk falling, data_in captures on clk rising); validator
+    (step 0 sets every cell; waits need a timeout; `done`/`captured` cell must be applied
+    in the same step and able to finish; mode checks; widths; 50 MHz limit, >10 MHz warning;
+    <=16 steps); tick compiler with a time scale; step summary; `program_verify()` against a
+    `Sequencer` protocol; `python -m nemo_ctl.sequence <yaml>` check command.
+    `config/phase7_seq_loopback.yaml` (new): 6-step demo (idle 1 s -> rst pulse -> load
+    0xA5 on a 4 Hz x8 clock until captured -> cs pulse until 1 edge seen -> en_in level ->
+    hold 2 s), ~6 s at human speed.
+  - **7.2** `fpga/src/seq_engine.sv` (new): PRELOAD step 0 after reset (RUN low; pins at
+    step 0's idle levels), START applies step 0 to all cells then RUN, masked APPLY per
+    step (unlisted cells untouched), tick-exact AFTER, waits ignored for 2 ticks, timeout
+    -> FAULT, abort, end/fault/abort: RUN low + step 0 re-applied to sig cells only.
+    `fpga/tb/seq_engine_tb.sv` (new) with real cells.
+  - **7.3** `tools/nemo_ctl/gen_svh.py --phase7` (+ `--time-scale`, `--out`; refuses a
+    scaled package without `--out`) -> `fpga/src/gen/phase7_cfg_pkg.sv` (per-step packed
+    vectors). `fpga/src/phase7_seq_loopback_top.sv` + `fpga/constraints/phase7_seq_loopback_top.xdc`
+    (new): engine + 5 sig/5 cap cells on pairs 0-4, sw[4] START/ABORT (2-FF sync + 20 ms
+    debounce), LEDs LD0-2 step, LD3 busy, LD4 done, LD5 fault, LD6 data match, LD7 aborted.
+    XDC pin/IOSTANDARD lines identical to Phase 4 (checked with `diff`), plus PULLDOWN on
+    LA16-20_P. `fpga/tb/phase7_seq_loopback_top_tb.sv` (new), `scripts/run_phase7_sim.sh`
+    (new). `docs/experiments/EXP-03_phase7_sequencer_loopback.md` (new): procedure +
+    PENDING results table.
+  - **7.4** docs: USER_MANUAL §8 Phase 7 (old §8/§9 -> §9/§10), status table, 3
+    troubleshooting rows, quick reference; CLAUDE.md §6 (2 rows) and §7 item 8;
+    `tools/nemo_ctl/README.md`; `docs/issues.md` (3), `docs/decisions.md` (3).
+- Hardware setup: none (laptop, no board).
+- Results:
+  - **[simulated, Icarus 12]** `scripts/run_phase7_sim.sh`: `seq_engine_tb` **31/31**
+    (every step boundary to the tick: AFTER 7 = 7 ticks, done/edges/level/captured end the
+    step the tick after the event, 1-tick step, clock from step 0 never restarted over 7
+    periods, fault 51 ticks after the step's apply with timeout 50, abort, start-while-busy
+    ignored, 1-step table, captures kept after the end); `phase7_seq_loopback_top_tb`
+    **27/27** on the x1e-4 package (preload rst=1, debounce glitch ignored, every step
+    length, rst pulse 5000 ticks, 8 clk edges all 2500-tick periods, data_in = 0xA5 on the
+    8th rising edge, cs width, confirm step 3 ticks, LEDs, pulled J2-20 -> FAULT at step 4,
+    abort at step 2).
+  - **[not hardware]** pytest **176 passed, 1 skipped** (+32 for Phase 7).
+  - Regression [simulated, Icarus 12]: Phase 3 28/16/9/16, Phase 4 21/21, Phase 6 69/69;
+    `nemo_cfg_pkg.sv` / `phase6_cfg_pkg.sv` regenerate unchanged.
+  - Every USER_MANUAL §8 command run as written (check command good + bad, `--phase7`,
+    refused `--time-scale` without `--out`, `run_phase7_sim.sh`).
+  - **Not done:** Vivado build of this top, xsim, EXP-03 on the board (the Phase 7 hardware
+    exit criterion), link v2.
+- Problems / fixes (detail in `docs/issues.md`):
+  - **Real design bug, caught by the top testbench:** the end-of-run re-apply also
+    re-applied the cap cells and wiped `data_in`'s result. Now sig cells only.
+  - Testbench race: monitors on posedge were +/-1 tick off; moved to negedge. Plus two test
+    mistakes of mine (a "never-true" level that was briefly true, an unreachable period
+    count) and a check that ran before its monitor had recorded the value.
+  - Floating input on a pulled jumper would make the fault test random -> PULLDOWN in XDC.
+  - Small: the check command split errors on "; " (one message contains it) -> one error
+    per line; an edit of mine put a raw newline in a string literal (SyntaxError, caught by
+    the tests before commit).
+- Decisions: `docs/decisions.md` (3 new entries).
+- What a pass looks like on hardware: EXP-03 §4/§5. LEDs step 0,1,2,3,5 over ~6 s, then
+  LD4 + LD6 on; pulled J2-20 -> LD5 with step 4; sw[4] down mid-run -> LD7.
+- Next steps: EXP-03 on the lab PC (sim in xsim, build, program, run 3 runs, fill §5);
+  Phase 7 round 2 = link v2; Rahaf reviews PR #1 and then this branch.
 
 ---
 

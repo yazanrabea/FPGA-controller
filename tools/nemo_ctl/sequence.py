@@ -259,7 +259,7 @@ class StepTable:
 def compile_steps(raw_steps: Sequence[dict], target: Target = PHASE7_LOOPBACK,
                   scale: float = 1.0) -> StepTable:
     """Validate + quantize a list of step dicts. Raises SequenceError listing every
-    problem found."""
+    problem found, one per line."""
     errs: list[str] = []
     warns: list[str] = []
     if not raw_steps:
@@ -326,7 +326,7 @@ def compile_steps(raw_steps: Sequence[dict], target: Target = PHASE7_LOOPBACK,
                 errs.append(f"step {st.name}: a value ({v}) doesn't fit {TICK_W} bits")
                 break
     if errs:
-        raise SequenceError("; ".join(errs))
+        raise SequenceError("\n".join(errs))  # one problem per line
     return StepTable(target=target, steps=tuple(steps), warnings=tuple(warns))
 
 
@@ -456,3 +456,30 @@ def program_verify(seq: Sequencer, build: Callable[[int], StepTable], read_cell:
         if check(value):
             return VerifyResult(True, i + 1, history)
     return VerifyResult(False, max_iters, history)
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(
+        prog="python -m nemo_ctl.sequence",
+        description="Check a Phase 7 step sequence and print its step-by-step summary "
+                    "(USER_MANUAL §8). Prints every problem and exits 1 if it is invalid.")
+    ap.add_argument("config", type=Path, nargs="?",
+                    default=Path(__file__).resolve().parents[2] / "config" / "phase7_seq_loopback.yaml",
+                    help="sequence YAML (default: config/phase7_seq_loopback.yaml)")
+    args = ap.parse_args(argv)
+    try:
+        table = load_sequence(args.config)
+    except (SequenceError, OSError) as exc:
+        for part in str(exc).splitlines():
+            print(f"error: {part}", file=sys.stderr)
+        sys.exit(1)
+    for line in table.summary():
+        print(line)
+    for w in table.warnings:
+        print(f"warning: {w}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

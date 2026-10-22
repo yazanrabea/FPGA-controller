@@ -57,6 +57,8 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 | `run_ctrl.sv` | Global RUN/STOP + one-cycle APPLY strobe, synchronized command inputs. [simulated] only, `fpga/tb/run_ctrl_tb.sv` |
 | `phase4_loopback_top.sv` / `.xdc` | Phase 4 bring-up top: one `sig_cell`+`cap_cell` pair per TYPE (CLOCK/PULSE/SERIAL/LOW/HIGH) on loopback pairs 0-4, config from generated `fpga/src/gen/nemo_cfg_pkg.sv` (`tools/nemo_ctl/gen_svh.py` + `config/phase4_loopback_test.yaml`). [simulated] only so far (`fpga/tb/phase4_loopback_top_tb.sv`, `scripts/run_phase4_sim.sh`) — **not yet run on hardware**, see `docs/experiments/EXP-01_*.md` |
 | `phase6_sipo_piso_top.sv` | Phase 6: SIPO_LOAD / PISO_READ from generic cells only (`run_ctrl` + 7 `sig_cell`s + 2-FF sync + `cap_cell` CAP_W=168), config from generated `fpga/src/gen/phase6_cfg_pkg.sv` (`gen_svh.py --phase6` + `config/phase6_sipo_piso.yaml`, timing-checked by `tools/nemo_ctl/sipo_piso.py`). **Sim top, no XDC** (no chip-pin map). [simulated] Icarus 12, 69/69, against Dima's RTL (`fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh`); xsim run with Dima's unmodified `sipo_wrapper.sv` pending |
+| `seq_engine.sv` | Phase 7 step sequencer: walks a step table (from outside: package or RAM), APPLYs only each step's cells, ends a step after N ticks or on done/captured/edges/level with timeout -> FAULT; preloads step 0 after reset. [simulated] `fpga/tb/seq_engine_tb.sv` 31/31 |
+| `phase7_seq_loopback_top.sv` / `.xdc` | Phase 7 bring-up: `seq_engine` + 5 sig/5 cap cells on loopback pairs 0-4, compile-time table `fpga/src/gen/phase7_cfg_pkg.sv` (`gen_svh.py --phase7` + `config/phase7_seq_loopback.yaml`); `sw[4]` start/abort, LEDs step/busy/done/fault/match/aborted. Same pins as Phase 4 + PULLDOWN on LA16-20_P. [simulated] 27/27 (`scripts/run_phase7_sim.sh`), **not yet on hardware**: `docs/experiments/EXP-03_*.md` |
 
 ## 7. Next tasks
 1. Verify remaining 15 pairs (static + clock).
@@ -70,6 +72,10 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
    (neither available where it was built) to actually synthesize, program, and measure —
    see `docs/experiments/EXP-01_phase4_generic_controller_bringup.md` for the exact
    procedure. This is the actual Phase 4 exit criterion; nothing above it counts as done.
+8. Generic controller Phase 7 (mode sequencer): engine + loopback top done [simulated];
+   open: EXP-03 on the board (`docs/experiments/EXP-03_*.md`), then link v2 (step table
+   over UART, 136/168-bit DATA/CAPTURE) and real chip sequences (INFERENCE/WRITE) once the
+   chip-pin map and Dima's answers exist.
 
 ## 8. Coding and answer rules for Claude
 - Provide clean, **synthesizable**, modular Verilog/SystemVerilog with inline comments about timing/logic.

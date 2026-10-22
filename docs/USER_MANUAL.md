@@ -24,10 +24,11 @@ want to understand *why* it's built this way, read `CLAUDE.md` and
 | 4 | Top-level design + compile-time config | RTL/software done, **hardware step not run** | §5 below (build + simulate now; wiring/measuring needs you) |
 | 5 | Runtime link (framed UART protocol, register file, Python client + CLI) | RTL/software done, **simulated only, hardware step not run** | §6 below (talk to it once §5's board is actually built and wired; the link itself needs its own build/wiring too, see §6.1) |
 | 6 | SIPO load / PISO read as profiles of the generic cells, against Dima's RTL | Python + RTL done, **simulated only (Icarus 12)**; xsim run against Dima's unmodified `sipo_wrapper.sv` not done; no hardware step yet (no chip-pin map) | §7 below |
-| 7-8 | Mode sequencer, chip-ready checklist | Not started | — |
+| 7 | Mode sequencer: a mode as an ordered list of steps, run by an FPGA step engine | Engine + loopback bring-up top done, **simulated only (Icarus 12)**; hardware run EXP-03 not done; link v2 (step table over UART, 136/168-bit frames) not started | §8 below |
+| 8 | Chip-ready checklist | Not started | — |
 
-Nothing past Phase 6 exists yet. Phase 6 is simulation-only by nature until the chip-pin ->
-FMC map exists. Phases 4 **and** 5 are **not complete** by this project's
+Nothing past Phase 7 exists yet. Phase 6 is simulation-only by nature until the chip-pin ->
+FMC map exists; Phase 7's bring-up top can be run on the board now (EXP-03). Phases 4 **and** 5 are **not complete** by this project's
 own rule ("a phase is not done until ... I have followed it successfully myself") — the
 RTL and simulations are ready for both, but nobody has actually built either in Vivado and
 measured it on the ZedBoard yet. `docs/experiments/EXP-01_phase4_generic_controller_bringup.md`
@@ -476,7 +477,99 @@ lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run p
 - Before the first APPLY the controller drives every pin 0, so the chip's active-low
   resets are *asserted* until the config is applied (open item for Phase 8).
 
-## 8. Troubleshooting
+## 8. Phase 7 — the mode sequencer
+
+A mode becomes an **ordered list of steps**. Each step changes some pins and then ends
+either after a fixed time or when something happens (a cell finishes, a capture
+completes, an edge count or a level is reached), with a timeout so it can never hang.
+The FPGA runs the steps itself (`fpga/src/seq_engine.sv`), so step boundaries are exact
+to the 10 ns tick. Today it runs a compile-time step table on the loopback pairs
+(`phase7_seq_loopback_top`). Sending a step table to the board at runtime, over the
+link, is the next part of Phase 7 and not built yet.
+
+### 8.1 Writing a sequence
+
+`config/phase7_seq_loopback.yaml`, one entry per step:
+
+```yaml
+steps:
+  - name: idle               # step 0: must set EVERY cell; it is also the idle state
+    set:     {clk: {type: LOW}, rst: {type: HIGH}, ...}     # pin settings, same format as §2
+    capture: {data_in: {mode: SERIAL, bits: 8}, ...}        # capture modes: LEVEL/EDGE_COUNT/PERIOD/SERIAL
+    until:   {after: 1s}
+  - name: reset
+    set: {rst: {type: PULSE, width: 500ms, polarity: active_low}}   # only what changes
+    until: {after: 1s}
+```
+
+How a step ends (`until`), one of:
+
+| `until:` | Ends when | Needs `timeout`? |
+|---|---|---|
+| `{after: 1s}` | exactly that long after the step started | no |
+| `{done: clk, timeout: 5s}` | that pin's setting finished (CLOCK with `cycles`, PULSE, SERIAL) | yes |
+| `{captured: data_in, timeout: 5s}` | that SERIAL capture got all its bits | yes |
+| `{edges: {cell: cs_in, count: 1}, timeout: 2s}` | that EDGE_COUNT capture counted that many rising edges | yes |
+| `{level: {cell: en_in, value: 1}, timeout: 100ms}` | that input is at that level | yes |
+
+Rules worth knowing:
+- A step only lists the cells it **changes**. Everything else keeps running untouched
+  (a clock started in an earlier step doesn't restart). A listed cell restarts at the
+  step's start, so its `delay` counts from there.
+- `done` / `captured` must refer to a cell set or re-armed **in the same step**.
+- If a wait times out, the sequence **FAULTs**: every pin goes to idle, nothing further
+  runs. The same happens on ABORT.
+- After the last step (or a fault/abort) the pins return to step 0's settings. **Capture
+  results are kept** until the next START; edge counts are cleared when RUN drops.
+- Wait conditions are checked from a step's 3rd tick (30 ns) on, so a condition that's
+  already true ends the step after 30 ns.
+- Up to 16 steps. On this bring-up top the cells are fixed: `clk rst data cs en` drive
+  FMC pins 0–4, `clk_in rst_in data_in cs_in en_in` read pins 16–20 through the jumpers.
+  `data` can only be SERIAL shifted on `clk`'s falling edge, and `data_in` captures on
+  `clk`'s rising edge.
+
+### 8.2 Check it
+
+From inside `tools/`:
+
+```
+python -m nemo_ctl.sequence ../config/phase7_seq_loopback.yaml
+```
+
+Prints one line per step: when it starts (exact while every earlier step has a fixed
+duration), which cells it applies, and how it ends. A bad sequence prints every problem
+(`error: ...`) and exits 1, for example `step 0 must set every cell` or `a wait step needs
+a 'timeout'`.
+
+### 8.3 Generate and simulate
+
+```
+python -m nemo_ctl.gen_svh --phase7          # from tools/: -> fpga/src/gen/phase7_cfg_pkg.sv
+scripts/run_phase7_sim.sh                    # from the repo root
+```
+
+The generator runs the same checks and writes nothing if they fail. The sim script runs
+`seq_engine_tb` (expect `ALL TESTS PASSED (31 checks)`) and the bring-up top's testbench
+(`ALL TESTS PASSED (27 checks)`). The real sequence takes seconds, so the top's testbench
+uses a copy with every time ×1e-4, written to a temp folder. `gen_svh` refuses to write a
+time-scaled package without `--out`, so it can't end up in a bitstream by accident.
+
+### 8.4 Run it on the board
+
+Follow `docs/experiments/EXP-03_phase7_sequencer_loopback.md`. In short: same 5 jumpers as
+EXP-01, `sw[4]` up = START, down = ABORT; LD0–LD2 show the step, LD3 busy, LD4 done,
+LD5 FAULT, LD6 serial capture matched, LD7 aborted. Pulling the J2-20 jumper must give a
+FAULT at step 4.
+
+### 8.5 Program-verify from Python
+
+`nemo_ctl.sequence.program_verify(seq, build, read_cell, check, max_iters)` repeats
+pulse → read → compare: `build(i)` makes iteration i's step table (e.g. a longer pulse each
+time), `check(value)` says when the read-back value is good. It stops at the first pass,
+after `max_iters`, or immediately if the sequencer FAULTs. It is tested against a mock;
+connecting it to the board needs the link v2 work (not built yet).
+
+## 9. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
@@ -494,9 +587,12 @@ lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run p
 | `sipo_wrapper.sv:49: error: ... Part select is double-driving unresolved wire` | Icarus 12 compiling Dima's original `sipo_wrapper.sv` directly | Use `scripts/run_phase6_sim.sh`, which swaps in the Icarus stand-in (§7.4) |
 | `uart_tb.sv:64: error: Cannot "return" from tasks` | Icarus 12 (Windows winget package) is too old for the Phase 5 testbench | Run Phase 5 sims with Icarus 13 (macOS) or xsim (lab PC) |
 | `ModuleNotFoundError: No module named 'yaml'` from a sim script | An old checkout picking a Python without the packages | `git pull`, or `pip install -r tools/requirements.txt` for that Python |
+| `error: ... step 0 must set every cell` from `nemo_ctl.sequence` / `gen_svh --phase7` | Step 0 is also the idle state, so it must give every cell a setting | Add the missing cells to step 0's `set:` / `capture:` |
+| `gen_svh --phase7 --time-scale ...` says `give --out` | A time-scaled table is for simulation only | Add `--out <file outside fpga/src/gen>`, or drop `--time-scale` for the hardware package |
+| EXP-03: LD5 (FAULT) on with every jumper in | A wait timed out: a loopback isn't reading back (loose jumper, wrong header row, VADJ not 1V8) | LD0–LD2 show which step; check that step's jumper |
 | `link.NackError` | The device NACKed — either a bad checksum got through somehow, or you sent `LOAD_MODE` (permanently unimplemented) | Check `--baud` and wiring (a bad checksum from clean code usually means a framing/timing problem, not a logic bug); don't use `LOAD_MODE` |
 
-## 9. Where things live (quick reference)
+## 10. Where things live (quick reference)
 
 | Thing | Path |
 |---|---|
@@ -513,4 +609,8 @@ lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run p
 | Phase 6 frames, timing rules (Python) | `tools/nemo_ctl/sipo_piso.py` |
 | Phase 6 top / testbench / sim script | `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `scripts/run_phase6_sim.sh` |
 | Dima's SIPO/PISO RTL (reference, never edited) | `fpga/reference/dima_blocks/` |
+| Phase 7 sequence (bring-up) | `config/phase7_seq_loopback.yaml` -> `fpga/src/gen/phase7_cfg_pkg.sv` |
+| Phase 7 step format, checks, program-verify (Python) | `tools/nemo_ctl/sequence.py` |
+| Phase 7 engine / top / XDC / sims | `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`, `fpga/constraints/phase7_seq_loopback_top.xdc`, `scripts/run_phase7_sim.sh` |
+| Hardware procedure for Phase 7 | `docs/experiments/EXP-03_phase7_sequencer_loopback.md` |
 | Chronological project log | `docs/WORKLOG.md` |

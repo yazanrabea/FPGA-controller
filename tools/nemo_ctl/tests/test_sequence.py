@@ -205,3 +205,20 @@ def test_phase7_bad_sequence_writes_nothing(tmp_path, capsys):
     bad.write_text(yaml.safe_dump(doc))
     with pytest.raises(SequenceError, match="needs a 'timeout'"):
         gen_svh.generate_phase7(bad)
+
+
+def test_sequence_cli_prints_summary_or_every_error(tmp_path, capsys):
+    from nemo_ctl.sequence import main
+    main([str(CONFIG)])
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 6 and out[0].startswith("0 idle:")
+    doc = yaml.safe_load(CONFIG.read_text())
+    doc["steps"][0]["set"].pop("cs")
+    doc["steps"][2]["until"].pop("timeout")
+    bad = tmp_path / "bad.yaml"
+    bad.write_text(yaml.safe_dump(doc))
+    with pytest.raises(SystemExit) as e:
+        main([str(bad)])
+    assert e.value.code == 1
+    err = capsys.readouterr().err
+    assert "step 0 must set every cell" in err and "needs a 'timeout'" in err
