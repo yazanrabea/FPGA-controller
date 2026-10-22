@@ -382,3 +382,82 @@ class V2Status:
     @classmethod
     def decode(cls, b: int) -> "V2Status":
         return cls(*(bool(b >> i & 1) for i in range(8)))
+
+
+class SeqLink(Link):
+    """Client for link v2 (phase7_link_top.sv): load a compiled step table, run it, read
+    the results. Implements sequence.Sequencer, so sequence.program_verify() runs over the
+    real link with it. Frames, commands and errors are Phase 5's (Link)."""
+
+    def __init__(self, transport: Transport, target=None, poll_s: float = 0.01,
+                 clock=None, sleep=None):
+        import time as _time
+        from .sequence import PHASE7_LOOPBACK
+        super().__init__(transport)
+        self.target = target or PHASE7_LOOPBACK
+        self.poll_s = poll_s
+        self._clock = clock or _time.monotonic
+        self._sleep = sleep or _time.sleep
+
+    # ---- Sequencer protocol ----
+    def load(self, table) -> None:
+        """Write every step's entry and N_STEPS, then APPLY (pins go to the new step 0's
+        idle state). Refuses a table for another target. Raises LinkError if the device
+        reports the writes were refused (a sequence was still running)."""
+        from .sequence import ENTRY_BYTES, MAX_STEPS, encode_step, entry_layout
+        if table.target != self.target:
+            raise LinkError(f"table is for {table.target.name}, this link drives {self.target.name}")
+        if not 1 <= len(table.steps) <= MAX_STEPS:
+            raise LinkError(f"{len(table.steps)} steps; the device holds 1..{MAX_STEPS}")
+        lay = entry_layout(self.target)
+        for k, st in enumerate(table.steps):
+            self.write_reg(V2_TABLE_BASE + k * ENTRY_BYTES, encode_step(st, lay))
+        self.write_reg(V2_N_STEPS, bytes([len(table.steps)]))
+        st = self.seq_status()
+        if st.table_rejected:
+            self.write_reg(V2_STATUS, b"\x00")   # clear it for next time
+            raise LinkError("device refused the table: a sequence was running (STOP it first)")
+        self.apply()
+
+    def start(self) -> None:
+        self.run()
+
+    def wait(self, timeout_s: float):
+        """Poll STATUS until the sequence is no longer busy (or timeout_s passes)."""
+        from .sequence import SeqResult
+        t_end = self._clock() + timeout_s
+        st = self.seq_status()
+        while st.busy and self._clock() < t_end:
+            self._sleep(self.poll_s)
+            st = self.seq_status()
+        last = self.read_reg(V2_LAST_STEP, 1)[0]
+        return SeqResult(done=st.done and not st.busy, fault=st.fault, step=last)
+
+    def read_capture(self, cap_cell: str) -> int:
+        """The cap cell's capture register (SERIAL result), as an int."""
+        k = self.target.cap_index(cap_cell)
+        n = (self.target.cap_cells[k].cap_w + 7) // 8
+        data = self.read_capture_raw(k * v2_cap_stride(self.target) + V2_CAP_DATA, n)
+        return int.from_bytes(data, "little")
+
+    # ---- extras ----
+    def abort(self) -> None:
+        self.stop()
+
+    def preload(self) -> None:
+        """Re-apply step 0 with RUN low (the idle state)."""
+        self.apply()
+
+    def seq_status(self) -> V2Status:
+        self._send(CMD_STATUS, 0x0000)
+        cmd, _addr, data = self._recv()
+        if cmd != CMD_STATUS or len(data) != 1:
+            raise LinkError(f"expected a 1-byte STATUS response, got CMD 0x{cmd:02X} / {len(data)} bytes")
+        return V2Status.decode(data[0])
+
+    def read_cap_counts(self, cap_cell: str) -> dict:
+        """flags + edge count of a cap cell: {'level', 'done', 'edges'}."""
+        k = self.target.cap_index(cap_cell)
+        b = self.read_capture_raw(k * v2_cap_stride(self.target), V2_CAP_PERIOD)
+        return {"level": bool(b[0] & 1), "done": bool(b[0] & 4),
+                "edges": int.from_bytes(b[V2_CAP_EDGES:V2_CAP_EDGES + 4], "little")}

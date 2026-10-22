@@ -94,6 +94,86 @@ def _open_link(args: argparse.Namespace):
     return open_serial(args.port, baud=args.baud, timeout=args.timeout)
 
 
+def _open_seqlink(args: argparse.Namespace):
+    """SeqLink on the serial port (tests replace this function)."""
+    from .link import SeqLink, SerialTransport
+    return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout))
+
+
+def _print_seq_status(st, step, last) -> None:
+    flags = [n for n in ("run", "busy", "done", "fault", "aborted", "late", "table_rejected",
+                         "rx_overflow") if getattr(st, n)]
+    print(f"STATUS: {' '.join(flags) or 'idle'}; step {step}, last step {last}")
+
+
+def cmd_seq_load(args: argparse.Namespace) -> int:
+    from .sequence import SequenceError, link_late_warnings, load_sequence
+    try:
+        table = load_sequence(Path(args.config))
+    except SequenceError as exc:
+        for line in str(exc).splitlines():
+            print(f"error: {line}", file=sys.stderr)
+        return 1
+    for line in table.summary():
+        print(line)
+    for w in list(table.warnings) + link_late_warnings(table):
+        print(f"warning: {w}", file=sys.stderr)
+    sl = _open_seqlink(args)
+    try:
+        sl.load(table)
+    finally:
+        sl.close()
+    print(f"loaded {len(table.steps)} steps, step 0 applied")
+    return 0
+
+
+def cmd_seq_run(args: argparse.Namespace) -> int:
+    from .link import V2_STEP
+    sl = _open_seqlink(args)
+    try:
+        sl.start()
+        if args.wait <= 0:
+            print("RUN sent")
+            return 0
+        r = sl.wait(args.wait)
+        st = sl.seq_status()
+        _print_seq_status(st, sl.read_reg(V2_STEP, 1)[0], r.step)
+    finally:
+        sl.close()
+    return 0 if r.done and not r.fault else 1
+
+
+def cmd_seq_stop(args: argparse.Namespace) -> int:
+    sl = _open_seqlink(args)
+    try:
+        sl.abort()
+    finally:
+        sl.close()
+    print("STOP sent")
+    return 0
+
+
+def cmd_seq_status(args: argparse.Namespace) -> int:
+    from .link import V2_LAST_STEP, V2_STEP
+    sl = _open_seqlink(args)
+    try:
+        _print_seq_status(sl.seq_status(), sl.read_reg(V2_STEP, 1)[0], sl.read_reg(V2_LAST_STEP, 1)[0])
+    finally:
+        sl.close()
+    return 0
+
+
+def cmd_seq_read(args: argparse.Namespace) -> int:
+    sl = _open_seqlink(args)
+    try:
+        value = sl.read_capture(args.cell)
+        c = sl.read_cap_counts(args.cell)
+    finally:
+        sl.close()
+    print(f"{args.cell}: capture 0x{value:X}, edges {c['edges']}, level {int(c['level'])}")
+    return 0
+
+
 def cmd_link_status(args: argparse.Namespace) -> int:
     lnk = _open_link(args)
     try:
@@ -394,6 +474,47 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     lk_cap.set_defaults(func=cmd_link_read_captures)
+
+    # ---- seq: Phase 7 round 2, the step sequencer over link v2 (phase7_link_top) ----
+    sq = sub.add_parser(
+        "seq",
+        help="load / run / read a step sequence on a phase7_link_top bitstream",
+        description=_wrap(
+            "Phase 7 step sequencer over link v2 (docs/link_register_map.md 'v2', "
+            "fpga/src/phase7_link_top.sv). Needs a board programmed with phase7_link_top "
+            "and the USB-UART adapter wired up (pin/voltage still unconfirmed, EXP-02). "
+            "See docs/USER_MANUAL.md section 8.6."
+        ),
+    )
+    sq_sub = sq.add_subparsers(dest="seq_command", required=True)
+    sq_load = sq_sub.add_parser(
+        "load", parents=[link_common], formatter_class=_RDF,
+        help="check a sequence YAML, send its step table, apply its idle state",
+        description=_wrap("Compile and check the sequence (same checks as "
+                          "`python -m nemo_ctl.sequence`), write every step to the board, then "
+                          "APPLY so the pins sit at its step 0. Refused if a sequence is running."),
+    )
+    sq_load.add_argument("config", help="sequence YAML, e.g. ../config/phase7_seq_loopback.yaml")
+    sq_load.set_defaults(func=cmd_seq_load)
+    sq_run = sq_sub.add_parser(
+        "run", parents=[link_common], formatter_class=_RDF,
+        help="start the loaded sequence (optionally wait for it)",
+        description=_wrap("Start the loaded sequence. With --wait N, poll STATUS for up to N "
+                          "seconds and print how it ended."),
+    )
+    sq_run.add_argument("--wait", type=float, default=0.0, metavar="SECONDS",
+                        help="poll until it finishes, up to this many seconds (default: don't wait)")
+    sq_run.set_defaults(func=cmd_seq_run)
+    sq_stop = sq_sub.add_parser("stop", parents=[link_common], formatter_class=_RDF,
+                                help="abort the running sequence (pins back to step 0)")
+    sq_stop.set_defaults(func=cmd_seq_stop)
+    sq_status = sq_sub.add_parser("status", parents=[link_common], formatter_class=_RDF,
+                                  help="print STATUS flags, current and last step")
+    sq_status.set_defaults(func=cmd_seq_status)
+    sq_read = sq_sub.add_parser("read", parents=[link_common], formatter_class=_RDF,
+                                help="print a cap cell's capture register and edge count")
+    sq_read.add_argument("cell", help="cap cell name, e.g. data_in")
+    sq_read.set_defaults(func=cmd_seq_read)
 
     return p
 
