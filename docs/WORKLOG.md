@@ -6,9 +6,35 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
-| Yazan | Phase 6 SIPO/PISO: 6.1-6.5 done ([simulated], Icarus 12); open: xsim run, manual walkthrough, PR #1 review on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv`, `fpga/tb/tower_cell_stubs.sv`, `fpga/tb/sipo_wrapper_icarus_shim.sv`, `scripts/run_phase6_sim.sh`, `scripts/sim_lib.sh`, `docs/WORKLOG.md`, `docs/decisions.md`, `docs/issues.md`, `docs/controller_spec.md` (Q1), `docs/USER_MANUAL.md`, `CLAUDE.md`, `tools/nemo_ctl/README.md` |
-| Yazan | Phase 7 mode sequencer: engine + loopback top done [simulated]; open: EXP-03, link v2 | `feature/yazan-phase7-sequencer` (from the Phase 6 branch) | `tools/nemo_ctl/sequence.py`, `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`, `fpga/constraints/phase7_seq_loopback_top.xdc`, `config/phase7_seq_loopback.yaml`, `tools/nemo_ctl/gen_svh.py`, new tests/tb, `scripts/run_phase7_sim.sh`, `docs/experiments/EXP-03_*`, docs |
+| Rahaf | EXP-01 (Phase 4 hardware run). Phase 6 was done by Yazan (merged to `main` 2026-10-22), so it's off this row; review it. | `main` (direct pushes, per Rahaf) | `docs/experiments/EXP-01*` |
+| Yazan | Nothing in progress. Phases 6 and 7 (round 1) merged to `main` 2026-10-22. Next, if picked up: Phase 7 round 2 (link v2), EXP-03 at the lab | — | — |
+
+---
+
+## 2026-10-22 (end of session), Yazan, branch main
+- Goal: Yazan asked to push Phase 6 and Phase 7 to `main` with the handoff and every doc up
+  to date.
+- Done:
+  - Fast-forwarded `main` to `feature/yazan-phase7-sequencer`, which contains all of
+    `feature/yazan-phase6-sipo-piso`. `origin/main` hadn't moved since `6a887d6`, so no
+    merge commit and nothing of Rahaf's to reconcile. PR #1 had no reviews; GitHub marks it
+    merged once `main` contains its commits.
+  - `docs/HANDOFF.md` rewritten for the state after Phases 6 and 7 (round 1).
+  - `README.md`: status paragraph (was "Phase 1 is done"), scripts/docs/config/tools lines of the layout, test and sim commands (pytest command checked from the repo root: 176 passed, 1 skipped).
+  - Stale references fixed: CLAUDE.md §7 item 5 and USER_MANUAL §7.5 now say the link
+    widening is Phase 7 round 2; `docs/link_register_map.md` no longer calls it "Phase 6/8
+    work"; the "Currently working on" table (Phase 6 no longer under Rahaf; nothing open
+    for Yazan); `docs/decisions.md` (outcome of the review-order override, and this push).
+  - Checked, no change needed: `docs/USER_MANUAL.md` status table, EXP-01/02/03 (all still
+    PENDING), `docs/pin_verification.md` (no new measurements), `docs/questions_for_dima_2026-10-22.md`
+    (still not sent), `docs/controller_spec.md`. `docs/NEMO_FPGA_bringup_log.tex` is the
+    frozen September bring-up report (never updated since it was imported); left as is.
+- Hardware setup: none.
+- Results: before the push, from the branch tip: pytest 176 passed, 1 skipped; Icarus 12
+  sims Phase 3 28/16/9/16, Phase 4 21/21, Phase 6 69/69, Phase 7 31/31 + 27/27
+  [simulated]. Phase 5 `uart_tb` doesn't elaborate under Icarus 12 (known, unchanged).
+- Decisions: pushed to `main` without Rahaf's review, at Yazan's request (`docs/decisions.md`).
+- Next steps: see `docs/HANDOFF.md` "What to do next".
 
 ---
 

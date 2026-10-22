@@ -65,7 +65,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 2. Oscilloscope and Vivado ILA: period, duty, swing, edges, ringing.
 3. Generic per-pin I/O on hardware.
 4. **Non-overlapping phase FSM**: `clk`, `phi1`, `phi2`, `phir` with dead time (phases must never overlap or array data can be corrupted). Per `docs/controller_spec.md` Q4, phases are generated on-chip from `clk`/`reset`/`set` — do not build this in the FPGA unless that's answered otherwise.
-5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and widening the Phase 5 link for 136/168-bit frames (Phase 7).
+5. SIPO / PISO: done in simulation as generic-controller Phase 6 (`phase6_sipo_piso_top.sv`, USER_MANUAL §7). Open: run `SIM=xsim scripts/run_phase6_sim.sh` on the lab PC (Dima's unmodified `sipo_wrapper.sv`), Dima's answers on edges/polarities/chip delay (Q1-Q7), the chip-pin -> FMC map, and widening the Phase 5 link for 136/168-bit frames (Phase 7 round 2, item 8).
 6. Connect and test the real Y-Flash chip.
 7. Generic controller Phase 4 hardware run: `phase4_loopback_top.sv` is written and
    [simulated] (`scripts/run_phase4_sim.sh`), but **needs Vivado + a physical ZedBoard**

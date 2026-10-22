@@ -472,7 +472,7 @@ lab PC) runs Dima's original file. **Phase 6 isn't finished until the xsim run p
 
 - No hardware: no XDC, the chip pins aren't assigned to FMC pins.
 - Not reachable over the Phase 5 link: its registers are 16 bits wide, the frames are
-  136/168 (deferred to Phase 7).
+  136/168 (Phase 7 round 2, not built yet; see §8).
 - `phirst` comes from the chip's own clock generator; the simulation drives it by hand.
 - Before the first APPLY the controller drives every pin 0, so the chip's active-low
   resets are *asserted* until the config is applied (open item for Phase 8).

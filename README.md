@@ -16,16 +16,21 @@ test chip needs, and reads its results back.
 fpga/src/          Verilog / SystemVerilog sources
 fpga/tb/           testbenches
 fpga/constraints/  XDC, one per top design
-scripts/           create_project.tcl
-docs/              worklog, experiments, decisions, issues, measurements
-config/            nemo_config.yaml — generic controller config (source of truth)
-tools/nemo_ctl/    Python config/validation tool for the generic controller, see its README
+scripts/           create_project.tcl, program_board.tcl, run_phase*_sim*.sh (simulations)
+docs/              worklog, handoff, user manual, experiments, decisions, issues, measurements
+config/            nemo_config.yaml (chip config, source of truth) + per-phase test configs
+tools/nemo_ctl/    Python tool for the generic controller (config, wizard, generators, link,
+                   SIPO/PISO frames, step sequences), see its README
 ```
 
 Generic, user-configurable NEMO chip controller (replaces the per-signal bring-up designs
-above once it's hardware-ready): see [`docs/controller_spec.md`](docs/controller_spec.md)
-and [`tools/nemo_ctl/README.md`](tools/nemo_ctl/README.md). Phase 1 (config format +
-Python core, no hardware) is done; run `python3 -m pytest` from the repo root.
+above once it's hardware-ready): see [`docs/controller_spec.md`](docs/controller_spec.md),
+the lab manual [`docs/USER_MANUAL.md`](docs/USER_MANUAL.md) and the current state in
+[`docs/HANDOFF.md`](docs/HANDOFF.md). Phases 0-7 (round 1) are built and **simulated**;
+none of the generic-controller designs has been run on the board yet (EXP-01/02/03 in
+`docs/experiments/`). Tests: `python -m pytest tools/nemo_ctl/tests` from the repo root;
+simulations: `scripts/run_phase3_sims.sh` ... `scripts/run_phase7_sim.sh` (Icarus Verilog or
+Vivado xsim, Git Bash on Windows).
 
 ## Build
 Vivado 2022.1, from the repo root:

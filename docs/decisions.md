@@ -40,9 +40,15 @@ Each entry: date, decision, reason, rejected options.
 ## Phase 7 round 1 scope: engine + loopback top; link v2 later (2026-10-22, Yazan)
 - Decision: this round is 7.1 Python + 7.2 engine + 7.3 loopback top/XDC/EXP-03 + docs. Writing the step table over the link and widening DATA/CAPTURE to 136/168 bits (deferred from Phase 6) is the next round.
 - Reason: link v2 can't be tested on hardware until EXP-02 is unblocked, and it touches the Phase 5 files.
-- Also: Yazan started Phase 7 before PR #1 (Phase 6) was reviewed, overriding Rahaf's "stop for approval after each phase" rule for this phase. Branch `feature/yazan-phase7-sequencer` is cut from the Phase 6 branch, so it carries Phase 6 until #1 merges.
+- Also: Yazan started Phase 7 before PR #1 (Phase 6) was reviewed, overriding Rahaf's "stop for approval after each phase" rule for this phase. Branch `feature/yazan-phase7-sequencer` is cut from the Phase 6 branch, so it carries Phase 6 until #1 merges. Outcome: both were pushed to `main` the same day without a review (next entry).
 
 ## PULLDOWN on the Phase 7 loopback inputs (2026-10-22, Yazan)
 - Decision: `phase7_seq_loopback_top.xdc` adds `PULLDOWN true` on LA16–LA20_P; pin numbers and IOSTANDARD lines are identical to Phase 4's (diffed).
 - Reason: EXP-03's fault test pulls a jumper; without a pull the input floats and the test is not deterministic.
 - Rejected: changing the other designs' XDCs (not needed there; one XDC per top, no physical pin moved).
+
+## Phases 6 and 7 pushed to main without partner review (2026-10-22, Yazan)
+- Decision: fast-forward `main` to the Phase 7 branch (which contains Phase 6) at Yazan's request, instead of waiting for Rahaf to review PR #1 and a Phase 7 PR.
+- Reason: Yazan's call, so both partners work from one up-to-date `main`. `origin/main` had not moved, so it's a clean fast-forward. Rahaf's own working rule (2026-10-19) is also direct pushes to `main` after each passing step.
+- Consequences: this skips CLAUDE.md §10's PR review. Rahaf should still review the Phase 6/7 changes on `main` (PR #1's description lists what to check). As with Phases 3-5 already on `main`, Phases 6 and 7 are **[simulated] only**: not built in Vivado, not run on the board. `main` is "builds in simulation", not "tested on the board", for everything after Phase 2.
+- Rejected: waiting for the reviews (Yazan chose not to); a merge commit (nothing to merge, fast-forward keeps history linear).

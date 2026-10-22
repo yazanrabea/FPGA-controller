@@ -41,8 +41,8 @@ Cell `k`'s base address = `0x0010 + 24*k`. `k`: 0=test_clock, 1=test_pulse,
 what `phase5_link_top.sv`'s `test_serial` cell actually needs (`SERIAL_W=16`, same as
 Phase 4). A real chip deployment needs `sipo_in` at `SERIAL_W=136` (17 bytes) — this
 register layout does not support that yet. Widening `DATA` (and picking a per-cell
-stride wide enough for the widest cell instead of a uniform 24 B) is Phase 6/8 work, once
-real chip pins are assigned.
+stride wide enough for the widest cell instead of a uniform 24 B) is Phase 7 round 2 work
+("link v2": also adds the step table, see `docs/USER_MANUAL.md` §8), not built yet.
 
 ## cap_cell shadow config + status/results, 0x0100-0x0177 (5 cells x 24 B)
 
