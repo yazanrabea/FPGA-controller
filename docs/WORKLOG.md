@@ -11,6 +11,14 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-22 (late), Yazan, branch feature/yazan-phase7-link-v2
+- Goal: Phase 7 round 2 (link v2): step table over UART, wide data/capture, program-verify over the real link. Decisions (Yazan): step table in RAM + prefetch bank; refactor link_ctrl into a shared link_frame and fix the Phase 5 testbenches.
+- Done (commits on this branch): R2.0 Phase 5 TBs Icarus-12-compatible; R2.1 `fpga/src/link_frame.sv` (shared parser, byte bus, 16-byte input FIFO) + `link_ctrl.sv` with packed ports; R2.2 `fpga/src/seq_bank.sv` + `seq_engine.sv` fetch handshake / LATE / preload / START latched during reload; R2.3 `fpga/src/phase7_link_top.sv` (+ `.xdc`: same pins, rxd/txd unconstrained) + `gen_svh.py --phase7-link`; R2.4 `SeqLink` + `cli seq`.
+- Results [simulated, Icarus 12]: Phase 5 uart 12, link_ctrl 22, phase5_link_top 7; seq_engine 40, seq_bank 10, phase7_seq_loopback_top 27, phase7_link_top (real UART) 21; pytest 194 passed, 1 skipped. Problems found and fixed: docs/issues.md (Icarus 12 ports; write latency LEN+4). Also fixed, not yet in issues.md: START dropped during the new reload state; SOF lost while a write was on the bus (-> FIFO).
+- NOT DONE (session hit the usage limit): R2.5 docs -- `docs/link_register_map.md` v2 section, USER_MANUAL §8.6 (`cli seq`), EXP-04 procedure, decisions.md entries, CLAUDE.md §6/§7, HANDOFF, nemo_ctl README; xsim runs; merge to main.
+
+---
+
 ## 2026-10-22 (end of session), Yazan, branch main
 - Goal: Yazan asked to push Phase 6 and Phase 7 to `main` with the handoff and every doc up
   to date.
