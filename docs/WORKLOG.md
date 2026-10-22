@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run). Phase 6 was done by Yazan (merged to `main` 2026-10-22), so it's off this row; review it. | `main` (direct pushes, per Rahaf) | `docs/experiments/EXP-01*` |
-| Yazan | Phase 7 round 2 (link v2) done [simulated] on `feature/yazan-phase7-link-v2`, not merged yet | `feature/yazan-phase7-link-v2` | `fpga/src/link_frame.sv`, `link_ctrl.sv`, `phase5_link_top.sv`, `seq_engine.sv`, `seq_bank.sv`, `phase7_link_top.sv` (+ `.xdc`), Phase 5/7 tbs, `tools/nemo_ctl/{link,sequence,gen_svh,cli}.py`, docs |
+| Yazan | Nothing in progress. Phase 7 round 2 merged to `main` 2026-10-22. | — | — |
 
 ---
 
@@ -16,7 +16,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Done (commits on this branch): R2.0 Phase 5 TBs Icarus-12-compatible; R2.1 `fpga/src/link_frame.sv` (shared parser, byte bus, 16-byte input FIFO) + `link_ctrl.sv` with packed ports; R2.2 `fpga/src/seq_bank.sv` + `seq_engine.sv` fetch handshake / LATE / preload / START latched during reload; R2.3 `fpga/src/phase7_link_top.sv` (+ `.xdc`: same pins, rxd/txd unconstrained) + `gen_svh.py --phase7-link`; R2.4 `SeqLink` + `cli seq`.
 - Results [simulated, Icarus 12]: Phase 5 uart 12, link_ctrl 22, phase5_link_top 7; seq_engine 40, seq_bank 10, phase7_seq_loopback_top 27, phase7_link_top (real UART) 21; pytest 194 passed, 1 skipped. Problems found and fixed: docs/issues.md (Icarus 12 ports; write latency LEN+4). Also fixed, not yet in issues.md: START dropped during the new reload state; SOF lost while a write was on the bus (-> FIFO).
 - R2.5 docs (same day, after a pause): `docs/link_register_map.md` (frame-engine changes + the v2 map and step-entry layout), USER_MANUAL §8.6 (`cli seq`, `SeqLink`, LATE) + status row, 2 troubleshooting rows, quick reference, §7.5 corrected; `docs/experiments/EXP-04_phase7_link_sequencer.md` (new, PENDING, blocked on EXP-02's UART pin); `docs/issues.md` (dropped START, lost SOF); `docs/decisions.md` (RAM + prefetch, shared frame engine, v2 command meanings); CLAUDE.md §6 (3 rows) / §7; `tools/nemo_ctl/README.md` (`link.py` row added; stale `types.py` -> `pin_types.py`; `cli.py` now lists `link`/`seq`); `docs/HANDOFF.md`. The manual's CLI output lines were checked against the real CLI code over the test fake (`STATUS: done; step 0, last step 5`, `data_in: capture 0xA5, edges 0, level 0`); the board would also show `late` (RTL testbench STATUS 00100100).
-- Still open: xsim runs of Phases 5-7 (lab PC), Vivado build of `phase7_link_top`, EXP-04 (needs EXP-02's UART pin), merge to `main`.
+- Still open: xsim runs of Phases 5-7 (lab PC), Vivado build of `phase7_link_top`, EXP-04 (needs EXP-02's UART pin).
+- Merged: Yazan asked to merge; `main` fast-forwarded to this branch (`origin/main` hadn't moved since `bbb80ae`). No partner review (`docs/decisions.md`).
 
 ---
 

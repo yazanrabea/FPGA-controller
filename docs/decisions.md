@@ -69,3 +69,8 @@ Each entry: date, decision, reason, rejected options.
 - Decision: on `phase7_link_top` the existing commands keep their frames but mean sequence operations: RUN = start, STOP = abort, APPLY = re-apply step 0 with RUN low. No new command codes.
 - Reason: the Phase 5 Python client and frame format stay usable as is; the meanings are the natural ones for a sequencer.
 - Rejected: new CMD codes (protocol change for no gain); control bits in a register (one more write per operation).
+
+## Phase 7 round 2 merged to main without partner review (2026-10-22, Yazan)
+- Decision: fast-forward `main` to `feature/yazan-phase7-link-v2` at Yazan's request, as was done for Phases 6/7 round 1.
+- Reason: Yazan's call; `origin/main` had not moved, so it's a clean fast-forward.
+- Consequences: round 2 changes Phase 5's link code (`link_ctrl.sv` split onto `link_frame.sv`, packed ports, writes now LEN+4 ticks after the checksum, three Phase 5 testbenches edited). Rahaf should review that on `main`, and it must be re-run in xsim on the lab PC. Everything in round 2 is **[simulated] only**.

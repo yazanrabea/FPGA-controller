@@ -14,7 +14,7 @@
 | 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met); **EXP-01 on the board not run** |
 | 5 | `phase5_link_top` (runtime UART link) | Simulated only; **EXP-02 blocked**: PMOD pin and bank voltage never confirmed |
 | 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated, Icarus 12]** 69/69; **xsim run with Dima's unmodified `sipo_wrapper.sv` not done**; no hardware step (no chip-pin map) |
-| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) on `main`; round 2 (table over UART, `cli seq`) on **`feature/yazan-phase7-link-v2`, not merged**. All **[simulated, Icarus 12]**: engine 40, bank 10, round-1 top 27, link top 21 (real UART). **EXP-03 / EXP-04 on the board not run, no Vivado build of either top**; EXP-04 also needs the UART pin (EXP-02) |
+| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) and round 2 (table over UART, `cli seq`), both on `main` (round 2 merged 2026-10-22 without Rahaf's review, at Yazan's request). All **[simulated, Icarus 12]**: engine 40, bank 10, round-1 top 27, link top 21 (real UART). **EXP-03 / EXP-04 on the board not run, no Vivado build of either top**; EXP-04 also needs the UART pin (EXP-02) |
 | 8 | Chip-ready checklist | Not started (needs Dima's answers + chip-pin map) |
 
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
@@ -36,7 +36,7 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
   -> `gen_svh.py --phase7` -> `fpga/src/gen/phase7_cfg_pkg.sv`, `scripts/run_phase7_sim.sh`,
   `docs/experiments/EXP-03_phase7_sequencer_loopback.md`. Design decision: the sequencer
   runs on the FPGA (tick-exact), not in Python.
-- **Phase 7 round 2** (USER_MANUAL §8.6, branch `feature/yazan-phase7-link-v2`):
+- **Phase 7 round 2** (USER_MANUAL §8.6, on `main` since 2026-10-22):
   - `fpga/src/link_frame.sv`: the frame parser, split out of `link_ctrl.sv` and shared by both link tops. It writes onto a byte bus a RAM can sit behind, with a 16-byte input FIFO.
   - Phase 5: `link_ctrl.sv` now has packed ports, and its testbenches now run under Icarus 12. Writes land LEN+4 ticks after the checksum.
   - `fpga/src/seq_bank.sv`: the step-table RAM plus the prefetched next-step bank (~40 ticks per step). `seq_engine.sv` waits for it and sets LATE when it has to.
@@ -59,7 +59,7 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
   - Two Pythons: `python` (3.10) has the packages, `python3` (3.13) doesn't. `sim_python` picks the one that can import `yaml`.
   - GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe`, signed in as `yazanrabea`.
 
-## Last verified results (2026-10-22, Yazan's laptop, branch `feature/yazan-phase7-link-v2`)
+## Last verified results (2026-10-22, Yazan's laptop, just before the round-2 merge to `main`)
 
 - **[not hardware]** `python -m pytest tools/nemo_ctl/tests` (from `tools/`): 194 passed,
   1 skipped (expected skip: `test_link.py`, only runs without pyserial).
@@ -77,8 +77,8 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
 ## What to do next (in order)
 
-0. **Decide about merging** `feature/yazan-phase7-link-v2` into `main` (ask Yazan; Rahaf should
-   review it, especially the Phase 5 refactor).
+0. **Rahaf reviews round 2 on `main`**, above all the Phase 5 refactor (`link_frame.sv`,
+   `link_ctrl.sv`, the three Phase 5 testbenches): it went in without a review.
 1. **Lab PC, xsim:** `SIM=xsim scripts/run_phase5_link_sim.sh`, `run_phase6_sim.sh` and
    `run_phase7_sim.sh`. These are the first xsim runs of the refactored Phase 5 link and of
    Phases 6/7 (xsim is stricter), and the first run against Dima's unmodified `sipo_wrapper.sv`.
