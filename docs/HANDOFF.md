@@ -20,6 +20,17 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
+## 2026-10-22, JTAG link J3 (link tops) done [simulated + bitstreams]
+
+- `phase5_link_jtag_top` / `phase7_link_jtag_top` (+ XDCs): the existing link tops with
+  `LINK("JTAG")`. **First bitstreams of the link tops**, timing met (+0.206 / +0.427 ns).
+- End-to-end simulation `fpga/tb/jtag_link_e2e_tb.sv` 11/11: Phase 5's exit criterion (clock
+  period changed while running) works over JTAG in simulation.
+- `seq_engine.sv` got a `step_cnt1` register (timing fix, same behaviour; `docs/issues.md`).
+  EXP-03 was measured on the bitstream from before it.
+- Next: J4, the Python `JtagTransport` (xsdb, `jtag lock`, the rules in
+  `docs/link_register_map.md`). Then J5 = EXP-02 / EXP-04 on the board.
+
 ## 2026-10-22, JTAG link J2 (bridge RTL) done [simulated]
 
 - `fpga/src/jtag_link_bridge.sv` + `jtag_link_bscan.sv` (BSCANE2 USER4). `link_frame` sees

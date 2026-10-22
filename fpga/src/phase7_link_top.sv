@@ -27,7 +27,12 @@
 // input-FIFO overflow, sticky).
 //==========================================================================
 module phase7_link_top #(
-    parameter int BAUD = 115_200     // the testbench runs it faster
+    parameter int    BAUD = 115_200,  // the testbench runs it faster
+    // Byte transport (docs/decisions.md, 2026-10-22: JTAG over J17 chosen):
+    //   "UART": uart_rx/uart_tx on rxd/txd (pins TBD, see header).
+    //   "JTAG": jtag_link_bscan (BSCANE2 USER4 over the J17 PROG cable); rxd/txd unused.
+    //           Built through phase7_link_jtag_top.sv, which has no rxd/txd ports.
+    parameter string LINK = "UART"
 ) (
     input  logic        clk,         // 100 MHz ZedBoard system clock
     output logic [7:0]  led,
@@ -58,11 +63,21 @@ module phase7_link_top #(
 
     // ---- UART + frame engine ----
     logic [7:0] rx_byte, tx_byte;
-    logic rx_byte_valid, rx_frame_error, tx_send, tx_busy;
-    uart_rx #(.BAUD(BAUD)) u_uart_rx (.clk(clk), .rst_n(rst_n), .rx(rxd),
-        .data_out(rx_byte), .valid(rx_byte_valid), .frame_error(rx_frame_error));
-    uart_tx #(.BAUD(BAUD)) u_uart_tx (.clk(clk), .rst_n(rst_n),
-        .data_in(tx_byte), .send(tx_send), .busy(tx_busy), .tx(txd));
+    logic rx_byte_valid, rx_frame_error, tx_send, tx_busy;  // rx_frame_error: JTAG = down FIFO overrun
+    generate
+        if (LINK == "JTAG") begin : g_jtag
+            jtag_link_bscan u_jtag (.clk(clk), .rst_n(rst_n),
+                .rx_byte(rx_byte), .rx_byte_valid(rx_byte_valid),
+                .tx_byte(tx_byte), .tx_send(tx_send), .tx_busy(tx_busy),
+                .dn_overflow(rx_frame_error));
+            assign txd = 1'b1;               // unused (no pin in the JTAG top)
+        end else begin : g_uart
+            uart_rx #(.BAUD(BAUD)) u_uart_rx (.clk(clk), .rst_n(rst_n), .rx(rxd),
+                .data_out(rx_byte), .valid(rx_byte_valid), .frame_error(rx_frame_error));
+            uart_tx #(.BAUD(BAUD)) u_uart_tx (.clk(clk), .rst_n(rst_n),
+                .data_in(tx_byte), .send(tx_send), .busy(tx_busy), .tx(txd));
+        end
+    endgenerate
 
     logic        bus_we, bus_re, cmd_apply, cmd_run, cmd_stop, rx_overflow;
     logic [15:0] bus_waddr, bus_raddr;

@@ -125,6 +125,10 @@ module seq_engine #(
     state_t state;
 
     logic [TICK_W-1:0] step_cnt;     // ticks since this step's apply (0 in the apply cycle)
+    logic [TICK_W-1:0] step_cnt1;    // always step_cnt + 1, kept in its own register: COND_AFTER
+                                     // compares it with the arg instead of step_cnt with arg - 1,
+                                     // which took a 32-bit subtract off the late hdr path
+                                     // (phase7_link_jtag_top missed 100 MHz by 0.037 ns, docs/issues.md)
     logic              apply_pulse;  // one-cycle
     logic              apply_all;    // with apply_pulse: every sig cell, not just the mask
     logic              apply_caps;   // with apply_all: every cap cell too (not at the end)
@@ -144,7 +148,7 @@ module seq_engine #(
     logic cond_met;
     always_comb begin
         case (step_cond)
-            COND_AFTER:    cond_met = (step_cnt == step_cond_arg - 1'b1);
+            COND_AFTER:    cond_met = (step_cnt1 == step_cond_arg);   // = (step_cnt == arg - 1)
             COND_DONE:     cond_met = (step_cnt >= 2) && sig_done[step_cond_cell];
             COND_CAPTURED: cond_met = (step_cnt >= 2) && cap_done[step_cond_cell];
             COND_EDGES:    cond_met = (step_cnt >= 2) && (edges_sel >= step_cond_arg);
@@ -173,7 +177,7 @@ module seq_engine #(
             state       <= S_PRELOAD;
             step        <= '0;
             fetch_step  <= '0;
-            step_cnt    <= '0;
+            step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);
             run         <= 1'b0;
             apply_pulse <= 1'b0;
             apply_all   <= 1'b0;
@@ -189,6 +193,7 @@ module seq_engine #(
             apply_all   <= 1'b0;
             apply_caps  <= 1'b0;
             step_cnt    <= step_cnt + 1'b1;
+            step_cnt1   <= step_cnt1 + 1'b1;
             // A START during the (re)load of step 0 isn't lost: it runs as soon as IDLE.
             // An ABORT cancels it. Outside those states START means what it always did
             // (ignored while busy).
@@ -213,7 +218,7 @@ module seq_engine #(
                         step     <= '0;
                         state    <= S_ARM;
                         if (fetch_ready) begin       // step 0 already there: apply now
-                            step_cnt    <= '0;       // 0 in the apply cycle
+                            step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);       // 0 in the apply cycle
                             apply_pulse <= 1'b1;
                             apply_all   <= 1'b1;
                             apply_caps  <= 1'b1;
@@ -231,7 +236,7 @@ module seq_engine #(
                         last_step <= step;
                         state     <= S_RELOAD;
                     end else if (fetch_ready) begin
-                        step_cnt    <= '0;
+                        step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);
                         apply_pulse <= 1'b1;
                         apply_all   <= 1'b1;
                         apply_caps  <= 1'b1;
@@ -262,7 +267,7 @@ module seq_engine #(
                             state      <= S_RELOAD;
                         end else if (next_ready) begin
                             step        <= step + 1'b1;
-                            step_cnt    <= '0;
+                            step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);
                             apply_pulse <= 1'b1;
                             fetch_step  <= after_next;
                         end else begin
@@ -285,7 +290,7 @@ module seq_engine #(
                     end else if (cond_met) begin
                         if (next_ready) begin
                             step        <= step + 1'b1;
-                            step_cnt    <= '0;
+                            step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);
                             apply_pulse <= 1'b1;
                             fetch_step  <= after_next;
                         end else begin
@@ -305,7 +310,7 @@ module seq_engine #(
                         state      <= S_RELOAD;
                     end else if (next_ready) begin
                         step        <= step + 1'b1;
-                        step_cnt    <= '0;
+                        step_cnt    <= '0;  step_cnt1 <= TICK_W'(1);
                         apply_pulse <= 1'b1;
                         fetch_step  <= after_next;
                         state       <= S_RUNNING;

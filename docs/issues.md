@@ -128,3 +128,11 @@ Format: symptom, suspected cause, fix, confirmation.
 - Fix: `jtag_echo_top` moved to **USER4** (IR `0x23`, `JTAG_CHAIN` parameter). The script keeps `jtag lock` anyway.
 - Confirmation [measured on board]: USER4, no lock: 0/500 bad; value kept 60 s unlocked and across disconnect + reconnect; LEDs steady at 0xC1; `jtag_echo_test.tcl C1 2000` all pass.
 - For J2: the real bridge must also reject scans without a valid header, so stray scans can't inject link bytes.
+
+## phase7_link_jtag_top missed 100 MHz by 0.037 ns (sequencer COND_AFTER path)
+- Symptom (2026-10-22, first Vivado build of `phase7_link_jtag_top`): `Timing constraints are not met`, sys clk WNS -0.037 ns, 2 failing endpoints (`u_core/u_engine/step_reg[0..1]/CE`). Path: `u_engine/apply_pulse_reg` -> `seq_bank`'s `hdr` mux (`apply_tick ? next_entry : cur_hdr`) -> `seq_engine` `COND_AFTER` test -> `step`, 14 levels with 4 CARRY4. The UART build `phase7_link_top` had passed the same path at +0.334 ns; the bridge's extra logic shifted placement enough to tip it over.
+- Cause: `cond_met = (step_cnt == step_cond_arg - 1)` put a 32-bit subtract on the arg, which arrives late through the `hdr` mux.
+- Fix (`fpga/src/seq_engine.sv`): a second counter register `step_cnt1`, always `step_cnt + 1`, set to 1 wherever `step_cnt` is set to 0. `COND_AFTER` is now `step_cnt1 == arg`: the same test, without the subtract.
+- Confirmation: `seq_engine_tb` 40/40 (it checks COND_AFTER's tick-exact timing), `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27, `phase7_link_top_tb` 21, `jtag_link_e2e_tb` 11 [simulated, xsim]; `phase7_link_jtag_top` rebuilt: timing met, sys clk WNS +0.427 ns [Vivado report].
+- Note: EXP-03 (PASS on the board, 2026-10-22) was measured on the bitstream from before this change. The logic is equivalent and the simulations are unchanged, but strictly the new `phase7_seq_loopback_top` bitstream hasn't been on the board.
+- Side effect: `phase7_seq_loopback_top` rebuilt with the change still meets timing, but WNS went from +0.248 to **+0.100 ns**. Its critical path is the compile-time step-table mux by `step` (WORKLOG review, 2026-10-22), not COND_AFTER, so this is placement variation on an already tight path. Watch item: if it ever fails, register the current step's table entry (like `seq_bank` does).

@@ -26,7 +26,14 @@
 // Phase 4's sw[4] switch -- that's the point of this phase. sw[2:0] still
 // just selects which pair's status shows on the LEDs, same as Phase 4.
 //==========================================================================
-module phase5_link_top (
+module phase5_link_top #(
+    // Byte transport to the PC (docs/decisions.md, 2026-10-22: JTAG over J17 chosen).
+    //   "UART": uart_rx/uart_tx on rxd/txd (pins still TBD, see header).
+    //   "JTAG": jtag_link_bscan (BSCANE2 USER4 over the J17 PROG cable); rxd/txd unused.
+    //           Built through phase5_link_jtag_top.sv, which has no rxd/txd ports.
+    // link_frame / link_ctrl and the register map are the same either way.
+    parameter string LINK = "UART"
+) (
     input  logic        clk,        // 100 MHz ZedBoard system clock
     input  logic [2:0]  sw,
     output logic [7:0]  led,
@@ -55,22 +62,34 @@ module phase5_link_top (
     end
     assign rst_n = (por_cnt == 4'hF);
 
-    // ---- UART + link ----
+    // ---- byte transport (UART or JTAG) + link ----
     logic [7:0] rx_byte;
     logic        rx_byte_valid;
-    logic        rx_frame_error;
+    logic        rx_frame_error;   // UART: framing error; JTAG: the PC overran the down FIFO
     logic [7:0] tx_byte;
     logic        tx_send;
     logic        tx_busy;
 
-    uart_rx u_uart_rx (
-        .clk(clk), .rst_n(rst_n), .rx(rxd),
-        .data_out(rx_byte), .valid(rx_byte_valid), .frame_error(rx_frame_error)
-    );
-    uart_tx u_uart_tx (
-        .clk(clk), .rst_n(rst_n),
-        .data_in(tx_byte), .send(tx_send), .busy(tx_busy), .tx(txd)
-    );
+    generate
+        if (LINK == "JTAG") begin : g_jtag
+            jtag_link_bscan u_jtag (
+                .clk(clk), .rst_n(rst_n),
+                .rx_byte(rx_byte), .rx_byte_valid(rx_byte_valid),
+                .tx_byte(tx_byte), .tx_send(tx_send), .tx_busy(tx_busy),
+                .dn_overflow(rx_frame_error)
+            );
+            assign txd = 1'b1;              // UART idle level; unused (no pin in the JTAG top)
+        end else begin : g_uart
+            uart_rx u_uart_rx (
+                .clk(clk), .rst_n(rst_n), .rx(rxd),
+                .data_out(rx_byte), .valid(rx_byte_valid), .frame_error(rx_frame_error)
+            );
+            uart_tx u_uart_tx (
+                .clk(clk), .rst_n(rst_n),
+                .data_in(tx_byte), .send(tx_send), .busy(tx_busy), .tx(txd)
+            );
+        end
+    endgenerate
 
     logic run, apply;
     logic run_set, run_clear, apply_cmd;

@@ -7,7 +7,51 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link: J1 (EXP-05 PASS) and J2 (bridge RTL, simulated) done; next J3 (link tops) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link: J1 (EXP-05 PASS), J2 + J3 done (simulated, bitstreams built); next J4 (Python transport) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC), JTAG link J3: link tops over JTAG, Yazan + Claude, branch main
+- Goal: step J3 (approved by Yazan): the Phase 5 and Phase 7 link tops on the JTAG transport,
+  and their first bitstreams.
+- Done:
+  - `fpga/src/phase5_link_top.sv`, `fpga/src/phase7_link_top.sv`: new parameter
+    `LINK = "UART"` (default, unchanged) or `"JTAG"`, where `jtag_link_bscan` replaces
+    `uart_rx`/`uart_tx`. The bridge's overflow flag takes the UART framing error's place
+    (P5 LD5 / P7 LD7 = link error).
+  - New tops `fpga/src/phase5_link_jtag_top.sv`, `phase7_link_jtag_top.sv`: the existing top
+    with `LINK("JTAG")` and no `rxd`/`txd` ports (an unconstrained top-level port stops the
+    bitstream).
+  - New XDCs `fpga/constraints/phase5_link_jtag_top.xdc`, `phase7_link_jtag_top.xdc`: every
+    constraint line of the existing link-top XDC unchanged (checked with `diff`: identical,
+    no rxd/txd lines existed) + the `jtag_tck` clock and the async clock groups.
+  - `fpga/tb/bscane2_sim_stub.sv`: simulation-only BSCANE2 stand-in, driven by a
+    `jtag_tap_model` instance it finds by name.
+  - `fpga/tb/jtag_link_e2e_tb.sv` (both JTAG tops, unmodified, real link frames), added to
+    `scripts/run_jtag_sim.sh`.
+  - `fpga/src/seq_engine.sv`: `step_cnt1` register for COND_AFTER (timing fix, below).
+- Hardware setup: none (no board step in J3).
+- Results:
+  - **[simulated, xsim]** `jtag_link_e2e_tb` 11/11:
+    - P5: STATUS; SCRATCH write/read; clock cell configured over the link, APPLY + RUN;
+      LA00 period 20 ticks, then **40 ticks after a live APPLY** (Phase 5's exit criterion,
+      over JTAG); bad checksum -> NACK; STOP. Stray scans in between.
+    - P7: STATUS; SCRATCH; N_STEPS write/read.
+  - **[simulated, xsim]** unchanged after the edits: Phase 5 UART 12/22/7, Phase 7
+    40/10/27/21, `jtag_echo_core_tb` 9, `jtag_link_bridge_tb` 19.
+  - **[Vivado reports, not measurements]**, first bitstreams of the link tops:
+
+    | Top | sys clk WNS | TCK WNS | LUT / FF / BRAM / IOB |
+    |---|---|---|---|
+    | `phase5_link_jtag_top` | +0.206 ns | +22.7 ns | 6924 / 11179 / 0.5 / 22 |
+    | `phase7_link_jtag_top`, first build | **-0.037 ns** (2 endpoints) | +22.0 ns | 6015 / 10550 / 2.5 / 19 |
+    | `phase7_link_jtag_top`, after the `seq_engine` fix | +0.427 ns | +20.3 ns | 6026 / 10582 / 2.5 / 19 |
+    | `phase7_seq_loopback_top` (EXP-03 design), rebuilt with the fix | +0.100 ns (was +0.248) | — | — |
+- Problems / fixes: the Phase 7 timing miss (`docs/issues.md`).
+- Decisions: thin wrapper tops instead of making `rxd`/`txd` conditional: the original tops
+  and their UART testbenches stay exactly as they were.
+- Next steps: J4 (Python `JtagTransport` through xsdb, `--jtag` for `cli link` / `cli seq`),
+  then J5 on the board (EXP-02 / EXP-04 over JTAG). After Yazan's OK.
 
 ---
 
