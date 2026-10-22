@@ -1,0 +1,67 @@
+# Phase 7 bring-up sequence for fpga/src/phase7_seq_loopback_top.sv (target
+# PHASE7_LOOPBACK in tools/nemo_ctl/sequence.py). Same loopback pairs as Phase 4:
+# sig cell i drives LA i (J3-i), cap cell i reads LA i+16 (J3-16 / J2-17..20) through
+# the jumper. NOT a chip config: the shape mimics a chip mode (reset -> load serial ->
+# latch -> check) on test pins, at human speed so it can be followed on the LEDs.
+#
+# Consumed by:  cd tools && python -m nemo_ctl.gen_svh --phase7
+#   -> fpga/src/gen/phase7_cfg_pkg.sv  (hardware speed)
+# scripts/run_phase7_sim.sh generates a time-scaled copy (x1e-4) for simulation only.
+#
+# Steps run in order. Step 0 sets every cell and is also the idle state (applied after
+# reset, after the last step, on abort and on a fault). A later step only lists the
+# cells it changes; everything else keeps running untouched.
+
+target: phase7_seq_loopback_top
+
+steps:
+  - name: idle
+    set:
+      clk:  {type: LOW}
+      rst:  {type: HIGH}                  # "reset" pin, active-low, held inactive
+      data: {type: LOW}
+      cs:   {type: LOW}
+      en:   {type: LOW}
+    capture:
+      clk_in:  {mode: EDGE_COUNT}
+      rst_in:  {mode: LEVEL}
+      data_in: {mode: SERIAL, bits: 8, msb_first: true}
+      cs_in:   {mode: EDGE_COUNT}
+      en_in:   {mode: LEVEL}
+    until: {after: 1s}
+
+  - name: reset
+    set:
+      rst: {type: PULSE, width: 500ms, polarity: active_low}
+    until: {after: 1s}
+
+  - name: load                            # like a SIPO load: 8 bits, MSB first
+    set:
+      # clk starts 10 ms in, so data's first bit is already on the pin at rising edge 1
+      clk:  {type: CLOCK, freq: 4Hz, duty: 50%, cycles: 8, delay: 10ms}
+      data: {type: SERIAL, data: "0xA5", bits: 8, msb_first: true,
+             clock: clk, data_edge: falling}
+    capture:
+      clk_in:  {mode: EDGE_COUNT}        # re-armed: counts this step's edges only
+      data_in: {mode: SERIAL, bits: 8, msb_first: true}
+    # ends on clk's 8th rising edge (the 8th bit captured); clk is NOT re-applied in the
+    # next step, so it finishes its last cycle there without restarting
+    until: {captured: data_in, timeout: 5s}
+
+  - name: latch                           # like cs after a SIPO load
+    set:
+      cs: {type: PULSE, width: 500ms, delay: 250ms}
+      en: {type: HIGH}
+    capture:
+      cs_in: {mode: EDGE_COUNT}
+    until: {edges: {cell: cs_in, count: 1}, timeout: 2s}
+
+  - name: confirm                         # pull jumper J2-20 (en) -> FAULT here
+    until: {level: {cell: en_in, value: 1}, timeout: 100ms}
+
+  - name: hold
+    until: {after: 2s}
+
+# What data_in must hold after the sequence (LD6 on the board, checked by the testbench).
+expect:
+  data_in: "0xA5"
