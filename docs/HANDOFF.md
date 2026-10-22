@@ -20,6 +20,19 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
+## 2026-10-22, EXP-04 PASS over JTAG: every phase up to 7 verified on the board
+
+- `phase7_link_jtag_top` + `cli seq ... --jtag`: sequence loaded from the PC; done / fault /
+  abort; changed sequence (0x3C) with no re-synthesis; `program_verify()` on hardware.
+- **JTAG plan J1-J5 complete.** On the board now: Phase 4 (EXP-01), Phase 5 (EXP-02, over
+  JTAG), Phase 7 round 1 (EXP-03) and round 2 (EXP-04, over JTAG), plus the link itself (EXP-05).
+- Still open:
+  - UART builds on hardware (no adapter; not needed now);
+  - scope/ILA timing;
+  - LA pairs 5-15;
+  - Dima's questions -> chip-pin map -> Phase 8;
+  - EXP-03 rerun on the post-fix `phase7_seq_loopback_top` bitstream (optional, logic unchanged).
+
 ## 2026-10-22, EXP-02 PASS over JTAG (Phase 5 exit criterion met on the board)
 
 - `phase5_link_jtag_top` + `nemo_ctl.cli link ... --jtag`: clock set from the PC, changed

@@ -74,22 +74,56 @@ failure.
 10. Record everything in §5, tagged [measured on board]. Disagreements go to
     `docs/issues.md` as symptoms, not guessed causes.
 
-## 5. Results — PENDING, not yet run (blocked on EXP-02's UART pin)
+## 5. Results — 2026-10-22, run over **JTAG** (J17), not the UART: PASS [measured on board]
 
-| Check | Expected | Measured | Instrument | Pass/Fail |
+### Transport change
+As in EXP-02, the PC link ran over the J17 PROG cable (`docs/decisions.md`):
+- `phase7_link_jtag_top` (= `phase7_link_top` with `LINK("JTAG")`);
+- `python -m nemo_ctl.cli seq ... --jtag`, or `nemo_ctl.jtag.open_jtag(link_cls=SeqLink)`
+  from Python.
+
+The UART-pin row doesn't apply. The UART build is still not run on hardware.
+
+**LED meanings differ from EXP-03** (`phase7_link_top.sv` header):
+- LD0-LD2 = step (last step when idle), LD3 busy, LD4 done, LD5 FAULT, **LD6 LATE**,
+  **LD7 link error**;
+- there is no "aborted" LED; the PC reads it.
+
+### Setup
+- Yazan at the board, Claude on the lab PC.
+- J18 on 1V8; the EXP-01/EXP-03 jumpers; switches down; J17.
+- Fluke 115 DC V, ground on an SMA shell.
+- Programmed `phase7_link_jtag_top.bit` (`DONE=1`). Built 2026-10-22 *with* the
+  `seq_engine.sv` `step_cnt1` fix (`docs/issues.md`); timing met, sys clk WNS +0.427 ns.
+- Sequence: `config/phase7_seq_loopback.yaml`. Run 4 and Run 5 used *copies* in the session
+  scratch folder (the repo config was not changed).
+
+| Check | Expected | Measured | Instrument | Pass |
 |---|---|---|---|---|
-| UART pin + bank voltage confirmed | from the ZedBoard reference manual | — | manual | — |
-| Build | timing met, no critical warnings | — | Vivado report | — |
-| `seq status` before load | `idle`, LD7 off | — | PC | — |
-| After `seq load`: J3-1 / others | ≈1.8 V / ≈0 V | — | multimeter | — |
-| Run 1 status | `done late`, last step 5 | — | PC | — |
-| Run 1 `data_in` | `0xA5` | — | PC | — |
-| Run 2 (J2-20 pulled) | `fault`, last step 4, LD5 | — | PC, eyes | — |
-| Run 3 (stop in step 2) | `aborted`, last step 2, J3-0 ≈0 V | — | PC, multimeter | — |
-| Run 4 (new data, no rebuild) | `data_in` = the new value | — | PC | — |
+| Build | timing met, no critical warnings | met, WNS +0.427 ns | Vivado report | PASS |
+| `seq status --jtag` before load | `idle` | `STATUS: idle; step 0, last step 0` | PC | PASS |
+| `seq load ... --jtag` | 6 steps, step 0 applied | `loaded 6 steps, step 0 applied` (2.7 s incl. starting xsdb) | PC | PASS |
+| After load: J3-1 / others; LEDs | ≈1.8 V / ≈0 V; all off | reported "voltages correct"; all LEDs off | multimeter, eyes | PASS |
+| Run 1 status | `done late`, last step 5 | `STATUS: done late; step 0, last step 5` | PC | PASS |
+| Run 1 LEDs | step 5, done, late | LD0, LD2, LD4, LD6 on; others off | eyes | PASS |
+| Run 1 `data_in` | `0xA5` | `capture 0xA5` | PC | PASS |
+| Run 2 (J2-20 pulled) | `fault`, last step 4, exit code 1, LD5 | `STATUS: fault; step 0, last step 4`, exit 1; LD2 + LD5 on (LD6 off: never reached the late boundary) | PC, eyes | PASS |
+| Run 3 (stop in step 2) | `aborted`, last step 2, J3-0 ≈0 V | abort 2.81 s after START (one Python session); status `aborted`, last_step 2; LD1 only; **J3-0 0 V** | PC, eyes, multimeter | PASS |
+| Run 4 (new data, no rebuild) | `data_in` = `0x3C` | copy with `0xA5` -> `0x3C`: `done late`, last step 5, **`capture 0x3C`**; LEDs as Run 1 | PC, eyes | PASS |
+| Run 5 (program-verify, optional) | loop until the check passes | `program_verify(SeqLink over JTAG, build(i) = data (i+1)*0x11, "data_in", v >= 0x44, max_iters=8)`: **passed after 4 iterations**, history 0x11, 0x22, 0x33, 0x44, 24.3 s | PC | PASS |
 
-**Fill a row only with an actual reading from the board.**
+Not measured: step timing / pulse widths (scope); the step order during the runs.
 
 ## 6. Conclusion
 
-Not yet reached. Depends on §5.
+**PASS, 2026-10-22, over the JTAG transport.**
+- A step sequence was written to the FPGA from the PC and run on the board: done, FAULT,
+  abort.
+- The same bitstream ran a different sequence (`0x3C`) with no re-synthesis.
+- The program-verify loop ran from Python on hardware.
+
+This is Phase 7 round 2's hardware exit criterion. With EXP-03 (round 1, compile-time table),
+Phase 7 is verified on the board.
+
+Open: the UART variant; scope timing; real chip sequences (need the chip-pin map and Dima's
+answers).

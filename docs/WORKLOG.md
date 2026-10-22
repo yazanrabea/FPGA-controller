@@ -7,7 +7,30 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link J1-J4 done; EXP-02 over JTAG PASS; next EXP-04 (Phase 7 over JTAG). | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link J1-J5 done: EXP-02 + EXP-04 PASS over JTAG. Nothing in progress. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC, board), J5 part 2: EXP-04 over JTAG, Yazan at the ZedBoard + Claude, branch main
+- Goal: Phase 7 round 2's hardware exit criterion: a step sequence loaded and run from the PC.
+- Done:
+  - Programmed `phase7_link_jtag_top`; ran EXP-04 §4 runs 1-5 with `--jtag`. Run 3 (abort)
+    and Run 5 (program-verify) were run from one Python session each (`open_jtag(link_cls=SeqLink)`):
+    each CLI command restarts xsdb, too slow to hit step 2.
+  - No code changed. Docs: EXP-04 §5/§6, CLAUDE.md §5/§7, decisions (J1-J5 done), HANDOFF.
+- Hardware setup: unchanged (J18 1V8, the 5 jumpers, J17); J2-20 pulled for Run 2 only and
+  put back. Fluke 115 DC V.
+- Results **[measured on board]** (table in EXP-04 §5):
+  - status idle; load 6 steps (2.7 s); step 0 levels correct, LEDs off.
+  - Run 1: `done late`, last step 5, LD0/LD2/LD4/LD6, data_in 0xA5.
+  - Run 2: `fault`, last step 4, exit 1, LD2 + LD5.
+  - Run 3: abort at 2.81 s, `aborted`, last step 2, LD1, J3-0 0 V.
+  - Run 4: data 0x3C copy, data_in 0x3C, no re-synthesis.
+  - Run 5: program_verify passed after 4 iterations (0x11, 0x22, 0x33, 0x44).
+- Problems / fixes: none.
+- Decisions: none.
+- Next steps: the JTAG plan is complete. Remaining project items: scope/ILA timing
+  measurements, LA pairs 5-15, Dima's questions -> chip-pin map -> Phase 8.
 
 ---
 
