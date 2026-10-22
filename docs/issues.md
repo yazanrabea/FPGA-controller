@@ -94,3 +94,17 @@ Format: symptom, suspected cause, fix, confirmation.
 - Cause: the new parser writes one byte per tick after the checksum (so a block RAM can sit on the bus), and couldn't take input meanwhile. `link_ctrl_tb` feeds bytes every 2 ticks. Real UART (one byte per ~8,680 ticks) never hits this.
 - Fix: a 16-byte input FIFO in `link_frame.sv`. The parser takes bytes when it's ready, and overflow is flagged (sticky `rx_overflow`, v2 STATUS bit 7) instead of silent. Also fixed while there: a full FIFO popped on the same tick now accepts the incoming byte.
 - Confirmation: `link_ctrl_tb` 22/22, `phase5_link_top_tb` 7/7, `phase7_link_top_tb` 21/21 (LD7 off) [simulated, Icarus 12].
+
+## `seq_engine_tb` used signals before declaring them (xsim refused to compile it)
+- Symptom (2026-10-22, first xsim run of Phase 7 on the lab PC): `run_phase7_sim.sh` stopped at `seq_engine_tb` with `VRFC 10-2938: 'fetch_step' is already implicitly declared` (also `fetch_ready`) and then `VRFC 10-3380: identifier 'fault_cyc' is used before its declaration`. Passed under Icarus 12.
+- Cause: `fetch_step`/`fetch_ready`/`late` were declared after the DUT instance that connects them, and `fault_cyc` after the `clear_mon()` task that writes it. Icarus allows use-before-declaration; the standard and xsim don't.
+- Fix: moved those declarations above their first use (`fpga/tb/seq_engine_tb.sv`). No check changed.
+- Confirmation: all four Phase 7 testbenches pass in xsim 2022.1 with the same counts as Icarus: `seq_engine_tb` 40, `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27, `phase7_link_top_tb` 21 [simulated]. The other three also compiled and elaborated with no error before the fix.
+
+## `phase5_link_top` failed 100 MHz timing by 6.1 ns (divide by 24 in the read path)
+- Symptom (2026-10-22, first Vivado synthesis + place + route of `phase5_link_top`, no bitstream since `rxd`/`txd` have no pins): `Timing constraints are not met`, WNS -6.148 ns, TNS -1129 ns, 1087 failing endpoints. Worst path `u_link_ctrl/u_frame/bus_raddr_reg` -> `u_link_ctrl/bus_rdata_reg`, 26 logic levels (15 CARRY4). Every simulation passed, because simulation has no timing.
+- Cause: `fpga/src/link_ctrl.sv` `read_byte()` found the cap cell and byte with `(addr - CAP_BASE) / CAP_STRIDE` and `% CAP_STRIDE`, and `CAP_STRIDE` = 24 is not a power of 2, so synthesis built a divider. The divide was already in the original Phase 5 code (`5b045ef`); the Phase 7 R2.1 refactor kept it. `phase7_link_top` has the same expression but its stride is 16 (a shift), and it meets timing (WNS +0.334 ns).
+- Fix: `read_byte()` now picks the cell with one constant range compare per cap cell (`for i < N_CAP`). Same register map, same values returned.
+- Confirmation: `phase5_link_top` meets timing, WNS +0.238 ns, 0 failing endpoints [Vivado implementation report, not a measurement]; `run_phase5_link_sim.sh` in xsim `uart_tb` 12, `link_ctrl_tb` 22, `phase5_link_top_tb` 7 [simulated].
+- Still tight: the worst path (9 levels) is now the 376-byte register-file read mux. If it fails after a change, register the address decode or make the register file a RAM.
+- Lesson: run every new top through Vivado synthesis + routing (`report_timing_summary`) before calling it ready for the board, even when it can't make a bitstream yet.

@@ -52,6 +52,10 @@ module seq_engine_tb;
     logic [1:0] sig_apply, cap_apply;
     logic [1:0] sig_done_v, cap_done_v, cap_level_v;
     logic [2*TW-1:0] cap_edges_v;
+    // declared before the DUT that drives them: xsim rejects use-before-declaration
+    // (VRFC 10-2938), Icarus doesn't
+    logic [3:0] fetch_step;
+    logic fetch_ready, late;
 
     seq_engine #(.N_SIG(2), .N_CAP(2), .TICK_W(TW), .STEP_W(4)) dut (
         .clk(clk), .rst_n(rst_n), .start(start), .abort(abort), .preload(1'b0), .n_steps(n_steps),
@@ -67,8 +71,7 @@ module seq_engine_tb;
 
     // ---- model of a next-step bank: fetch_step's entry is there `bank_lat` ticks after
     //      fetch_step changes. bank_lat = 0 -> always ready (a compile-time table). ----
-    logic [3:0] fetch_step, bank_tgt = '0;
-    logic fetch_ready, late;
+    logic [3:0] bank_tgt = '0;
     int bank_lat = 0, bank_cnt = 0;
     always @(posedge clk) begin
         if (fetch_step != bank_tgt) begin bank_tgt <= fetch_step; bank_cnt <= bank_lat; end
@@ -126,6 +129,7 @@ module seq_engine_tb;
     int unsigned sig1_done_cyc, edges5_cyc, level1_cyc, cap1_done_cyc, end_cyc;
     int unsigned last_p0_rise;
     int          p0_bad_periods, p0_periods;
+    int unsigned fault_cyc;   // here, not below: clear_mon() uses it (xsim VRFC 10-3380)
 
     task automatic clear_mon();
         n_apply = 0; sig1_done_cyc = 0; edges5_cyc = 0; level1_cyc = 0; cap1_done_cyc = 0;
@@ -135,7 +139,6 @@ module seq_engine_tb;
     // Monitors sample at negedge: every DUT register has settled by then, so `cyc` (the
     // number of posedges so far) is the tick a value became visible. Sampling on posedge
     // races the DUT's own register updates (it did: +/-1 tick errors, 2026-10-22).
-    int unsigned fault_cyc;
     logic p0_d = 0;
     always @(negedge clk) begin
         if (step_start) begin

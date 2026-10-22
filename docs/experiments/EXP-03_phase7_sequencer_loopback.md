@@ -80,6 +80,15 @@ and the capture results are kept.
 8. Record everything in §5, tagged [measured on board]. If anything disagrees, record the
    symptom (not a guessed cause) in `docs/issues.md`.
 
+### Build record (2026-10-22, Windows lab PC, Vivado 2022.1)
+
+`create_project.tcl -tclargs phase7_seq_loopback_top build` completes, no errors or critical
+warnings. Implementation report, **not a measurement**: all timing constraints met,
+WNS +0.248 ns / WHS +0.167 ns (worst path `u_engine/step_reg` -> `step_reg`, 9 levels),
+1061 LUTs, 755 FFs, 19 IOBs. Same pins as EXP-01 (`phase7_seq_loopback_top.xdc` has the same
+PACKAGE_PIN/IOSTANDARD lines as `phase4_loopback_top.xdc`), plus PULLDOWN on LA16-20_P.
+The testbenches pass in xsim 2022.1 too (`run_phase7_sim.sh`), [simulated].
+
 ## 5. Results — PENDING, not yet run
 
 | Check | Expected | Measured | Instrument | Pass/Fail |

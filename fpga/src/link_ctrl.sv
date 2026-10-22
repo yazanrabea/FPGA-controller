@@ -129,8 +129,17 @@ module link_ctrl #(
         if (addr == 16'h0002) return 8'h00;
         if (addr == 16'h0003) return {7'b0, run};
         if (addr >= CAP_BASE && addr < CAP_BASE + N_CAP * CAP_STRIDE) begin
-            k      = (addr - CAP_BASE) / CAP_STRIDE;
-            off    = (addr - CAP_BASE) % CAP_STRIDE;
+            // Which cap cell / which byte of it: one constant range compare per cell, NOT
+            // (addr - CAP_BASE) / CAP_STRIDE. A divide by 24 (not a power of 2) synthesizes
+            // to a ~15-CARRY4 chain that failed 100 MHz timing by 6.1 ns in Vivado
+            // (docs/issues.md, 2026-10-22). Same register map, same result.
+            k   = 0;
+            off = 0;
+            for (int i = 0; i < N_CAP; i++)
+                if (addr >= CAP_BASE + i * CAP_STRIDE && addr < CAP_BASE + (i + 1) * CAP_STRIDE) begin
+                    k   = i;
+                    off = addr - (CAP_BASE + i * CAP_STRIDE);
+                end
             edges  = cap_edge_count[k];
             period = cap_period_ticks[k];
             high   = cap_high_ticks[k];

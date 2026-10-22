@@ -11,16 +11,25 @@
 | 1 | Config file + Python core | Done |
 | 2 | Interactive CLI wizard | Done |
 | 3 | RTL cells `sig_cell` / `cap_cell` / `run_ctrl` | Done, **simulated only** |
-| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met); **EXP-01 on the board not run** |
-| 5 | `phase5_link_top` (runtime UART link) | Simulated only; **EXP-02 blocked**: PMOD pin and bank voltage never confirmed |
-| 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated, Icarus 12]** 69/69; **xsim run with Dima's unmodified `sipo_wrapper.sv` not done**; no hardware step (no chip-pin map) |
-| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) and round 2 (table over UART, `cli seq`), both on `main` (round 2 merged 2026-10-22 without Rahaf's review, at Yazan's request). All **[simulated, Icarus 12]**: engine 40, bank 10, round-1 top 27, link top 21 (real UART). **EXP-03 / EXP-04 on the board not run, no Vivado build of either top**; EXP-04 also needs the UART pin (EXP-02) |
+| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met, rebuilt 2026-10-22 with the Phase 6/7 files in the project); **EXP-01 on the board not run** |
+| 5 | `phase5_link_top` (runtime UART link) | Simulated (Icarus + xsim). Vivado route **failed timing by 6.1 ns until 2026-10-22's `link_ctrl.sv` fix**, now met (+0.238 ns). **EXP-02 blocked**: no PC-link pin/adapter yet |
+| 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated]** 69/69 in Icarus 12 *and* xsim 2022.1 (xsim with Dima's unmodified `sipo_wrapper.sv`, 2026-10-22); no hardware step (no chip-pin map) |
+| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) and round 2 (table over UART, `cli seq`), both on `main` (round 2 merged 2026-10-22 without Rahaf's review, at Yazan's request). All **[simulated]** in Icarus 12 and xsim 2022.1: engine 40, bank 10, round-1 top 27, link top 21 (real UART). Vivado: `phase7_seq_loopback_top` bitstream built (WNS +0.248 ns); `phase7_link_top` routes and meets timing (+0.334 ns, no bitstream: no UART pins). **EXP-03 / EXP-04 on the board not run**; EXP-04 also needs the UART pin (EXP-02) |
 | 8 | Chip-ready checklist | Not started (needs Dima's answers + chip-pin map) |
 
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
-## What changed since the last handoff (2026-10-19)
+## 2026-10-22, lab PC session (handoff steps 1-2 done)
+
+- Every sim script passes in **xsim 2022.1** (Phases 3-7, counts as in Icarus); pytest 194 passed, 1 skipped.
+- `fpga/tb/seq_engine_tb.sv`: declarations moved above first use (xsim refused it).
+- `fpga/src/link_ctrl.sv`: `read_byte()` no longer divides by 24. `phase5_link_top` failed
+  timing by 6.1 ns because of it (the divide dates from the original Phase 5). Same register map.
+- Vivado results table, review findings: `docs/WORKLOG.md` 2026-10-22 (lab PC) entry; bugs in `docs/issues.md`.
+- Lesson: route every new top in Vivado before calling it board-ready, even without a bitstream.
+
+## What changed before that (2026-10-19 -> 2026-10-22, Yazan's laptop)
 
 - **Phase 6** (USER_MANUAL §7): `tools/nemo_ctl/sipo_piso.py` (136-bit frame, 168-bit
   decode, timing rules), `config/phase6_sipo_piso.yaml` -> `gen_svh.py --phase6` ->
@@ -70,8 +79,8 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
   - Phase 6 `phase6_sipo_piso_tb` 69 (with the `sipo_wrapper` stand-in)
   - Phase 7 `seq_engine_tb` 40, `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27,
     `phase7_link_top_tb` 21 (time-scaled ×1e-4 tables)
-- **[simulated, xsim 2022.1, 2026-10-19 on the lab PC]** Phases 3-5 *before* the round-2
-  refactor. **Phases 6 and 7, and the refactored Phase 5, have never been run in xsim.**
+- **[simulated, xsim 2022.1, 2026-10-22 on the lab PC]** all of Phases 3-7, same counts as
+  Icarus (Phase 6 with Dima's unmodified `sipo_wrapper.sv`).
 - Generated packages (`nemo_cfg_pkg.sv`, `phase6_cfg_pkg.sv`, `phase7_cfg_pkg.sv`,
   `phase7_link_pkg.sv`) regenerate byte-identical.
 
@@ -79,22 +88,17 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
 0. **Rahaf reviews round 2 on `main`**, above all the Phase 5 refactor (`link_frame.sv`,
    `link_ctrl.sv`, the three Phase 5 testbenches): it went in without a review.
-1. **Lab PC, xsim:** `SIM=xsim scripts/run_phase5_link_sim.sh`, `run_phase6_sim.sh` and
-   `run_phase7_sim.sh`. These are the first xsim runs of the refactored Phase 5 link and of
-   Phases 6/7 (xsim is stricter), and the first run against Dima's unmodified `sipo_wrapper.sv`.
-   Phase 6 isn't done until it passes.
-2. **Lab PC, Vivado:** rebuild `phase4_loopback_top` once
-   (`create_project.tcl -tclargs phase4_loopback_top build`). `create_project.tcl` globs
-   `fpga/src/*.sv` and `fpga/src/gen/*.sv`, so the Phase 6/7 tops and packages are now part
-   of every project; Icarus parses them, but Vivado hasn't seen them yet. If it breaks,
-   suspect those files first.
+1. ~~Lab PC, xsim runs of Phases 5-7~~ **done 2026-10-22**, all pass (see above).
+2. ~~Lab PC, Vivado rebuild~~ **done 2026-10-22**: `phase4_loopback_top` and
+   `phase7_seq_loopback_top` bitstreams build (in `build/`, git-ignored: rebuild with
+   `create_project.tcl -tclargs <top> build` if missing).
 3. **EXP-01** (Phase 4 on the board): `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**
    (it was last seen on **2V5**, 2026-10-22: move it with SW8 off),
    jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20 (P column), switches down,
    PROG USB J17. Program with `scripts/program_board.tcl -tclargs phase4_loopback_top`. The
    person at the board reads the LEDs and meters; you record exactly what they report, tagged
    [measured on board]. Never fill a results table yourself.
-4. **EXP-03** (Phase 7 on the board, same jumpers): build `phase7_seq_loopback_top`, then the
+4. **EXP-03** (Phase 7 on the board, same jumpers): program `phase7_seq_loopback_top` (built), then the
    3 runs in `docs/experiments/EXP-03_*.md`: full sequence, J2-20 pulled → FAULT, abort.
    That's Phase 7's hardware exit criterion.
 5. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`) after the team
