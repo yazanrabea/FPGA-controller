@@ -1,212 +1,164 @@
-# Handoff — NEMO generic controller (Phases 0-7 built and simulated; nothing past Phase 2 measured on the board yet)
+# Handoff — NEMO generic controller (Phases 0-7 built; Phases 4, 5 and 7 verified on the board)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
-> and `docs/WORKLOG.md` (newest entry first, 2026-10-22) for full detail.
+> and `docs/WORKLOG.md` (newest entry first). Rewritten 2026-10-22, end of the lab-PC
+> session (Yazan at the board, Claude on the lab PC).
 
 ## State as of 2026-10-22, `main` on `https://github.com/yazanrabea/FPGA-controller.git`
 
 | Phase | What it is | Status |
 |---|---|---|
-| 0 | Spec: 26-signal pin table, config schema, link choice | Done, approved |
-| 1 | Config file + Python core | Done |
-| 2 | Interactive CLI wizard | Done |
-| 3 | RTL cells `sig_cell` / `cap_cell` / `run_ctrl` | Done, **simulated only** |
-| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | Bitstream builds in Vivado (timing met, rebuilt 2026-10-22 with the Phase 6/7 files in the project); **EXP-01 PASS on the board 2026-10-22** (found + fixed a SERIAL checker bug) |
-| 5 | `phase5_link_top` (runtime UART link) | Simulated (Icarus + xsim). Vivado route **failed timing by 6.1 ns until 2026-10-22's `link_ctrl.sv` fix**, now met (+0.238 ns). **EXP-02 blocked**: no PC-link pin/adapter yet |
-| 6 | SIPO load / PISO read from generic cells, against Dima's RTL | Done **[simulated]** 69/69 in Icarus 12 *and* xsim 2022.1 (xsim with Dima's unmodified `sipo_wrapper.sv`, 2026-10-22); no hardware step (no chip-pin map) |
-| 7 | Mode sequencer (step engine) | Round 1 (compile-time table) and round 2 (table over UART, `cli seq`), both on `main` (round 2 merged 2026-10-22 without Rahaf's review, at Yazan's request). All **[simulated]** in Icarus 12 and xsim 2022.1: engine 40, bank 10, round-1 top 27, link top 21 (real UART). Vivado: `phase7_seq_loopback_top` bitstream built (WNS +0.248 ns); `phase7_link_top` routes and meets timing (+0.334 ns, no bitstream: no UART pins). **EXP-03 / EXP-04 on the board not run**; EXP-04 also needs the UART pin (EXP-02) |
-| 8 | Chip-ready checklist | Not started (needs Dima's answers + chip-pin map) |
+| 0-2 | Spec, config file + Python core, CLI wizard | Done |
+| 3 | RTL cells `sig_cell` / `cap_cell` / `run_ctrl` | [simulated]; used by every board test below |
+| 4 | `phase4_loopback_top` (compile-time config, loopback pairs 0-4) | **EXP-01 PASS [measured on board]** |
+| 5 | Runtime link to the PC (`link_frame` + `link_ctrl`) | **EXP-02 PASS over JTAG [measured on board]**: clock changed live from the PC. The UART variant has never run on hardware (no adapter) |
+| 6 | SIPO load / PISO read against Dima's RTL | [simulated] 69/69 in Icarus and xsim (Dima's unmodified `sipo_wrapper.sv`). No hardware step possible yet (no chip-pin map) |
+| 7 | Mode sequencer | Round 1 (compile-time table): **EXP-03 PASS**. Round 2 (table from the PC): **EXP-04 PASS over JTAG**, incl. `program_verify()` on hardware |
+| — | PC link over JTAG (J17) | **J1-J5 done**: EXP-05 feasibility PASS, bridge RTL, JTAG link tops, Python transport, EXP-02 + EXP-04 |
+| 8 | Chip-ready checklist | Not started: needs Dima's answers and the chip-pin -> FMC map |
 
-Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
-Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
+### The PC link: JTAG over the J17 PROG cable (decided 2026-10-22)
 
-## 2026-10-22, EXP-04 PASS over JTAG: every phase up to 7 verified on the board
-
-- `phase7_link_jtag_top` + `cli seq ... --jtag`: sequence loaded from the PC; done / fault /
-  abort; changed sequence (0x3C) with no re-synthesis; `program_verify()` on hardware.
-- **JTAG plan J1-J5 complete.** On the board now: Phase 4 (EXP-01), Phase 5 (EXP-02, over
-  JTAG), Phase 7 round 1 (EXP-03) and round 2 (EXP-04, over JTAG), plus the link itself (EXP-05).
-- Still open:
-  - UART builds on hardware (no adapter; not needed now);
-  - scope/ILA timing;
-  - LA pairs 5-15;
-  - Dima's questions -> chip-pin map -> Phase 8;
-  - EXP-03 rerun on the post-fix `phase7_seq_loopback_top` bitstream (optional, logic unchanged).
-
-## 2026-10-22, EXP-02 PASS over JTAG (Phase 5 exit criterion met on the board)
-
-- `phase5_link_jtag_top` + `nemo_ctl.cli link ... --jtag`: clock set from the PC, changed
-  live (J3-0 0.9 V -> 0.45 V, 100 Hz -> 1 Hz), stopped. No re-synthesis.
-- Next: EXP-04 (`phase7_link_jtag_top`, `cli seq ... --jtag`).
-
-## 2026-10-22, JTAG link J4 (Python transport) done
-
-- `tools/nemo_ctl/jtag.py` + `scripts/jtag_server.tcl` (xsdb). CLI: `--jtag` instead of
-  `--port`. Manual: USER_MANUAL §6.4. pytest 212 passed, 1 skipped.
-- Checked on the board against the J1 echo design: 1.18 ms/scan, ~109 kB/s through Python.
-- Next: **J5 = EXP-02 / EXP-04 over JTAG on the board** (bitstreams `phase5_link_jtag_top`,
-  `phase7_link_jtag_top` are built; `build/` is git-ignored, rebuild if missing).
-
-## 2026-10-22, JTAG link J3 (link tops) done [simulated + bitstreams]
-
-- `phase5_link_jtag_top` / `phase7_link_jtag_top` (+ XDCs): the existing link tops with
-  `LINK("JTAG")`. **First bitstreams of the link tops**, timing met (+0.206 / +0.427 ns).
-- End-to-end simulation `fpga/tb/jtag_link_e2e_tb.sv` 11/11: Phase 5's exit criterion (clock
-  period changed while running) works over JTAG in simulation.
-- `seq_engine.sv` got a `step_cnt1` register (timing fix, same behaviour; `docs/issues.md`).
-  EXP-03 was measured on the bitstream from before it.
-- Next: J4, the Python `JtagTransport` (xsdb, `jtag lock`, the rules in
-  `docs/link_register_map.md`). Then J5 = EXP-02 / EXP-04 on the board.
-
-## 2026-10-22, JTAG link J2 (bridge RTL) done [simulated]
-
-- `fpga/src/jtag_link_bridge.sv` + `jtag_link_bscan.sv` (BSCANE2 USER4). `link_frame` sees
-  UART-shaped ports. Testbench 19/19, mutation-checked. Vivado OOC timing met.
-- Scan format + the rules the PC transport (J4) must follow: `docs/link_register_map.md`,
+The kit has no USB-UART adapter, so the link's bytes ride BSCANE2 **USER4** scans over the
+programming cable (`docs/decisions.md`). The protocol and register maps are unchanged; only
+the transport is different.
+- **FPGA**: `fpga/src/jtag_link_bridge.sv` + `jtag_link_bscan.sv`. Same ports as
+  `uart_rx`/`uart_tx`, so `link_frame` connects unchanged.
+- **Tops**: `phase5_link_top` / `phase7_link_top` have `parameter string LINK = "UART"`;
+  `phase5_link_jtag_top` / `phase7_link_jtag_top` set it to `"JTAG"` and have no
+  `rxd`/`txd` ports. These are the ones to build and program.
+- **PC**: `tools/nemo_ctl/jtag.py` (`JtagTransport`, `XsdbScanPort`, `open_jtag()`) runs
+  `scripts/jtag_server.tcl` inside Vivado's **xsdb**, which holds `jtag lock`. CLI:
+  `python -m nemo_ctl.cli link|seq ... --jtag` (instead of `--port`).
+- **Scan format and the rules the PC must follow**: `docs/link_register_map.md`, section
   "Transport: JTAG over J17".
-- Next: J3 = `LINK` choice in the two link tops + XDC TCK constraints, bitstreams.
-
-## 2026-10-22, JTAG link J1 (EXP-05) PASS
-
-- PC link = JTAG over J17 (Yazan; plan J1-J5 in `docs/decisions.md`). J1 done: a BSCANE2
-  echo register (`jtag_echo_top`) talks to xsdb (`scripts/jtag_echo_test.tcl`) at ~98 kB/s
-  polling, ~1 MB/s batched, no errors on **USER4**.
-- **Use USER4, not USER1**: hw_server writes into USER1 on its own (`docs/issues.md`).
-- xsdb hex is byte-little-endian; always full-length scans (the ARM DAP's bypass bit).
-- Next: J2 bridge RTL (header-validated scans, byte FIFOs + CDC), then J3 tops, J4 Python
-  `JtagTransport`, J5 = EXP-02/EXP-04 over JTAG. Each step needs Yazan's OK.
-
-## 2026-10-22, at the board: EXP-01 PASS, EXP-03 PASS
-
-- **EXP-03 PASS** (Phase 7's hardware exit criterion): full sequence, FAULT, ABORT; `rst` preloaded HIGH before START.
-
-- Phase 4's hardware exit criterion is met: all 5 signal types on pairs 0-4 [measured on board].
-- The board run found a bug no simulation reached: the SERIAL checker compared 0xA5 with 0x00.
-  Fixed, with a new time-scaled `fpga/tb/phase4_serial_tb.sv`.
-- Open: one unexplained LD3 transient on pair 4 (`docs/issues.md`); watch LD3 in EXP-03.
-- Board setup that worked: J18 on 1V8; PROG micro-USB on J17 (a bad cable shows up as *no
-  Digilent USB device in Windows*, not as a Vivado error); multimeter ground on an SMA shell.
-- PC link: **JTAG over J17 chosen by Yazan** (`docs/decisions.md`); plan not yet approved, no RTL.
-
-## 2026-10-22, lab PC session (handoff steps 1-2 done)
-
-- Every sim script passes in **xsim 2022.1** (Phases 3-7, counts as in Icarus); pytest 194 passed, 1 skipped.
-- `fpga/tb/seq_engine_tb.sv`: declarations moved above first use (xsim refused it).
-- `fpga/src/link_ctrl.sv`: `read_byte()` no longer divides by 24. `phase5_link_top` failed
-  timing by 6.1 ns because of it (the divide dates from the original Phase 5). Same register map.
-- Vivado results table, review findings: `docs/WORKLOG.md` 2026-10-22 (lab PC) entry; bugs in `docs/issues.md`.
-- Lesson: route every new top in Vivado before calling it board-ready, even without a bitstream.
-
-## What changed before that (2026-10-19 -> 2026-10-22, Yazan's laptop)
-
-- **Phase 6** (USER_MANUAL §7): `tools/nemo_ctl/sipo_piso.py` (136-bit frame, 168-bit
-  decode, timing rules), `config/phase6_sipo_piso.yaml` -> `gen_svh.py --phase6` ->
-  `fpga/src/gen/phase6_cfg_pkg.sv`, `fpga/src/phase6_sipo_piso_top.sv` (sim-only top),
-  `fpga/tb/phase6_sipo_piso_tb.sv` vs Dima's blocks (`scripts/run_phase6_sim.sh`).
-  - **Q1 is corrected:** after `rst_sipo`, `sel[23:8]` holds the **previous** load's slice 0.
-    It isn't 0. (CLAUDE.md §5, `docs/controller_spec.md` Q1.)
-  - Before the first APPLY, `sig_cell` drives every pin 0, so active-low chip resets are
-    *asserted*. Open item for Phase 8. The Phase 7 engine's preload avoids it.
-- **Phase 7 round 1** (USER_MANUAL §8): `tools/nemo_ctl/sequence.py` (step format, checks,
-  compiler, `program_verify()`), `fpga/src/seq_engine.sv`, `fpga/src/phase7_seq_loopback_top.sv`
-  + `.xdc` (same pins as Phase 4 + PULLDOWN on LA16-20_P), `config/phase7_seq_loopback.yaml`
-  -> `gen_svh.py --phase7` -> `fpga/src/gen/phase7_cfg_pkg.sv`, `scripts/run_phase7_sim.sh`,
-  `docs/experiments/EXP-03_phase7_sequencer_loopback.md`. Design decision: the sequencer
-  runs on the FPGA (tick-exact), not in Python.
-- **Phase 7 round 2** (USER_MANUAL §8.6, on `main` since 2026-10-22):
-  - `fpga/src/link_frame.sv`: the frame parser, split out of `link_ctrl.sv` and shared by both link tops. It writes onto a byte bus a RAM can sit behind, with a 16-byte input FIFO.
-  - Phase 5: `link_ctrl.sv` now has packed ports, and its testbenches now run under Icarus 12. Writes land LEN+4 ticks after the checksum.
-  - `fpga/src/seq_bank.sv`: the step-table RAM plus the prefetched next-step bank (~40 ticks per step). `seq_engine.sv` waits for it and sets LATE when it has to.
-  - `fpga/src/phase7_link_top.sv` + `.xdc` (register map v2, `docs/link_register_map.md`).
-  - `gen_svh.py --phase7-link` for the layout package; `link.SeqLink`; `python -m nemo_ctl.cli seq ...`; `docs/experiments/EXP-04_*.md`.
-- `docs/questions_for_dima_2026-10-22.md`: 16 questions, **drafted, not sent yet**.
+- **Speed**: ~1.2 ms per 128-byte scan, ~100 kB/s each way. Each CLI command spends 2-6 s
+  starting xsdb; use one Python session (`open_jtag(...)`) when timing matters (EXP-04 Run 3).
+- **Facts found on the board (EXP-05)**:
+  - hw_server scans **USER1** on its own and overwrote data there, so the link uses USER4;
+  - xsdb `-hex` strings are byte 0 first;
+  - scans must be full length, because the ARM DAP's bypass bit sits in the chain ahead of
+    the FPGA.
 
 ## Machines
 
 - **Windows lab PC** (`C:\Users\LAB\Desktop\yazan_rahaf\FPGA-controller`): Vivado 2022.1 at
-  `C:\Xilinx\Vivado\2022.1`, the ZedBoard, no Icarus.
-  - Run the `scripts/*.sh` from Git Bash; they fall back to xsim (`scripts/sim_lib.sh`).
-  - Call Vivado with `cmd //c "C:\\Xilinx\\Vivado\\2022.1\\bin\\vivado.bat" -mode batch -nojournal -nolog -source <tcl> -tclargs ...`.
-  - Use `python`, not `python3` (the Windows Store stub).
-  - Memory is tight: don't leave long jobs in the background.
-  - `git push` can stall on a GitHub sign-in window: ask the person at the PC.
-  - **No git identity is set**: ask for a repo-local `git config user.name/user.email` before committing (the PC is shared).
+  `C:\Xilinx\Vivado\2022.1` (synthesis license works; xsdb in the same `bin`), the ZedBoard.
+  No Icarus/yosys.
+  - Run `scripts/*.sh` from Git Bash; they fall back to Vivado xsim (`scripts/sim_lib.sh`;
+    `SIM=xsim` to force).
+  - Vivado:
+    `cmd //c "C:\\Xilinx\\Vivado\\2022.1\\bin\\vivado.bat" -mode batch -nojournal -nolog -source <tcl> -tclargs ...`.
+    A full build is 5-10 min; the link tops take longer than one 10-minute tool call, so
+    run them in the background.
+  - `python`, not `python3` (Windows Store stub). Packages from `tools/requirements.txt` are installed.
+  - **Git identity is set repo-locally**: `yazanrabea <yazan.rabea@campus.technion.ac.il>`
+    (asked of Yazan 2026-10-22). Someone else committing here should set their own.
+  - `git push` works (GitHub signed in via Git Credential Manager, 2026-10-22). If it stalls,
+    a sign-in window is waiting on the lab screen.
+  - Memory is tight: a background job idling for a long time can be killed by Claude Code.
 - **Yazan's laptop** (Windows 11): no Vivado.
-  - **Icarus Verilog 12** (`winget install Icarus.Verilog`, at `C:\iverilog\bin`, found by `sim_lib.sh`). It rejects three things Icarus 13 and xsim accept: `return` in a task (so `uart_tb` doesn't elaborate), Dima's `sipo_wrapper.sv` (handled by `fpga/tb/sipo_wrapper_icarus_shim.sv`), and `fork/join_any`+`disable`.
-  - Two Pythons: `python` (3.10) has the packages, `python3` (3.13) doesn't. `sim_python` picks the one that can import `yaml`.
-  - GitHub CLI at `C:\Program Files\GitHub CLI\gh.exe`, signed in as `yazanrabea`.
+  - Icarus Verilog 12 at `C:\iverilog\bin`. It rejects a few things xsim accepts:
+    `return` in a task, Dima's `sipo_wrapper.sv` (use `fpga/tb/sipo_wrapper_icarus_shim.sv`),
+    and `fork/join_any` + `disable`.
+  - `python` 3.10 has the packages.
+  - `gh` signed in as `yazanrabea`.
 
-## Last verified results (2026-10-22, Yazan's laptop, just before the round-2 merge to `main`)
+## Board setup that works (all of today's experiments)
 
-- **[not hardware]** `python -m pytest tools/nemo_ctl/tests` (from `tools/`): 194 passed,
-  1 skipped (expected skip: `test_link.py`, only runs without pyserial).
-- **[simulated, Icarus 12]**:
-  - Phase 3 `sig_cell_tb` 28, `cap_cell_tb` 16, `run_ctrl_tb` 9, `integration_tb` 16
-  - Phase 4 `phase4_loopback_top_tb` 21
-  - Phase 5 `uart_tb` 12, `link_ctrl_tb` 22, `phase5_link_top_tb` 7 (refactored link)
-  - Phase 6 `phase6_sipo_piso_tb` 69 (with the `sipo_wrapper` stand-in)
-  - Phase 7 `seq_engine_tb` 40, `seq_bank_tb` 10, `phase7_seq_loopback_top_tb` 27,
-    `phase7_link_top_tb` 21 (time-scaled ×1e-4 tables)
-- **[simulated, xsim 2022.1, 2026-10-22 on the lab PC]** all of Phases 3-7, same counts as
-  Icarus (Phase 6 with Dima's unmodified `sipo_wrapper.sv`).
-- Generated packages (`nemo_cfg_pkg.sv`, `phase6_cfg_pkg.sv`, `phase7_cfg_pkg.sv`,
-  `phase7_link_pkg.sv`) regenerate byte-identical.
+- ZedBoard. **J18 (VADJ) on 1V8**: it was found on 2V5 earlier on 2026-10-22; move it with
+  SW8 off. A reading of 1.8 V on J3-4 (HIGH pair) confirms it.
+- PROG micro-USB on **J17**. Symptom of a bad cable: *no Digilent USB device in Windows at
+  all* (`Get-PnpDevice`), not a Vivado error.
+- Jumpers on the HTG-FMC P column: J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19,
+  J3-4↔J2-20 (pairs 0-4).
+- Multimeter (Fluke 115, DC V): black probe on the outer metal shell of an SMA jack on the
+  HTG board. Not the Pmod pins, where GND sits next to 3.3 V.
+- Program: `scripts/program_board.tcl -tclargs <top>`. It prints `no JTAG target found` if
+  the board isn't reachable. Bitstreams live in `build/` (git-ignored); rebuild with
+  `scripts/create_project.tcl -tclargs <top> build`.
+- The person at the board reads the LEDs and the meter; you record exactly what they report,
+  tagged [measured on board]. Ask again if a report is ambiguous (e.g. "000", "ld2").
+
+## Last verified results (2026-10-22, lab PC)
+
+- **[not hardware]** pytest (from `tools/`: `python -m pytest nemo_ctl/tests`): 213 passed,
+  1 skipped (expected skip: a test that only runs without pyserial).
+- **[simulated, xsim 2022.1]**, all through the repo scripts:
+  - Phase 3: 28 / 16 / 9 / 16.
+  - Phase 4: `phase4_loopback_top_tb` 21, `phase4_serial_tb` 2.
+  - Phase 5: 12 / 22 / 7.
+  - Phase 6: 69.
+  - Phase 7: 40 / 10 / 27 / 21.
+  - JTAG (`scripts/run_jtag_sim.sh`): `jtag_echo_core_tb` 9, `jtag_link_bridge_tb` 19,
+    `jtag_link_e2e_tb` 11.
+- **[Vivado reports]**, sys clk WNS, all met:
+  - `phase4_loopback_top` +4.001 ns;
+  - `phase7_seq_loopback_top` +0.100 ns (tight, see below);
+  - `phase5_link_jtag_top` +0.206 ns;
+  - `phase7_link_jtag_top` +0.427 ns;
+  - `jtag_echo_top` +9.24 ns.
+- **[measured on board]** EXP-01, EXP-02 (JTAG), EXP-03, EXP-04 (JTAG), EXP-05: all PASS.
+  Details in each `docs/experiments/EXP-0*_*.md` §results and the WORKLOG.
+
+## Bugs found today that a reviewer should know about (all in `docs/issues.md`)
+
+- **`phase4_loopback_top` SERIAL checker compared 0xA5 with 0x00.** Found on the board; it
+  also *passed* with the jumper pulled. Fixed, and covered by `fpga/tb/phase4_serial_tb.sv`.
+- **`link_ctrl.sv` read path divided by 24**, and `phase5_link_top` failed timing by 6.1 ns.
+  Replaced with range compares. This was in the original Phase 5 code.
+- **`seq_engine.sv` COND_AFTER** had a subtract on a late path, so `phase7_link_jtag_top`
+  missed by 0.037 ns. Added a `step_cnt1` register; same behaviour.
+- **xsim-only testbench problems**: use-before-declaration (`seq_engine_tb`), multi-driven
+  `always_ff` (`link_ctrl_tb`), generated package as `.svh` (Vivado never compiles `.svh`).
+- **Open: one unexplained LD3 (fault latch) transient on pair 4 in EXP-01.** Retests were
+  clean; suspected a jumper bumped.
 
 ## What to do next (in order)
 
-0. **Rahaf reviews round 2 on `main`**, above all the Phase 5 refactor (`link_frame.sv`,
-   `link_ctrl.sv`, the three Phase 5 testbenches): it went in without a review.
-1. ~~Lab PC, xsim runs of Phases 5-7~~ **done 2026-10-22**, all pass (see above).
-2. ~~Lab PC, Vivado rebuild~~ **done 2026-10-22**: `phase4_loopback_top` and
-   `phase7_seq_loopback_top` bitstreams build (in `build/`, git-ignored: rebuild with
-   `create_project.tcl -tclargs <top> build` if missing).
-3. ~~**EXP-01**~~ **done 2026-10-22, PASS** (`docs/experiments/EXP-01_*.md`). Kept for reference: `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**
-   (it was last seen on **2V5**, 2026-10-22: move it with SW8 off),
-   jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20 (P column), switches down,
-   PROG USB J17. Program with `scripts/program_board.tcl -tclargs phase4_loopback_top`. The
-   person at the board reads the LEDs and meters; you record exactly what they report, tagged
-   [measured on board]. Never fill a results table yourself.
-4. ~~**EXP-03**~~ **done 2026-10-22, PASS**. Kept for reference: program `phase7_seq_loopback_top` (built), then the
-   3 runs in `docs/experiments/EXP-03_*.md`: full sequence, J2-20 pulled → FAULT, abort.
-   That's Phase 7's hardware exit criterion.
-5. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`) after the team
-   reads them. The answers unblock Phase 8 and the real INFERENCE/WRITE sequences.
-6. **Unblock EXP-02 / EXP-04 (the PC link):** facts now confirmed in `docs/controller_spec.md`
-   §9 (Avnet HW guide v1.1): Pmod JA = PL Bank 13 at **3.3 V**, JA1 = Y11, JA2 = AA11; the
-   onboard J14 USB-UART goes to the **PS** (MIO bank 501, 1.8 V), so PL logic can't use it
-   without ARM software. **The kit has no PMOD USB-UART adapter.** Options, being discussed
-   with the mentor (no decision yet):
-   - (a) get a 3.3 V USB-UART adapter for JA (Claude's recommendation: only XDC lines
-     needed, everything else is built). The RX/TX direction depends on the adapter model.
-   - (c) JTAG over J17 as a second byte transport into `link_frame` (new RTL + a Vivado
-     bridge; switching to (a) later is cheap).
-   - (b) J14 through the ARM (block design + software; breaks CLAUDE.md §4).
-   Until then EXP-02/EXP-04 stay blocked. EXP-01 and EXP-03 need **no** PC link.
-   **Do not invent a pin or an adapter pinout.**
-7. Bring-up backlog (CLAUDE.md §7): verify LA pairs 5-15, scope/ILA measurements.
+1. **Rahaf reviews what went to `main` without her review:**
+   - Yazan's round 2 (the `link_frame` / `link_ctrl` refactor);
+   - today's fixes (`phase4_loopback_top.sv`, `link_ctrl.sv` `read_byte`, `seq_engine.sv`
+     `step_cnt1`);
+   - the whole JTAG link (`jtag_*`, `*_jtag_top`, `tools/nemo_ctl/jtag.py`,
+     `scripts/jtag_server.tcl`).
+2. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, not sent).
+   His answers unblock the chip-pin -> FMC map, the real INFERENCE/WRITE sequences and Phase 8.
+3. **Scope / ILA measurements** (CLAUDE.md §7 item 2). Nothing today measured frequency,
+   duty, pulse width or edges with a scope; only multimeter averages and LEDs.
+4. **Verify LA pairs 5-15** (CLAUDE.md §7 item 1); `docs/pin_verification.md` has pairs 0-4.
+5. Optional:
+   - rerun EXP-03 on the current `phase7_seq_loopback_top` bitstream (the `seq_engine` fix
+     came after the board run; the logic is equivalent);
+   - if `phase7_seq_loopback_top`'s +0.100 ns ever goes negative, register its per-step
+     table entry (as `seq_bank` does).
+6. The UART link variant stays untested on hardware. Only needed if someone buys a 3.3 V
+   USB-UART adapter for Pmod JA (JA1 = Y11, JA2 = AA11, Bank 13 at 3.3 V,
+   `docs/controller_spec.md` §9). Don't invent an adapter pinout.
 
 ## Working rules
 
-- **Rahaf (2026-10-19):** push directly to `main` after each passing step (commit →
-  `git pull --rebase origin main` → push); stop for her approval after each phase.
-- **Yazan (2026-10-22):** works on `feature/yazan-<topic>` branches; Phases 6/7 went to
-  `main` at his request without review. Ask him before pushing to `main` or opening PRs.
-- Both: document every step per CLAUDE.md §9, docs committed with the code; keep the
-  "Currently working on" table in `docs/WORKLOG.md` current; don't edit a file the partner
-  has listed there.
+- **Yazan (2026-10-22, this session):** approves each step; said "push it" for each commit
+  today. Ask before pushing to `main`. Approval of one push doesn't cover the next.
+- **Rahaf (2026-10-19):** push directly to `main` after each passing step (commit ->
+  `git pull --rebase origin main` -> push); stop for her approval after each phase.
+- Both: document every step per CLAUDE.md §9, docs in the same commit as the code; keep the
+  "Currently working on" table in `docs/WORKLOG.md` current.
 
 ## Things a new agent should NOT do
 
-- Don't invent a PMOD pin number, bank voltage, or chip behaviour.
-- Don't mark a hardware exit criterion met from simulation or a Vivado report.
-  `[simulated]` and `[measured on board]` are never interchangeable.
-- Don't program the board until the person there confirms VADJ is on 1V8 and the
+- Don't invent a pin number, bank voltage, adapter pinout or chip behaviour.
+- Don't mark a hardware result from simulation or a Vivado report. `[simulated]` and
+  `[measured on board]` are never interchangeable.
+- Don't program the board until the person there confirms VADJ on 1V8 and the
   jumpers/switches match the experiment.
+- Don't put a JTAG user register on USER1 (hw_server writes to it). Don't send short
+  scans over JTAG.
 - Don't edit Dima's files in `fpga/reference/dima_blocks/`; stub around them.
-- Don't build a bitstream from a time-scaled Phase 7 package. `gen_svh.py --phase7 --time-scale`
-  refuses to write one without `--out`, and the sim script keeps it in a temp folder.
-- Don't treat the Phase 6 "resets asserted before APPLY" behaviour as fixed for tops that
-  don't use `seq_engine`.
+- Don't build a bitstream from a time-scaled package (Phase 4 serial test, Phase 7): the
+  sim scripts keep those in temp folders.
+- Don't treat "resets asserted before the first APPLY" as fixed for tops that don't use
+  `seq_engine` (its preload fixes it; EXP-03 measured `rst` at 1.8 V before START).
 
 ## Key files
 
@@ -214,22 +166,23 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 |---|---|
 | Shared project context (read first) | `CLAUDE.md` |
 | Chronological log, newest first | `docs/WORKLOG.md` |
-| Lab-user manual (Phase 6 = §7, Phase 7 = §8) | `docs/USER_MANUAL.md` |
-| Phase 0 spec, pin table, open questions Q1-Q10 | `docs/controller_spec.md` |
+| Lab-user manual (JTAG link = §6.4, Phase 7 = §8) | `docs/USER_MANUAL.md` |
+| Spec, pin table, open questions | `docs/controller_spec.md` |
 | Questions for Dima (draft) | `docs/questions_for_dima_2026-10-22.md` |
-| Link register maps (Phase 5 and v2) | `docs/link_register_map.md` |
-| Hardware procedures | `docs/experiments/EXP-01_*.md` ... `EXP-04_*.md` |
+| Link register maps + JTAG scan format | `docs/link_register_map.md` |
+| Experiments (procedures + results) | `docs/experiments/EXP-01_*.md` ... `EXP-05_*.md` |
+| Pin verification per pair | `docs/pin_verification.md` |
 | Bugs and fixes / decisions | `docs/issues.md`, `docs/decisions.md` |
 | Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
-| Sims | `scripts/run_phase3_sims.sh`, `run_phase4_sim.sh`, `run_phase5_link_sim.sh`, `run_phase6_sim.sh`, `run_phase7_sim.sh` (`sim_lib.sh`) |
+| Sims | `scripts/run_phase{3_sims,4_sim,5_link_sim,6_sim,7_sim}.sh`, `scripts/run_jtag_sim.sh` |
+| JTAG PC side | `tools/nemo_ctl/jtag.py`, `scripts/jtag_server.tcl`, `scripts/jtag_echo_test.tcl` (J1 test) |
 | Python tool (module list) | `tools/nemo_ctl/README.md` |
 | The task brief (phases, exit criteria) | `generic_controller_prompt.md` |
 | Dima's SIPO/PISO model (reference, never edited) | `fpga/reference/dima_blocks/` |
-| Frozen September bring-up report | `docs/NEMO_FPGA_bringup_log.tex` |
 
 ## Who's who
 
-- **Yazan**: owns the GitHub repo; did Phases 6-7 on his laptop.
-- **Rahaf**: partner, usually at the lab PC with the board; did Phases 0-5 and step 6.0.
+- **Yazan**: owns the GitHub repo; did Phases 6-7; at the board for today's experiments.
+- **Rahaf**: partner; did Phases 0-5 and step 6.0; reviews what's listed above.
 - **Dima**: provided the SIPO/PISO RTL and the chip details; the open questions go to him.
 - **Supervisor**: Ilan Lipschutz, ASIC² Lab, Technion, NEMO project.
