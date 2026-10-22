@@ -13,6 +13,9 @@ echo "=== seq_engine_tb ==="
 sim_run seq_engine_tb \
     "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" "$SRC/seq_engine.sv" "$TB/seq_engine_tb.sv"
 
+echo "=== seq_bank_tb (round 2: step-table RAM + next-step bank) ==="
+sim_run seq_bank_tb "$SRC/seq_bank.sv" "$TB/seq_bank_tb.sv"
+
 # The top's real package runs for seconds (human-speed LEDs); simulate a
 # time-scaled copy instead (same steps, x1e-4 ticks). It's written to the
 # scratch dir, never to fpga/src/gen, so it can't end up in a bitstream.
