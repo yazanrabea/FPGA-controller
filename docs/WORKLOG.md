@@ -7,7 +7,38 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | EXP-01 + EXP-03 done on the board (PASS); next: JTAG-link plan (J1-J5) for approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | JTAG link: J1 done (EXP-05 PASS); next J2 (bridge RTL) after approval. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+
+---
+
+## 2026-10-22 (lab PC, board), JTAG link J1 / EXP-05, Yazan at the ZedBoard + Claude, branch main
+- Goal: step J1 of the JTAG PC-link plan (approved by Yazan): prove bytes can move between
+  the PC and FPGA logic over the J17 cable, and measure the speed.
+- Done:
+  - New `fpga/src/jtag_echo_core.sv` (TCK-domain echo register, returns ~previous scan),
+    `fpga/src/jtag_echo_top.sv` (BSCANE2, LEDs = last[7:0] via 2-FF sync),
+    `fpga/constraints/jtag_echo_top.xdc` (clk + LEDs only, `jtag_tck` 30 MHz, async to the
+    sys clock), `fpga/tb/jtag_echo_core_tb.sv`, `scripts/run_jtag_sim.sh`,
+    `scripts/jtag_echo_test.tcl` (xsdb: echo check, speed, LED pattern).
+  - First build on USER1. Found that hw_server overwrites it, moved to USER4, rebuilt.
+  - Docs: `docs/experiments/EXP-05_jtag_link_feasibility.md`, `docs/issues.md`,
+    `docs/decisions.md`, CLAUDE.md §6, HANDOFF.
+- Hardware setup: unchanged (J18 1V8, EXP-01 jumpers in but unused, J17). xsdb from Vivado
+  2022.1 (`C:\Xilinx\Vivado\2022.1\bin\xsdb.bat`), JTAG at 15 MHz.
+- Results:
+  - **[simulated, xsim]** `jtag_echo_core_tb` 9/9.
+  - **[Vivado report]** timing met: TCK +31.15 ns, sys clk +9.24 ns; 1025 LUT / 2064 FF / 9 IOB.
+  - **[measured on board]** USER1, no lock: 12/500 bad (15 MHz), 14/500 (5 MHz); with lock
+    0/500. USER4: 0/500 without lock, value persists 60 s and across reconnect; 2000/2000
+    scans correct; 1.3 ms/scan = ~98 kB/s, batched ~1.0 MB/s. LEDs `C1` = LD7/LD6/LD0 (Yazan).
+  - xsdb `-hex` is byte-little-endian (first hex pair = bits [7:0]); `arm_dap`'s bypass bit
+    enters first, so scans must be full length.
+- Problems / fixes: hw_server writes into USER1 -> USER4 (`docs/issues.md`). Also an xsim
+  multi-driver error from `initial` + `always_ff` in `jtag_echo_core.sv` -> declaration
+  initializers.
+- Decisions: USER4 for the link (`docs/decisions.md`).
+- Next steps: J2 (`jtag_link_bridge.sv`: header-validated fixed-length scans, byte FIFOs
+  both ways, CDC TCK <-> 100 MHz), after Yazan's OK.
 
 ---
 

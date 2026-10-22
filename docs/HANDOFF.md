@@ -20,6 +20,16 @@
 Phases 6 and 7 were pushed straight to `main` on 2026-10-22 at Yazan's request, **without
 Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
 
+## 2026-10-22, JTAG link J1 (EXP-05) PASS
+
+- PC link = JTAG over J17 (Yazan; plan J1-J5 in `docs/decisions.md`). J1 done: a BSCANE2
+  echo register (`jtag_echo_top`) talks to xsdb (`scripts/jtag_echo_test.tcl`) at ~98 kB/s
+  polling, ~1 MB/s batched, no errors on **USER4**.
+- **Use USER4, not USER1**: hw_server writes into USER1 on its own (`docs/issues.md`).
+- xsdb hex is byte-little-endian; always full-length scans (the ARM DAP's bypass bit).
+- Next: J2 bridge RTL (header-validated scans, byte FIFOs + CDC), then J3 tops, J4 Python
+  `JtagTransport`, J5 = EXP-02/EXP-04 over JTAG. Each step needs Yazan's OK.
+
 ## 2026-10-22, at the board: EXP-01 PASS, EXP-03 PASS
 
 - **EXP-03 PASS** (Phase 7's hardware exit criterion): full sequence, FAULT, ABORT; `rst` preloaded HIGH before START.

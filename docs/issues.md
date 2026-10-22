@@ -121,3 +121,10 @@ Format: symptom, suspected cause, fix, confirmation.
 - Checked: the latch counts mismatches of the *selected* pair only (16 consecutive ticks = 160 ns); `sel` falls back to pair 0 for `sw[3:0]` >= 5, so passing through other switch values shouldn't set it. Retest on the fixed bitstream: `sw[2:0]`=100, RUN on, nothing touched for 30 s: off; then 100 -> 011 -> 100: still off.
 - Suspected: a brief real dropout on a jumper (e.g. bumped while flipping the nearby switches). Not proven.
 - Status: open. Watch LD3 in EXP-03 (same jumpers); if it comes back, wiggle-test the jumpers one by one with the pair selected.
+
+## JTAG USER1 register overwritten by hw_server (EXP-05)
+- Symptom (2026-10-22, `jtag_echo_top` on USER1, xsdb over J17): 12/500 scans read back all ones (15 MHz, no `jtag lock`), 14/500 at 5 MHz; the write side of those scans still landed. The stored value was 0 at the start of every new xsdb session. With the session held open unlocked, all 8 LEDs blinked (the design can only show one fixed byte).
+- Cause (inferred from the symptoms, not from documentation): hw_server scans the BSCAN USER registers itself, for debug-core discovery (Vivado's debug hub uses USER1 by default), and writes into ours. Not signal integrity: lowering TCK to 5 MHz didn't help; `jtag lock` (exclusive access) gave 0/500.
+- Fix: `jtag_echo_top` moved to **USER4** (IR `0x23`, `JTAG_CHAIN` parameter). The script keeps `jtag lock` anyway.
+- Confirmation [measured on board]: USER4, no lock: 0/500 bad; value kept 60 s unlocked and across disconnect + reconnect; LEDs steady at 0xC1; `jtag_echo_test.tcl C1 2000` all pass.
+- For J2: the real bridge must also reject scans without a valid header, so stray scans can't inject link bytes.

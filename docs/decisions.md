@@ -79,4 +79,5 @@ Each entry: date, decision, reason, rejected options.
 - Decision (Yazan, 2026-10-22): carry the link's bytes over the J17 JTAG/USB cable (the one already used for programming) instead of a USB-UART adapter on Pmod JA.
 - Reason: the kit has no 3.3 V USB-UART adapter (`docs/controller_spec.md` §9), and J17 needs no new wiring, pins or voltage decision.
 - Rejected for now: (a) USB-UART adapter on Pmod JA (needs hardware we don't have; still the cheapest switch later, since `link_frame.sv` stays the same); (b) the onboard J14 USB-UART via the ARM PS (needs a block design + software, against CLAUDE.md §4's no-block-design rule).
-- Status: design plan to be approved before any RTL is written.
+- Status: plan J1-J5 approved by Yazan 2026-10-22. J1 (feasibility, EXP-05) PASS: ~98 kB/s polling, ~1 MB/s batched.
+- Sub-decision (2026-10-22, from EXP-05): use BSCANE2 **USER4** (IR `0x23`), not USER1. hw_server scans USER1 on its own and overwrote the register there. Rejected: USER1 + relying on `jtag lock` (protects only while our session holds the lock).
