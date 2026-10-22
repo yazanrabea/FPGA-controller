@@ -88,7 +88,8 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
    `fpga/src/*.sv` and `fpga/src/gen/*.sv`, so the Phase 6/7 tops and packages are now part
    of every project; Icarus parses them, but Vivado hasn't seen them yet. If it breaks,
    suspect those files first.
-3. **EXP-01** (Phase 4 on the board): `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**,
+3. **EXP-01** (Phase 4 on the board): `docs/experiments/EXP-01_*.md`. VADJ J18 on **1V8**
+   (it was last seen on **2V5**, 2026-10-22: move it with SW8 off),
    jumpers J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20 (P column), switches down,
    PROG USB J17. Program with `scripts/program_board.tcl -tclargs phase4_loopback_top`. The
    person at the board reads the LEDs and meters; you record exactly what they report, tagged
@@ -98,11 +99,18 @@ Rahaf's review** (`docs/decisions.md`). PR #1 (Phase 6) describes what to check.
    That's Phase 7's hardware exit criterion.
 5. **Send Dima the questions** (`docs/questions_for_dima_2026-10-22.md`) after the team
    reads them. The answers unblock Phase 8 and the real INFERENCE/WRITE sequences.
-6. **Unblock EXP-02 / EXP-04:** confirm the USB-UART adapter's PMOD pin and bank voltage in
-   the ZedBoard reference manual (`docs/controller_spec.md` §9) and add them to
-   `phase5_link_top.xdc` and `phase7_link_top.xdc`. **Do not invent a pin or voltage.** Then
-   EXP-02 (Phase 5) and EXP-04 (`cli seq` on the board, including a changed sequence without
-   re-synthesis).
+6. **Unblock EXP-02 / EXP-04 (the PC link):** facts now confirmed in `docs/controller_spec.md`
+   §9 (Avnet HW guide v1.1): Pmod JA = PL Bank 13 at **3.3 V**, JA1 = Y11, JA2 = AA11; the
+   onboard J14 USB-UART goes to the **PS** (MIO bank 501, 1.8 V), so PL logic can't use it
+   without ARM software. **The kit has no PMOD USB-UART adapter.** Options, being discussed
+   with the mentor (no decision yet):
+   - (a) get a 3.3 V USB-UART adapter for JA (Claude's recommendation: only XDC lines
+     needed, everything else is built). The RX/TX direction depends on the adapter model.
+   - (c) JTAG over J17 as a second byte transport into `link_frame` (new RTL + a Vivado
+     bridge; switching to (a) later is cheap).
+   - (b) J14 through the ARM (block design + software; breaks CLAUDE.md §4).
+   Until then EXP-02/EXP-04 stay blocked. EXP-01 and EXP-03 need **no** PC link.
+   **Do not invent a pin or an adapter pinout.**
 7. Bring-up backlog (CLAUDE.md §7): verify LA pairs 5-15, scope/ILA measurements.
 
 ## Working rules

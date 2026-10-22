@@ -11,6 +11,26 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-22 (night), Yazan, branch main
+- Goal: answer the open UART question (EXP-02 / EXP-04) from Yazan's notes on the board kit.
+- Done: checked the pasted notes against the official Avnet *ZedBoard Hardware User's Guide*
+  v1.1 (2012; the Digilent manual page refused automated download). Results recorded in
+  `docs/controller_spec.md` §9:
+  - Pmods JA-JD = PL Bank 13 at 3.3 V; JA1 = Y11, JA2 = AA11.
+  - J14 USB-UART = PS MIO bank 501 (1.8 V), so it can't be reached from PL without ARM software.
+  - J18 sets VADJ for FMC banks 34/35.
+  - One correction to the notes: J14 can't be bridged to the PL by an EMIO/XDC change; it needs option (b) (block design + software).
+- Hardware setup (reported by Yazan, not measured): the kit has only the 12 V adapter and
+  micro-USB cables, no PMOD USB-UART adapter. **J18 (VADJ) was seen on the 2V5 position**;
+  it must go back to **1V8**, with SW8 off, before any FMC test (CLAUDE.md §4).
+- Results: none measured.
+- Decisions: none yet. Pin directions on JA1/JA2 depend on which adapter is used. Choice
+  pending: get a 3.3 V USB-UART adapter for JA (option (a)), or switch to the PS (option (b)).
+- Next steps: Yazan chooses; then the XDC lines go into `phase5_link_top.xdc` and
+  `phase7_link_top.xdc`.
+
+---
+
 ## 2026-10-22 (late), Yazan, branch feature/yazan-phase7-link-v2
 - Goal: Phase 7 round 2 (link v2): step table over UART, wide data/capture, program-verify over the real link. Decisions (Yazan): step table in RAM + prefetch bank; refactor link_ctrl into a shared link_frame and fix the Phase 5 testbenches.
 - Done (commits on this branch): R2.0 Phase 5 TBs Icarus-12-compatible; R2.1 `fpga/src/link_frame.sv` (shared parser, byte bus, 16-byte input FIFO) + `link_ctrl.sv` with packed ports; R2.2 `fpga/src/seq_bank.sv` + `seq_engine.sv` fetch handshake / LATE / preload / START latched during reload; R2.3 `fpga/src/phase7_link_top.sv` (+ `.xdc`: same pins, rxd/txd unconstrained) + `gen_svh.py --phase7-link`; R2.4 `SeqLink` + `cli seq`.

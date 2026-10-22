@@ -347,6 +347,27 @@ item for Phase 4/5 hardware bring-up. (c), VIO over JTAG, remains available in p
 Phase 3/4 debug regardless, since CLAUDE.md already lists Vivado ILA as a planned
 verification tool. §8's framed protocol is now the one that applies (no AXI-Lite path).
 
+**PMOD / UART facts confirmed 2026-10-22** (Avnet *ZedBoard Zynq Evaluation and Development
+Hardware User's Guide*, **Version 1.1, 1 Aug 2012**, an early revision; recheck against
+the guide or schematic for our board revision before wiring):
+- The four PL Pmods JA1–JD1 connect to **PL Bank 13 at 3.3 V** (§2.9.2; Table 21 "Zynq Bank
+  Voltage Assignments": Bank 13 3.3V). So option (a) uses **LVCMOS33**, not the FMC's
+  LVCMOS18, and the adapter must be a **3.3 V** logic-level USB-UART.
+- JA pins (Table 16): JA1 **Y11**, JA2 **AA11**, JA4 AA9, JA7 AB11, JA8 AB10, JA9 AB9, JA10 AA8.
+  JA3 reads "Y19" in this revision's table, which community XDCs give as Y10; JA3 is not
+  needed for the UART. Which of JA1/JA2 is the FPGA's RX vs TX depends on the adapter's own
+  pinout (e.g. Digilent PmodUSBUART vs a bare FTDI TTL cable), so it stays open until the
+  adapter is chosen.
+- The onboard USB-UART (CY7C64225, micro-USB **J14**) is wired to the **PS**: Zynq pins D11 /
+  C14 in **MIO Bank 1/501 (1.8 V)** (Table 6). PL logic can't reach it without software on
+  the ARM forwarding the bytes. That is option (b) above (block design + Vitis), not
+  something an XDC change can do.
+- FMC banks 34/35 are on VADJ, set by jumper **J18**. Default 2.5 V; the 3.3 V position is
+  deliberately unpopulated (Table 21 note). Our designs need **1V8** (CLAUDE.md §4).
+- 2026-10-22: the team reports owning only the boxed accessories (12 V adapter, micro-USB
+  cables), **no PMOD USB-UART adapter**. So option (a) still needs an adapter before
+  EXP-02 / EXP-04 can run.
+
 ## 10. Resource estimate
 
 **Superseded by Phase 3** (`fpga/src/sig_cell.sv`, `cap_cell.sv`, `run_ctrl.sv` now exist
