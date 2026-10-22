@@ -35,7 +35,10 @@ Three parts:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
+
+import yaml
 
 from .units import quantize_clock, quantize_duration
 
@@ -324,3 +327,148 @@ def check_piso_read(t: PisoReadTiming, chip_delay_ticks: int = 0) -> list[str]:
                     f"({CAPTURE_SYNC_TICKS} sync + {chip_delay_ticks} chip/wire): the "
                     f"falling-edge capture samples piso_out before the new bit arrives")
     return errs
+
+
+# ======================================================================================
+# Phase 6.2: config/phase6_sipo_piso.yaml -> checked per-pin settings
+# ======================================================================================
+
+DEFAULT_PHASE6_CONFIG = Path(__file__).resolve().parents[2] / "config" / "phase6_sipo_piso.yaml"
+
+# Per-pin requirements of the two profiles: setting type + the polarity Dima's RTL
+# implies (rst_n active-low; cs = clk_s, rising-edge; shift = load, 1 = shift). A
+# different polarity in the config is allowed (the pad might invert, Q6) but warned.
+SIPO_PINS = {"rst_sipo": ("PULSE", "active_low"), "clk_sipo": ("CLOCK", None),
+             "sipo_in": ("SERIAL", None), "cs": ("PULSE", "active_high")}
+PISO_PINS = {"rst_piso": ("HIGH", None), "clk_piso": ("CLOCK", None),
+             "shift": ("PULSE", "active_high"), "piso_out": ("CAPTURE", None)}
+EDGES = ("rising", "falling")
+
+
+@dataclass(frozen=True)
+class Phase6Config:
+    sipo_pins: dict  # pin -> raw setting dict (type + params), human units
+    piso_pins: dict
+    sipo: SipoLoadTiming
+    piso: PisoReadTiming
+    sipo_frame: int  # 136-bit parallel_out value to load
+    sipo_data_edge: str  # clk_sipo edge sipo_in changes on (UNCONFIRMED)
+    piso_capture_edge: str  # clk_piso edge piso_out is sampled on (UNCONFIRMED)
+    chip_delay_ticks: int
+    tb_piso_stages: tuple[PisoStage, ...]  # values the 6.4 testbench feeds the piso2 chain
+    warnings: tuple[str, ...]
+
+
+def _ticks(value) -> int:
+    return quantize_duration(value if value is not None else 0).ticks
+
+
+def _frame_from_setting(s: dict) -> int:
+    if "frame" in s:
+        f = s["frame"]
+        return pack_sipo_frame(int(f["sel_lo"]), [int(x) for x in f["slices"]])
+    raw = s.get("data")
+    if raw is None:
+        raise FrameError("sipo_in needs either 'frame: {sel_lo, slices}' or 'data'")
+    frame = int(raw, 0) if isinstance(raw, str) else int(raw)
+    _check_uint("sipo_in data", frame, SIPO_BITS)
+    return frame
+
+
+def _check_pins(profile: str, pins: dict, spec: dict, errs: list, warns: list) -> None:
+    for name, (typ, rtl_polarity) in spec.items():
+        s = pins.get(name)
+        if s is None:
+            errs.append(f"{profile}: missing pin {name!r}")
+            continue
+        if s.get("type") != typ:
+            errs.append(f"{profile}/{name}: type must be {typ}, got {s.get('type')!r}")
+        if rtl_polarity and s.get("polarity", "active_high") != rtl_polarity:
+            warns.append(f"{profile}/{name}: polarity {s.get('polarity', 'active_high')} differs "
+                         f"from Dima's RTL ({rtl_polarity}); only right if the pad inverts (Q6)")
+    for name in pins:
+        if name not in spec:
+            errs.append(f"{profile}: unexpected pin {name!r}")
+
+
+def load_phase6_config(path: Path | None = None) -> Phase6Config:
+    """Parse and check config/phase6_sipo_piso.yaml. Raises FrameError listing every
+    problem; warnings (UNCONFIRMED choices) come back in .warnings."""
+    with open(path or DEFAULT_PHASE6_CONFIG) as f:
+        doc = yaml.safe_load(f) or {}
+    profiles = doc.get("profiles") or {}
+    sp = profiles.get("SIPO_LOAD") or {}
+    pp = profiles.get("PISO_READ") or {}
+    errs: list[str] = []
+    warns: list[str] = []
+    _check_pins("SIPO_LOAD", sp, SIPO_PINS, errs, warns)
+    _check_pins("PISO_READ", pp, PISO_PINS, errs, warns)
+    if errs:
+        raise FrameError("; ".join(errs))
+
+    rst, clk, din, cs = sp["rst_sipo"], sp["clk_sipo"], sp["sipo_in"], sp["cs"]
+    cq = quantize_clock(clk["freq"], clk.get("duty", "50%"))
+    sipo = SipoLoadTiming(
+        rst_delay=_ticks(rst.get("delay")), rst_width=_ticks(rst["width"]),
+        clk_delay=_ticks(clk.get("delay")), period=cq.period_ticks, high=cq.high_ticks,
+        cycles=int(clk.get("cycles", 0)),
+        data_delay=_ticks(din.get("delay")),
+        cs_delay=_ticks(cs.get("delay")), cs_width=_ticks(cs["width"]),
+    )
+    pclk, shift, pout = pp["clk_piso"], pp["shift"], pp["piso_out"]
+    pq = quantize_clock(pclk["freq"], pclk.get("duty", "50%"))
+    piso = PisoReadTiming(
+        clk_delay=_ticks(pclk.get("delay")), period=pq.period_ticks, high=pq.high_ticks,
+        cycles=int(pclk.get("cycles", 0)),
+        shift_delay=_ticks(shift.get("delay")), shift_width=_ticks(shift["width"]),
+    )
+
+    if din.get("clock") != "clk_sipo":
+        errs.append(f"SIPO_LOAD/sipo_in: clock must be 'clk_sipo', got {din.get('clock')!r}")
+    if int(din.get("bits", 0)) != SIPO_BITS:
+        errs.append(f"SIPO_LOAD/sipo_in: bits must be {SIPO_BITS}")
+    if din.get("msb_first", True) is not True:
+        errs.append("SIPO_LOAD/sipo_in: must be msb_first (bit 135 first, sipo.sv shifts left)")
+    if pout.get("mode") != "serial" or pout.get("clock") != "clk_piso":
+        errs.append("PISO_READ/piso_out: must be mode: serial, clock: clk_piso")
+    if int(pout.get("bits", 0)) != PISO_BITS:
+        errs.append(f"PISO_READ/piso_out: bits must be {PISO_BITS}")
+    if pout.get("msb_first", True) is not True:
+        errs.append("PISO_READ/piso_out: must be msb_first (piso2 shifts out its MSB first)")
+
+    data_edge = din.get("data_edge", "falling")
+    cap_edge = pout.get("edge", "falling")
+    if data_edge not in EDGES or cap_edge not in EDGES:
+        errs.append(f"edges must be one of {EDGES}")
+    if data_edge == "rising":
+        warns.append("SIPO_LOAD/sipo_in: data_edge rising changes sipo_in 1 tick after the "
+                     "edge sipo.sv samples on -- 10 ns hold margin, chip hold time unknown")
+    if cap_edge == "rising":
+        errs.append("PISO_READ/piso_out: edge rising can't work with 168 clk_piso cycles: "
+                    "rising edge 1 is the load, so bit 1 must be read on falling edge 1")
+    warns.append("SIPO_LOAD/sipo_in data_edge and PISO_READ/piso_out edge are UNCONFIRMED (Dima)")
+
+    chip_delay = _ticks(pout.get("chip_delay"))
+    errs += [f"SIPO_LOAD: {e}" for e in check_sipo_load(sipo)]
+    errs += [f"PISO_READ: {e}" for e in check_piso_read(piso, chip_delay)]
+
+    try:
+        frame = _frame_from_setting(din)
+    except (FrameError, KeyError, TypeError, ValueError) as exc:
+        errs.append(f"SIPO_LOAD/sipo_in: {exc}")
+        frame = 0
+    tb = (doc.get("testbench") or {}).get("piso_stages") or []
+    try:
+        stages = tuple(PisoStage(**{k: int(v) for k, v in st.items()}) for st in tb)
+        if len(stages) != PISO_STAGES:
+            raise FrameError(f"need {PISO_STAGES} stages, got {len(stages)}")
+    except (FrameError, TypeError) as exc:
+        errs.append(f"testbench/piso_stages: {exc}")
+        stages = ()
+    if errs:
+        raise FrameError("; ".join(errs))
+
+    return Phase6Config(sipo_pins=sp, piso_pins=pp, sipo=sipo, piso=piso, sipo_frame=frame,
+                        sipo_data_edge=data_edge, piso_capture_edge=cap_edge,
+                        chip_delay_ticks=chip_delay, tb_piso_stages=stages,
+                        warnings=tuple(warns))

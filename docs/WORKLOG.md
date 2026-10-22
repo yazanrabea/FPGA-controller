@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | EXP-01 (Phase 4 hardware run, board not yet connected) + Phase 6 SIPO/PISO (6.0 done, 6.1-6.5 next) | `main` (direct pushes, per Rahaf) | `scripts/*`, `tools/nemo_ctl/gen_svh.py`, `fpga/src/gen/`, `docs/experiments/EXP-01*`; next: `tools/nemo_ctl/sipo_piso.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/phase6_sipo_piso_top.sv`, `fpga/tb/phase6_sipo_piso_tb.sv` |
-| Yazan | Phase 6 SIPO/PISO, starting with 6.1 (Python) on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `docs/WORKLOG.md` |
+| Yazan | Phase 6 SIPO/PISO: 6.1 + 6.2 done (Python) on his own laptop (no Vivado/Icarus there). **Overlaps Rahaf's Phase 6 row: agree who does 6.2-6.5 before either continues.** | `feature/yazan-phase6-sipo-piso` | `tools/nemo_ctl/sipo_piso.py`, `tools/nemo_ctl/gen_svh.py`, `config/phase6_sipo_piso.yaml`, `fpga/src/gen/phase6_cfg_pkg.sv`, `tools/nemo_ctl/tests/test_sipo_piso.py`, `tools/nemo_ctl/tests/test_phase6_config.py`, `docs/WORKLOG.md`, `docs/decisions.md` |
 
 ---
 
@@ -60,9 +60,55 @@ Tag every result **[simulated]** or **[measured on board]**.
   - Working on a feature branch, not pushing to `main` directly: Rahaf's direct-to-main
     rule was for her work; this is Yazan's laptop and the WORKLOG still lists Phase 6
     under Rahaf.
-- Next steps: agree with Rahaf who takes 6.2-6.5. 6.2 (YAML + `gen_svh.py`) can be done
-  without an HDL simulator; 6.3/6.4 (RTL top + testbench against Dima's blocks) need xsim
-  (lab PC, or Vivado/Icarus installed on this laptop) before they can be called done.
+- 6.1 pushed to `origin/feature/yazan-phase6-sipo-piso` (`7bc666c`).
+- **Step 6.2 (same session):**
+  - `config/phase6_sipo_piso.yaml` (new): `profiles.SIPO_LOAD` (rst_sipo PULSE active_low
+    100 ns @0; clk_sipo CLOCK 1 MHz, 136 cycles @1.1 us; sipo_in SERIAL 136 bits MSB-first,
+    data_edge falling, @1.08 us, frame sel_lo=0xA5 + slices 0x1111..0x8888; cs PULSE
+    active_high 1 us @137.1 us) and `profiles.PISO_READ` (rst_piso HIGH; clk_piso CLOCK
+    1 MHz, 168 cycles @0; shift PULSE active_high 167 us @750 ns; piso_out CAPTURE serial
+    168 bits MSB-first, edge falling, chip_delay 0 ns), plus `testbench.piso_stages` (4
+    stage values for 6.4). The numbers are exactly `build_sipo_load("1MHz")` /
+    `build_piso_read("1MHz")`. UNCONFIRMED fields are marked in the file.
+  - `tools/nemo_ctl/sipo_piso.py`: `load_phase6_config()` parses the YAML, checks pin
+    set/types, SERIAL/CAPTURE widths and bit order, edges and polarities, converts the
+    settings to `SipoLoadTiming`/`PisoReadTiming`, and runs the 6.1 rules. Errors raise
+    `FrameError` listing every problem; UNCONFIRMED choices come back as warnings.
+  - `tools/nemo_ctl/gen_svh.py`: new `--phase6` option (argparse; no option still makes
+    the Phase 4 package exactly as before) -> `generate_phase6()` writes
+    `fpga/src/gen/phase6_cfg_pkg.sv`: per-pin sig_cell localparams (TYPE, IDLE, DELAY,
+    PARAM_A/B, CYCLES, BITS) for the 7 driven pins, `SIPO_IN_DATA` (136 bits),
+    `SIPO_IN_SHIFT_ON_FALLING` / `PISO_OUT_CAPTURE_ON_FALLING` (strobe edge selects for 6.3),
+    piso_out cap_cell params, and testbench vectors: `SIPO_TB_SEL_AFTER_0..7` (Dima's
+    `sel[23:0]` after n phirst edges, Q1 quirk included) and `PISO_TB_STAGE{0..3}_*` +
+    `PISO_TB_FRAME`.
+  - `fpga/src/gen/phase6_cfg_pkg.sv` (new, generated and committed like `nemo_cfg_pkg.sv`).
+  - `tools/nemo_ctl/tests/test_phase6_config.py` (new, 20 tests): config == 1 MHz builders;
+    13 broken variants rejected with the right message (early cs, 135 cycles, late
+    sipo_in, LSB-first, early/short shift, rising capture edge, chip_delay too big, wrong
+    capture width, missing pin, wrong type, 3 stages, out-of-range stage value); non-RTL
+    polarity and rising data edge only warn; generated localparams/vectors parsed back
+    and compared.
+- Results (6.2):
+  - **[not hardware, not RTL simulation]** `python -m pytest tools/nemo_ctl/tests`:
+    144 passed, 1 skipped (101 existing + 23 from 6.1 + 20 new).
+  - Regenerating the Phase 4 package (`python -m nemo_ctl.gen_svh`) after the change:
+    `fpga/src/gen/nemo_cfg_pkg.sv` byte-identical (no git diff).
+  - **Not checked:** `phase6_cfg_pkg.sv` hasn't been parsed by any HDL tool (none on this
+    laptop). `scripts/create_project.tcl` globs `fpga/src/gen/*.sv`, so Vivado will also
+    compile this package into the Phase 4 project. It's plain localparams, but **if the
+    Phase 4 build on the lab PC breaks, check this file first.** Step 6.3/6.4 in xsim
+    will parse it.
+- Problems / fixes (6.2): my test helper's regex only parsed `'h` literals and missed
+  `1'b1`; fixed in the test. A first attempt to edit `gen_svh.py` through an inline bash
+  heredoc failed on shell quoting and changed nothing (checked with `git status`); redone
+  with the editor.
+- Decisions (6.2): see `docs/decisions.md`, "Phase 6: SIPO/PISO as profiles of the
+  generic cells, in their own config package".
+- Next steps: 6.3 `fpga/src/phase6_sipo_piso_top.sv` and 6.4
+  `fpga/tb/phase6_sipo_piso_tb.sv` (our controller + Dima's unmodified blocks). Both need
+  xsim (lab PC) or Icarus/Vivado installed on this laptop before they can be called done.
+  Still agree the split with Rahaf first: the WORKLOG lists Phase 6 under her too.
 
 ---
 

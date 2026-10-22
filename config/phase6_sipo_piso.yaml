@@ -1,0 +1,63 @@
+# Phase 6 (generic_controller_prompt.md §3): SIPO load and PISO read expressed as
+# profiles of the generic types, timed against Dima's RTL (fpga/reference/dima_blocks/).
+# Simulation config for fpga/src/phase6_sipo_piso_top.sv -- NOT a hardware config: there
+# is no chip-pin -> FMC LA_P map yet (config/nemo_config.yaml's pin_map is all null).
+#
+# Every delay is from RUN. Numbers below are tools/nemo_ctl/sipo_piso.py's
+# build_sipo_load("1MHz") / build_piso_read("1MHz") (test_phase6_config checks they
+# agree). Consumed by:  cd tools && python -m nemo_ctl.gen_svh --phase6
+#   -> fpga/src/gen/phase6_cfg_pkg.sv
+# The generator refuses to write the package if check_sipo_load/check_piso_read fail.
+#
+# UNCONFIRMED (Dima, docs/controller_spec.md Q6/Q7): which clk_sipo edge sipo_in should
+# change on, which clk_piso edge to sample piso_out on, whether the reset/cs/shift
+# polarities at the pad are the RTL's, max clk_sipo/clk_piso rate, chip_delay.
+
+profiles:
+  SIPO_LOAD:
+    # sipo.sv rst_n: active-low (RTL). Pad polarity UNCONFIRMED (Q6).
+    rst_sipo: {type: PULSE, width: 100ns, delay: 0, polarity: active_low}
+    # Starts high: exactly 136 rising edges (sipo.sv shifts on posedge), ends low.
+    clk_sipo: {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 136, delay: 1.1us}
+    # 2 ticks before clk_sipo, so bit 135 is stable at rising edge 1. Shifts on clk_sipo's
+    # data_edge (sig_cell shift_strobe = clk_sipo falling_edge): half a period of setup
+    # and hold around each rising edge.
+    sipo_in:
+      type: SERIAL
+      clock: clk_sipo
+      delay: 1.08us
+      bits: 136
+      msb_first: true
+      data_edge: falling     # UNCONFIRMED
+      frame:                 # packed by sipo_piso.pack_sipo_frame
+        sel_lo: 0xA5         # -> sel[7:0]
+        slices: [0x1111, 0x2222, 0x3333, 0x4444, 0x5555, 0x6666, 0x7777, 0x8888]
+                             # slices[k] -> parallel_out[8+16k +: 16]; slice 0 never
+                             # reaches sel (Q1), slice k after the k-th phirst edge
+    # sipo.sv clk_s: rising edge latches parallel_out. One period after edge 136.
+    cs: {type: PULSE, width: 1us, delay: 137.1us, polarity: active_high}
+
+  PISO_READ:
+    # piso2 rst_n: active-low, held inactive (the load edge overwrites every stage anyway).
+    rst_piso: {type: HIGH}
+    # Rising edge 1 = load (shift=0), edges 2..168 = shift.
+    clk_piso: {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 168, delay: 0}
+    # piso2 load: 1 = shift. Rises mid first low phase, high for 167 periods.
+    shift: {type: PULSE, width: 167us, delay: 750ns, polarity: active_high}
+    piso_out:
+      type: CAPTURE
+      mode: serial
+      clock: clk_piso
+      bits: 168
+      msb_first: true
+      edge: falling          # UNCONFIRMED. Falling edge 1 reads bit 1 before any shift.
+      chip_delay: 0ns        # clk_piso pad -> piso_out pad. UNKNOWN until measured.
+
+# Values the Phase 6.4 testbench drives into the 4 piso2 stages (PISO0 first); the
+# generated package also carries the 168-bit frame the capture must equal.
+testbench:
+  piso_stages:
+    - {out1: 0x3FFF, tdc_out1: 0x00, out0: 0x1234, tdc_out0: 0x7F}
+    - {out1: 0x0001, tdc_out1: 0x55, out0: 0x2AAA, tdc_out0: 0x01}
+    - {out1: 0x1555, tdc_out1: 0x2A, out0: 0x0000, tdc_out0: 0x40}
+    - {out1: 0x2001, tdc_out1: 0x7F, out0: 0x3FFE, tdc_out0: 0x00}

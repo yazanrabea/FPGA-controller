@@ -18,3 +18,9 @@ Each entry: date, decision, reason, rejected options.
 ## Vivado projects are generated, not committed
 - Decision: commit only sources, XDC, testbenches, Tcl and docs; rebuild projects with `scripts/create_project.tcl`.
 - Reason: generated files are large, machine-specific and cause merge conflicts between two people.
+
+## Phase 6: SIPO/PISO as profiles of the generic cells, in their own config package (2026-10-22, Yazan)
+- Decision: SIPO_LOAD / PISO_READ live in `config/phase6_sipo_piso.yaml` as ordinary per-pin settings (PULSE/CLOCK/SERIAL/HIGH/CAPTURE), generated into a separate `fpga/src/gen/phase6_cfg_pkg.sv` by `gen_svh.py --phase6`. The generator runs `sipo_piso.check_sipo_load` / `check_piso_read` first and writes nothing if a check fails.
+- Reason: the timing analysis (2026-10-19) showed the generic cells meet Dima's RTL timing, so no dedicated engine is needed. A separate package leaves `nemo_cfg_pkg.sv` and Phase 4 byte-identical. Checking before generating means a profile that would load or read a corrupted frame can't reach the RTL.
+- UNCONFIRMED choices are config fields, not hard-coded: `sipo_in.data_edge`, `piso_out.edge`, `piso_out.chip_delay`, and the rst/cs/shift polarities. A polarity different from Dima's RTL only warns, because the pad might invert (Q6). `piso_out.edge: rising` is an error, not a warning: with 168 clk_piso cycles, rising edge 1 is the load, so bit 1 can only be read on falling edge 1.
+- Rejected: dedicated SIPO/PISO engines; extending `nemo_cfg_pkg.sv`'s Phase 4 `pairs` schema to 136/168-bit SERIAL (would touch the Phase 4 build that EXP-01 is about to test on hardware); computing the delays inside the generator from a frequency alone (hides the per-pin timing the config is supposed to show).
