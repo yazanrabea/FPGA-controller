@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | Browser config editor (`cli gui`); JTAG link J1-J5 done earlier (EXP-02 + EXP-04 PASS) | `feature/yazan-config-gui` | `tools/nemo_ctl/{gui.py,data/config_gui.html,config.py,cli.py}`, `tools/nemo_ctl/tests/test_gui.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md` |
+| Yazan | Nothing in progress. Browser config editor (`cli gui`) merged to `main` 2026-10-23. | `main` | `tools/nemo_ctl/{gui.py,data/config_gui.html,config.py,cli.py}`, `tools/nemo_ctl/tests/test_gui.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -357,7 +357,8 @@ Tag every result **[simulated]** or **[measured on board]**.
   - **Not tested automatically:** clicking and typing in the page (only the API behind it is covered).
 - Problems / fixes: the test that pipes the page script to Node failed on Windows' default encoding (cp1252 can't encode "→"); it now passes `encoding="utf-8"`.
 - Decisions: `docs/decisions.md` "Config editor as a local browser form".
-- Next steps: Yazan tries it (`python -m nemo_ctl.cli gui` on a copy of the config) and reports anything unclear; merge to `main` when he's happy.
+- Yazan tried it on a copy of the config (`%TEMP%\my_test.yaml`) and asked to push it: `main` fast-forwarded to this branch 2026-10-23 (no partner review, as for the earlier phases).
+- Next steps: Rahaf reviews it on `main`; report anything unclear in the form.
 
 ---
 
