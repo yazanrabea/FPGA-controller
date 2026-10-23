@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | JTAG link J1-J5 done: EXP-02 + EXP-04 PASS over JTAG. Nothing in progress. | `main` | `fpga/src/link_ctrl.sv`, `fpga/tb/seq_engine_tb.sv`, `docs/{WORKLOG,HANDOFF,issues}.md`, `docs/experiments/EXP-03*` |
+| Yazan | Browser config editor (`cli gui`); JTAG link J1-J5 done earlier (EXP-02 + EXP-04 PASS) | `feature/yazan-config-gui` | `tools/nemo_ctl/{gui.py,data/config_gui.html,config.py,cli.py}`, `tools/nemo_ctl/tests/test_gui.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -329,6 +329,35 @@ Tag every result **[simulated]** or **[measured on board]**.
   register map stride (the map and the Python encoder stay as they are).
 - Next steps: EXP-01 then EXP-03 with someone at the board (both bitstreams are built);
   send Dima the questions; pick the PC-link option for EXP-02/EXP-04.
+
+---
+
+## 2026-10-23, Yazan, branch feature/yazan-config-gui
+- Goal: an easier way to edit the chip config than the question-by-question wizard (Yazan's request; he picked a browser form).
+- Done:
+  - `tools/nemo_ctl/gui.py` (new): local server on 127.0.0.1 (standard library). `GET /`, `/api/state`; `POST /api/check` (parse + `validate_config` + the `timing.py` achieved line per setting); `POST /api/save` (refused with errors; `.bak` kept; `save_config`). Host-header and JSON-only checks.
+  - `tools/nemo_ctl/data/config_gui.html` (new): the form.
+    - Mode tabs, one card per block, one row per pin (inputs and outputs).
+    - Type dropdown limited to the pin's allowed types, showing only that type's fields.
+    - Live achieved values and per-pin errors/warnings (350 ms after typing).
+    - Groups as pins or a bus value; DFT helper as in the wizard.
+    - Copy a block from another mode, clear a block, add a mode; Save/Reload, unsaved-changes warning; light and dark theme.
+  - `tools/nemo_ctl/config.py`: `config_from_dict()` split out of `load_config` (shared by both).
+  - `tools/nemo_ctl/cli.py`: `gui [--config] [--port] [--no-browser]`.
+  - `tools/nemo_ctl/tests/test_gui.py` (new, 11 tests):
+    - state; check vs `validate_config`; a bad value shown on its pin; an unparseable config;
+    - save refused with errors (file untouched, no .bak); save writes and keeps a .bak; unchanged round trip;
+    - the real server on a free port (page, state, check) and its Host/Content-Type refusals;
+    - the page's script parses (`node --check`); the CLI option.
+  - Docs: USER_MANUAL §3.5 + status row + 2 troubleshooting rows; `tools/nemo_ctl/README.md`; `docs/decisions.md`.
+- Hardware setup: none.
+- Results:
+  - **[not hardware]** pytest 224 passed, 1 skipped.
+  - Page rendered in headless Microsoft Edge against the example config: 7 block cards, 23 pin rows, 18 achieved-value lines, "0 errors · 4 warnings", matching `validate`. Screenshot checked; the polarity dropdown was clipped and was widened.
+  - **Not tested automatically:** clicking and typing in the page (only the API behind it is covered).
+- Problems / fixes: the test that pipes the page script to Node failed on Windows' default encoding (cp1252 can't encode "→"); it now passes `encoding="utf-8"`.
+- Decisions: `docs/decisions.md` "Config editor as a local browser form".
+- Next steps: Yazan tries it (`python -m nemo_ctl.cli gui` on a copy of the config) and reports anything unclear; merge to `main` when he's happy.
 
 ---
 

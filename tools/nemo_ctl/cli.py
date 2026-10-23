@@ -83,6 +83,12 @@ def cmd_import_excel(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    from .gui import serve
+    serve(Path(args.config), port=args.port, open_browser=not args.no_browser)
+    return 0
+
+
 def cmd_gen_template(args: argparse.Namespace) -> int:
     pin_db = load_pin_db()
     export_template(pin_db, Path(args.out), modes=tuple(args.modes))
@@ -389,6 +395,26 @@ def build_parser() -> argparse.ArgumentParser:
     gt.add_argument("--modes", nargs="+", default=["READ", "WRITE", "INFERENCE"],
                      help="which mode sheets to include (default: all three)")
     gt.set_defaults(func=cmd_gen_template)
+
+    gu = sub.add_parser(
+        "gui",
+        help="edit the config in your browser (a form instead of the wizard's questions)",
+        description=_wrap(
+            "Open a form in your browser to edit the config: one tab per mode, one row per "
+            "pin, a dropdown for the type and only the boxes that type needs. Shows achieved "
+            "values and validation messages as you type; Save writes the file (after "
+            "keeping a .bak copy). Runs a small server on this PC only (127.0.0.1); stop it "
+            "with Ctrl+C. See docs/USER_MANUAL.md section 3.5."
+        ),
+        formatter_class=_RDF,
+    )
+    gu.add_argument("--config", default=str(DEFAULT_CONFIG_PATH),
+                    help=f"YAML config to edit (default: {DEFAULT_CONFIG_PATH})")
+    gu.add_argument("--port", type=int, default=8765,
+                    help="local port for the page (default: 8765; 0 = any free port)")
+    gu.add_argument("--no-browser", action="store_true",
+                    help="don't open the browser, just print the address")
+    gu.set_defaults(func=cmd_gui)
 
     # ---- link: Phase 5 runtime link over a real USB-UART serial port ----
     # needs actual hardware (a programmed board + a confirmed serial port) -- see

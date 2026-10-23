@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEMO Config Editor</title>
+<style>
+/* Layout: sticky toolbar (file, counts, Validate/Save), mode tabs, then one card per chip block with a row per pin */
+:root {
+  --bg: #f4f6f5; --surface: #ffffff; --surface-2: #eef2f0; --ink: #1c2420; --muted: #5d6a63;
+  --rule: #d5ddd8; --accent: #276749; --accent-ink: #ffffff; --error: #b42318; --error-soft: #fdeceb;
+  --warn: #8a5a12; --warn-soft: #fbf1df; --ok: #276749;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #121715; --surface: #1a201d; --surface-2: #222a26; --ink: #e2e8e4; --muted: #98a59e;
+    --rule: #2f3934; --accent: #6fbf97; --accent-ink: #0f1a14; --error: #f08a80; --error-soft: #3a1f1c;
+    --warn: #e2b46a; --warn-soft: #33291a; --ok: #6fbf97; color-scheme: dark; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
+header { position: sticky; top: 0; z-index: 5; background: var(--surface); border-bottom: 1px solid var(--rule);
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+header h1 { font-size: 16px; margin: 0; }
+.path { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.spacer { flex: 1; }
+.counts { font-size: 13px; color: var(--muted); }
+.counts b.e { color: var(--error); } .counts b.w { color: var(--warn); }
+button { font: inherit; border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  border-radius: 5px; padding: 6px 12px; cursor: pointer; }
+button:hover { background: var(--surface-2); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+.status { font-size: 13px; padding: 8px 12px; border-radius: 5px; background: var(--surface-2); }
+.status.err { background: var(--error-soft); color: var(--error); }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tab { border-radius: 16px; padding: 5px 14px; }
+.tab.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.newmode { display: flex; gap: 6px; }
+.card { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.card > .head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 14px;
+  background: var(--surface-2); border-bottom: 1px solid var(--rule); }
+.card > .head h2 { font-size: 15px; margin: 0; }
+.card > .head .acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; }
+.row { display: grid; grid-template-columns: 170px 150px 1fr; gap: 6px 12px; padding: 10px 14px;
+  border-bottom: 1px solid var(--rule); align-items: start; }
+.row:last-child { border-bottom: 0; }
+.row.nested { padding-left: 34px; background: var(--surface-2); }
+.pname { font: 600 13px var(--mono); overflow-wrap: anywhere; }
+.badge { display: inline-block; font: 500 10px/1 var(--mono); padding: 2px 5px; border-radius: 3px;
+  background: var(--surface-2); color: var(--muted); margin-left: 4px; vertical-align: 1px; }
+.note { grid-column: 1 / -1; font-size: 12px; color: var(--muted); margin-top: -2px; }
+.fields { display: flex; flex-wrap: wrap; gap: 8px 12px; min-width: 0; }
+.f { display: grid; gap: 2px; font-size: 11px; color: var(--muted); }
+.f input[type=text], .f input[type=number], .f select { font: 13px var(--mono); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--rule); border-radius: 4px; padding: 4px 6px; width: 120px; }
+.f input.wide { width: 260px; }
+.f select { width: auto; min-width: 120px; }
+.f label.chk { display: flex; gap: 4px; align-items: center; font-size: 13px; color: var(--ink); padding-top: 4px; }
+select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--surface); color: var(--ink); }
+.out { grid-column: 2 / -1; font: 12px var(--mono); color: var(--ok); overflow-wrap: anywhere; }
+.out.bad { color: var(--error); }
+.iss { grid-column: 1 / -1; display: grid; gap: 3px; }
+.iss div { font-size: 12px; padding: 3px 8px; border-radius: 4px; }
+.iss .error { background: var(--error-soft); color: var(--error); }
+.iss .warning { background: var(--warn-soft); color: var(--warn); }
+.global .iss { padding: 10px 14px; }
+.empty { padding: 12px 14px; color: var(--muted); font-size: 13px; }
+@media (max-width: 720px) {
+  .row { grid-template-columns: 1fr; }
+  .out { grid-column: 1; }
+  .f input.wide { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>NEMO Config Editor</h1>
+  <span class="path" id="path">loading…</span>
+  <span class="spacer"></span>
+  <span class="counts" id="counts"></span>
+  <button id="reload" type="button" title="Discard changes and re-read the file">Reload</button>
+  <button id="save" type="button" class="primary">Save</button>
+</header>
+<main>
+  <div class="status" id="status">Loading the config…</div>
+  <div class="tabs" id="tabs"></div>
+  <div id="blocks"></div>
+</main>
+<script>
+"use strict";
+// ---- state ------------------------------------------------------------------
+let S = null;            // server state: {path, modes, pins, groups, dft_signals}
+let modes = {};          // the config being edited: {mode: {block: {key: setting}}}
+let cur = null;          // current mode tab
+let dirty = false;
+let lastCheck = null;    // last /api/check result
+let checkTimer = null;
+
+const TYPE_LABEL = {LOW: "0 (constant low)", HIGH: "1 (constant high)", PULSE: "pulse", CLOCK: "clock",
+                    SERIAL: "serial", CAPTURE: "capture"};
+const FIELDS = {
+  PULSE:  [["width", "width", "text", "e.g. 1us"], ["delay", "delay after RUN", "text", "0"],
+           ["polarity", "polarity", "select", ["", "active_high", "active_low"]],
+           ["repeat", "repeat count", "int", "1"], ["period", "repeat period", "text", ""]],
+  CLOCK:  [["freq", "frequency", "text", "e.g. 1MHz"], ["duty", "duty", "text", "50%"],
+           ["cycles", "cycles (blank = forever)", "int", ""], ["delay", "delay after RUN", "text", "0"]],
+  SERIAL: [["clock", "shifts on clock pin", "clock", ""], ["data", "data (hex)", "wide", "0xA5"],
+           ["bits", "bits", "int", ""], ["msb_first", "MSB first", "bool", true],
+           ["data_edge", "data changes on", "select", ["falling", "rising"]]],
+  CAPTURE:[["mode", "capture", "select", ["level", "edge_count", "period", "serial"]],
+           ["clock", "sampled on clock pin", "clock", ""], ["bits", "bits", "int", ""],
+           ["edge", "on edge", "select", ["falling", "rising"]]],
+};
+const CAPTURE_SERIAL_ONLY = new Set(["clock", "bits", "edge"]);
+
+const $ = (id) => document.getElementById(id);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null && v !== false) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids) if (k !== null && k !== undefined) e.append(k);
+  return e;
+}
+const clone = (o) => JSON.parse(JSON.stringify(o));
+
+// ---- server ------------------------------------------------------------------
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} :
+    {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+  return r.json();
+}
+function doc() { return {modes: modes, pin_map: S.pin_map}; }
+
+async function load() {
+  try {
+    S = await api("/api/state");
+  } catch (e) {
+    setStatus("Could not reach the editor's server. Is `python -m nemo_ctl.cli gui` still running?", true);
+    return;
+  }
+  modes = clone(S.modes || {});
+  if (!Object.keys(modes).length) modes.INFERENCE = {};
+  cur = cur && modes[cur] ? cur : (modes.INFERENCE ? "INFERENCE" : Object.keys(modes)[0]);
+  dirty = false;
+  $("path").textContent = S.path;
+  render();
+  await check();
+  setStatus("Loaded. Changes are checked as you type; Save writes the file.");
+}
+
+function changed() {
+  dirty = true;
+  clearTimeout(checkTimer);
+  checkTimer = setTimeout(check, 350);
+}
+
+async function check() {
+  try { lastCheck = await api("/api/check", doc()); }
+  catch (e) { setStatus("Check failed: " + e.message, true); return; }
+  showResults();
+}
+
+async function save() {
+  let r;
+  try { r = await api("/api/save", doc()); }
+  catch (e) { setStatus("Save failed: " + e.message, true); return; }
+  lastCheck = r; showResults();
+  if (r.saved) { dirty = false; setStatus(r.message); } else setStatus(r.message, true);
+}
+
+function setStatus(text, err) { const s = $("status"); s.textContent = text; s.className = "status" + (err ? " err" : ""); }
+
+// ---- helpers over the pin list ----------------------------------------------------
+function blockOrder() { const seen = []; for (const p of S.pins) if (!seen.includes(p.block)) seen.push(p.block); return seen; }
+function pinsOf(block) { return S.pins.filter((p) => p.block === block); }
+function groupOf(name) { for (const [g, m] of Object.entries(S.groups)) if (m.includes(name)) return g; return null; }
+function blk(block) { modes[cur][block] = modes[cur][block] || {}; return modes[cur][block]; }
+function clockPins() {
+  const out = [];
+  for (const b of Object.values(modes[cur] || {})) for (const [k, v] of Object.entries(b)) if (v && v.type === "CLOCK") out.push(k);
+  return out;
+}
+function dftHelperOn() { return !!(modes[cur]["DFT - All"] || {}).dft_select; }
+
+// ---- render ------------------------------------------------------------------------
+function render() {
+  renderTabs();
+  const host = $("blocks"); host.replaceChildren();
+  host.append(el("div", {class: "card global", id: "global"}));
+  for (const b of blockOrder()) host.append(renderBlock(b));
+  showResults();
+}
+
+function renderTabs() {
+  const t = $("tabs"); t.replaceChildren();
+  for (const m of Object.keys(modes)) {
+    t.append(el("button", {type: "button", class: "tab" + (m === cur ? " on" : ""),
+      onclick: () => { cur = m; render(); }}, m));
+  }
+  const inp = el("input", {type: "text", id: "newmode", placeholder: "new mode name", "aria-label": "New mode name"});
+  t.append(el("span", {class: "newmode"}, inp, el("button", {type: "button", onclick: () => {
+    const n = inp.value.trim().toUpperCase();
+    if (!n) return;
+    if (!/^[A-Z0-9_]+$/.test(n)) { setStatus("Mode names: letters, digits and _ only.", true); return; }
+    if (!modes[n]) modes[n] = {};
+    cur = n; changed(); render();
+  }}, "Add mode")));
+}
+
+function renderBlock(block) {
+  const card = el("section", {class: "card"});
+  const copySel = el("select", {"aria-label": `Copy ${block} from mode`},
+    el("option", {value: ""}, "copy from…"), ...Object.keys(modes).filter((m) => m !== cur).map((m) => el("option", {value: m}, m)));
+  copySel.addEventListener("change", () => {
+    const from = copySel.value; if (!from) return;
+    if (modes[from][block]) modes[cur][block] = clone(modes[from][block]); else delete modes[cur][block];
+    changed(); render(); setStatus(`Copied block ${block} from ${from}.`);
+  });
+  card.append(el("div", {class: "head"}, el("h2", {}, block),
+    el("span", {class: "acts"}, copySel, el("button", {type: "button", onclick: () => {
+      delete modes[cur][block]; changed(); render(); setStatus(`Cleared block ${block} in ${cur}.`);
+    }}, "Clear block"))));
+  const done = new Set();
+  for (const p of pinsOf(block)) {
+    const g = groupOf(p.name);
+    if (g) { if (!done.has(g)) { done.add(g); card.append(...renderGroup(block, g)); } }
+    else card.append(renderPin(block, p, false));
+  }
+  if (block === "DFT - All" && dftHelperOn()) card.append(renderDftHelper());
+  return card;
+}
+
+function renderPin(block, p, nested) {
+  const b = blk(block);
+  const s = b[p.name];
+  const row = el("div", {class: "row" + (nested ? " nested" : ""), "data-key": `${block}\u0000${p.name}`});
+  const types = p.allowed.filter((t) => t !== "BUS");
+  const sel = el("select", {class: "type", "aria-label": `${p.name} type`},
+    el("option", {value: ""}, "— not set —"), ...types.map((t) => el("option", {value: t}, TYPE_LABEL[t] || t)));
+  sel.value = s ? s.type : "";
+  sel.addEventListener("change", () => {
+    if (!sel.value) delete b[p.name];
+    else b[p.name] = defaults(p, sel.value);
+    changed(); render();
+  });
+  row.append(el("div", {class: "pname"}, p.name, p.direction === "out" ? el("span", {class: "badge"}, "output") : null), sel,
+             el("div", {class: "fields"}, ...(s ? renderFields(p, s) : [])));
+  if (p.notes) row.append(el("div", {class: "note"}, p.notes));
+  row.append(el("div", {class: "out"}), el("div", {class: "iss"}));
+  return row;
+}
+
+function defaults(p, type) {
+  const s = {type};
+  if (type === "PULSE") { s.width = "1us"; if (p.polarity) s.polarity = p.polarity; }
+  if (type === "CLOCK") { s.freq = "1MHz"; s.duty = "50%"; if (p.limits.cycles) s.cycles = p.limits.cycles; }
+  if (type === "SERIAL") { const c = clockPins(); s.clock = c[0] || ""; s.data = "0x0"; s.msb_first = true; s.data_edge = "falling";
+                           if (p.limits.frame_bits) s.bits = p.limits.frame_bits; }
+  if (type === "CAPTURE") { s.mode = p.limits.frame_bits ? "serial" : "level";
+                            if (p.limits.frame_bits) { s.bits = p.limits.frame_bits; s.clock = clockPins()[0] || ""; s.edge = "falling"; } }
+  return s;
+}
+
+function renderFields(p, s) {
+  const defs = FIELDS[s.type] || [];
+  const out = [];
+  for (const [key, label, kind, extra] of defs) {
+    if (s.type === "CAPTURE" && CAPTURE_SERIAL_ONLY.has(key) && s.mode !== "serial") continue;
+    const id = `f_${cur}_${p.name}_${key}`;
+    let input;
+    if (kind === "select") {
+      input = el("select", {id}, ...extra.map((v) => el("option", {value: v}, v === "" ? `default (${p.polarity || "active_high"})` : v)));
+      input.value = s[key] ?? extra[0];
+      input.addEventListener("change", () => { setField(s, key, input.value); if (key === "mode") render(); else changed(); });
+    } else if (kind === "clock") {
+      const opts = Array.from(new Set([...clockPins(), ...(s[key] ? [s[key]] : [])]));
+      input = el("select", {id}, el("option", {value: ""}, "— pick —"), ...opts.map((v) => el("option", {value: v}, v)));
+      input.value = s[key] || "";
+      input.addEventListener("change", () => { setField(s, key, input.value); changed(); });
+    } else if (kind === "bool") {
+      input = el("input", {type: "checkbox", id});
+      input.checked = s[key] !== false;
+      input.addEventListener("change", () => { s[key] = input.checked; changed(); });
+      out.push(el("div", {class: "f"}, el("label", {class: "chk", for: id}, input, label)));
+      continue;
+    } else {
+      input = el("input", {type: kind === "int" ? "number" : "text", id, placeholder: extra || "",
+                           class: kind === "wide" ? "wide" : null, min: kind === "int" ? "0" : null});
+      input.value = s[key] ?? "";
+      input.addEventListener("input", () => {
+        const v = input.value.trim();
+        setField(s, key, kind === "int" ? (v === "" ? "" : parseInt(v, 10)) : v);
+        changed();
+      });
+    }
+    out.push(el("div", {class: "f"}, el("label", {for: id}, label), input));
+  }
+  return out;
+}
+
+function setField(s, key, v) { if (v === "" || v === null || Number.isNaN(v)) delete s[key]; else s[key] = v; }
+
+function renderGroup(block, g) {
+  const members = S.groups[g];
+  const b = blk(block);
+  const isDft = g === "b_dft" || g === "s_dft";
+  const viaHelper = isDft && dftHelperOn();
+  const modeNow = viaHelper ? "dft" : (b[g] ? "bus" : "pins");
+  const row = el("div", {class: "row", "data-key": `${block}\u0000${g}`});
+  const sel = el("select", {class: "type", "aria-label": `${g} group`},
+    el("option", {value: "pins"}, "pins one by one"), el("option", {value: "bus"}, "one bus value"),
+    isDft ? el("option", {value: "dft"}, "DFT helper") : null);
+  sel.value = modeNow;
+  sel.addEventListener("change", () => {
+    clearDftHelper();
+    if (sel.value === "bus") { for (const m of members) delete b[m]; b[g] = {type: "BUS", value: 0}; }
+    else if (sel.value === "pins") { delete b[g]; }
+    else { setDftHelper(0, S.dft_signals[0]); }
+    changed(); render();
+  });
+  const fields = [];
+  if (modeNow === "bus") {
+    const id = `f_${cur}_${g}_value`;
+    const inp = el("input", {type: "text", id, placeholder: "0b011, 0x3 or 3"});
+    inp.value = "0b" + Number(b[g].value || 0).toString(2).padStart(members.length, "0");
+    inp.addEventListener("input", () => {
+      const v = inp.value.trim().toLowerCase();
+      const n = v.startsWith("0b") ? parseInt(v.slice(2), 2) : v.startsWith("0x") ? parseInt(v.slice(2), 16) : parseInt(v, 10);
+      b[g].value = Number.isNaN(n) ? v : n; changed();
+    });
+    fields.push(el("div", {class: "f"}, el("label", {for: id}, `value (bit 0 = ${members[0]})`), inp));
+  } else if (modeNow === "dft") {
+    fields.push(el("div", {class: "f"}, "set by the DFT helper (in DFT - All)"));
+  }
+  row.append(el("div", {class: "pname"}, g, el("span", {class: "badge"}, "group")), sel,
+             el("div", {class: "fields"}, ...fields),
+             el("div", {class: "note"}, members.join(", ")), el("div", {class: "out"}), el("div", {class: "iss"}));
+  const rows = [row];
+  if (modeNow === "pins") for (const m of members) rows.push(renderPin(block, S.pins.find((p) => p.name === m), true));
+  return rows;
+}
+
+function clearDftHelper() {
+  if (modes[cur]["DFT - All"]) delete modes[cur]["DFT - All"].dft_select;
+}
+function setDftHelper(adc, signal) {
+  // same as the wizard: the helper replaces both DFT groups and their pins in this mode
+  for (const g of ["b_dft", "s_dft"]) for (const bl of Object.values(modes[cur])) {
+    delete bl[g]; for (const m of S.groups[g]) delete bl[m];
+  }
+  blk("DFT - All").dft_select = {adc, signal};
+}
+
+function renderDftHelper() {
+  const ds = modes[cur]["DFT - All"].dft_select;
+  const row = el("div", {class: "row", "data-key": `DFT - All\u0000dft_select`});
+  const adc = el("select", {id: `f_${cur}_dft_adc`}, ...[0,1,2,3,4,5,6,7].map((i) => el("option", {value: i}, `ADC ${i}`)));
+  adc.value = ds.adc;
+  adc.addEventListener("change", () => { ds.adc = parseInt(adc.value, 10); changed(); });
+  const sig = el("select", {id: `f_${cur}_dft_sig`}, ...S.dft_signals.map((v) => el("option", {value: v}, v)));
+  sig.value = ds.signal;
+  sig.addEventListener("change", () => { ds.signal = sig.value; changed(); });
+  row.append(el("div", {class: "pname"}, "dft_select", el("span", {class: "badge"}, "helper")),
+    el("div", {}, ""), el("div", {class: "fields"},
+      el("div", {class: "f"}, el("label", {for: adc.id}, "ADC pair"), adc),
+      el("div", {class: "f"}, el("label", {for: sig.id}, "signal"), sig)),
+    el("div", {class: "note"}, "Picks b0-2_dft and s0-3_dft for you. The mapping is UNCONFIRMED until Dima checks it."),
+    el("div", {class: "out"}), el("div", {class: "iss"}));
+  return row;
+}
+
+// ---- results ----------------------------------------------------------------------------
+function showResults() {
+  const r = lastCheck;
+  const counts = $("counts");
+  if (!r) { counts.textContent = ""; return; }
+  counts.replaceChildren(el("b", {class: "e"}, `${r.errors} error${r.errors === 1 ? "" : "s"}`), " · ",
+                         el("b", {class: "w"}, `${r.warnings} warning${r.warnings === 1 ? "" : "s"}`),
+                         dirty ? " · unsaved changes" : "");
+  $("save").disabled = !!(r.parse_error || r.errors);
+  const placed = new Set();
+  for (const row of document.querySelectorAll(".row[data-key]")) {
+    const [block, key] = row.dataset.key.split("\u0000");
+    const sum = ((r.summaries[cur] || {})[block] || {})[key];
+    const out = row.querySelector(".out");
+    out.textContent = sum ? "→ " + sum.text : "";
+    out.className = "out" + (sum && !sum.ok ? " bad" : "");
+    const iss = row.querySelector(".iss"); iss.replaceChildren();
+    r.issues.forEach((i, n) => {
+      if (i.mode === cur && i.block === block && i.key === key) { iss.append(el("div", {class: i.level}, i.message)); placed.add(n); }
+    });
+  }
+  const g = $("global"); if (!g) return;
+  const rest = r.issues.filter((i, n) => !placed.has(n) && (i.mode === cur || i.level === "error"));
+  g.replaceChildren(el("div", {class: "head"}, el("h2", {}, r.parse_error ? "Can't read the config" : `Other messages (${cur} and errors in other modes)`)));
+  const box = el("div", {class: "iss"});
+  if (r.parse_error) box.append(el("div", {class: "error"}, r.parse_error));
+  for (const i of rest) box.append(el("div", {class: i.level}, `${i.mode} / ${i.block} / ${i.key}: ${i.message}`));
+  if (!r.parse_error && !rest.length) g.append(el("div", {class: "empty"}, "None."));
+  else g.append(box);
+  if (!r.parse_error && !rest.length) g.querySelector(".head h2").textContent = "Other messages";
+}
+
+$("save").addEventListener("click", save);
+$("reload").addEventListener("click", () => { if (!dirty || window.confirm("Discard unsaved changes?")) load(); });
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+load();
+</script>
+</body>
+</html>

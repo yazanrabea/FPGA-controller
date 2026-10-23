@@ -19,7 +19,7 @@ want to understand *why* it's built this way, read `CLAUDE.md` and
 |---|---|---|---|
 | 0 | Spec: pin table, config schema, link choice | Done, approved | Read `docs/controller_spec.md` |
 | 1 | Config file + Python core (load/validate/preview) | Done | §2 below |
-| 2 | Interactive CLI wizard | Done | §3 below |
+| 2 | Interactive CLI wizard, and a browser form for the same config | Done | §3 below (form: §3.5) |
 | 3 | RTL cells (`sig_cell`/`cap_cell`/`run_ctrl`) + testbenches | Done, **simulated only** | §4 below |
 | 4 | Top-level design + compile-time config | RTL/software done, **hardware step not run** | §5 below (build + simulate now; wiring/measuring needs you) |
 | 5 | Runtime link (framed UART protocol, register file, Python client + CLI) | RTL/software done, **simulated only, hardware step not run** | §6 below (talk to it once §5's board is actually built and wired; the link itself needs its own build/wiring too, see §6.1) |
@@ -223,6 +223,43 @@ helper from `docs/controller_spec.md` §4, and it is explicitly **unconfirmed**
 
 At the end it validates (same checks as §2.1, printed the same way) and saves. Add
 `--excel out.xlsx` to the `wizard` command to also export an Excel copy once it's done.
+
+### 3.5 The easier way: edit the config in your browser
+
+The same config, as a form instead of a list of questions. From inside `tools/`:
+
+```
+python -m nemo_ctl.cli gui
+```
+
+Your browser opens on a page (if it doesn't, open the address it prints, normally
+`http://127.0.0.1:8765/`). Leave the terminal open while you work; **Ctrl+C** there stops
+it. To edit another file: `--config ..\config\other.yaml`. Try it on a copy first, as
+with the wizard.
+
+- **Tabs at the top** pick the mode (READ / WRITE / INFERENCE). *Add mode* makes a new one.
+- **One card per block** (Clock Generator, SIPO, PISO, ...). *copy from…* copies the whole
+  block from another mode; *Clear block* empties it.
+- **One row per pin.** Pick the type from the dropdown: only the types that pin allows are
+  listed. Then fill in only the boxes that appear (frequency, width, delay, data, ...).
+  Leave a box empty for its default. Units are the same as the wizard's (`1MHz`, `500ns`,
+  `2us`, `50%`).
+- **Under each pin**, a green line shows what the FPGA will really make (e.g. `achieved
+  1.0000 MHz (+0.00%)`); errors (red) and warnings (amber) for that pin appear right there.
+  Messages that don't belong to one pin are under *Other messages* at the top.
+- **Groups** (`s_p`, `b_dft`, `s_dft`): set the pins one by one, or as one bus value (`0b011`,
+  `0x3` or `3`; bit 0 is the first pin listed). For the DFT groups, *DFT helper* picks them
+  from "ADC k, signal X" (UNCONFIRMED mapping, as in §3.3).
+- **Outputs** (`sipo_out`, `piso_out`, `dft0_buff`, `dft1_buff`) are shown too, as capture
+  settings.
+- **Save** is greyed out while there are errors. Warnings don't block it; most are the
+  TBD / UNCONFIRMED notes. Saving keeps the previous file as `<name>.yaml.bak` and, like the
+  wizard, drops the comments in the YAML file.
+- **Reload** throws away unsaved changes and re-reads the file. The top bar says
+  "unsaved changes" until you save.
+
+The page only works on this PC: the server listens on `127.0.0.1`, so nothing on the
+network can reach it.
 
 ## 4. Phase 3 — running the RTL simulations
 
@@ -669,6 +706,8 @@ Simulation (no board needed): `scripts/run_phase7_sim.sh` ends with
 | EXP-03: LD5 (FAULT) on with every jumper in | A wait timed out: a loopback isn't reading back (loose jumper, wrong header row, VADJ not 1V8) | LD0–LD2 show which step; check that step's jumper |
 | `seq load` raises `device refused the table` | A sequence was still running, so the board ignored the writes | `seq stop`, then load again |
 | `seq run --wait` prints `late` | A step ended before the next one could be fetched (~0.4 µs) | Expected for very short steps (the demo's `confirm`); lengthen the step if exact timing there matters |
+| `gui` stops with `OSError: [WinError 10048]` (address already in use) | Another editor or program already uses port 8765 | Stop the other one (Ctrl+C), or pass `--port 8766` |
+| The `gui` page says it can't reach the server | The terminal running `gui` was closed or stopped | Run `python -m nemo_ctl.cli gui` again and reload the page |
 | `link.NackError` | The device NACKed — either a bad checksum got through somehow, or you sent `LOAD_MODE` (permanently unimplemented) | Check `--baud` and wiring (a bad checksum from clean code usually means a framing/timing problem, not a logic bug); don't use `LOAD_MODE` |
 
 ## 10. Where things live (quick reference)

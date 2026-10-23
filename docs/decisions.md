@@ -81,3 +81,9 @@ Each entry: date, decision, reason, rejected options.
 - Rejected for now: (a) USB-UART adapter on Pmod JA (needs hardware we don't have; still the cheapest switch later, since `link_frame.sv` stays the same); (b) the onboard J14 USB-UART via the ARM PS (needs a block design + software, against CLAUDE.md §4's no-block-design rule).
 - Status: plan J1-J5 approved by Yazan 2026-10-22, **all done 2026-10-22**: J1 feasibility (EXP-05), J2 bridge RTL, J3 JTAG link tops, J4 Python transport, J5 = EXP-02 and EXP-04 PASS over JTAG on the board.
 - Sub-decision (2026-10-22, from EXP-05): use BSCANE2 **USER4** (IR `0x23`), not USER1. hw_server scans USER1 on its own and overwrote the register there. Rejected: USER1 + relying on `jtag lock` (protects only while our session holds the lock).
+
+## Config editor as a local browser form (2026-10-23, Yazan)
+- Decision: `python -m nemo_ctl.cli gui` serves a form for the config on 127.0.0.1, standard-library Python only (`http.server`, no web framework), and the page uses no external libraries or fonts. It uses the same parser (`config_from_dict`, now shared with `load_config`), checks (`validate_config`), achieved values (`timing.py`) and writer (`save_config`) as the wizard.
+- Reason: Yazan found the question-by-question wizard hard to use, and chose a browser form over a friendlier terminal wizard or a better Excel template. A form shows everything at once, shows only the boxes a type needs, and puts errors next to their pin. It needs nothing installed and works offline on the lab PC.
+- Rejected: Flask or another framework (one more dependency); a hosted web page (it can't read or write the local YAML file); tkinter (harder to make clear and to test).
+- Safety: binds 127.0.0.1 only, checks the Host header, POSTs must be JSON; Save refuses a config with errors and keeps a `.bak`.

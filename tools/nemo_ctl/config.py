@@ -76,6 +76,12 @@ def load_config(path: Path | None = None) -> Config:
     path = path or DEFAULT_CONFIG_PATH
     with open(path) as f:
         doc = yaml.safe_load(f) or {}
+    return config_from_dict(doc)
+
+
+def config_from_dict(doc: dict) -> Config:
+    """The parsed-YAML shape ({"modes": ..., "pin_map": ...}) -> Config. Shared by
+    load_config and the browser form (gui.py), so both accept exactly the same data."""
     modes: dict[str, dict[str, dict[str, PinSetting]]] = {}
     for mode_name, mode_body in (doc.get("modes") or {}).items():
         mode_body = mode_body or {}
