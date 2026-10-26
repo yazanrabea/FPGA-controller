@@ -31,7 +31,7 @@ on the board. Plan approved; full detail in the WORKLOG entries "chip pipeline s
 | C2 | `sequence.chip_target()`: 22 sig + 4 cap cells named as the chip signals; `sipo_in` 136-bit on `clk_sipo`, `piso_out` 168-bit on `clk_piso` (edges UNCONFIRMED, parameters); 1024-byte step entries (534 used); `SeqLink.load` sends 128-byte chunks | **Done** |
 | C3 | `python -m nemo_ctl.gen_svh --chip` -> `fpga/src/gen/chip_pkg.sv` + **`fpga/constraints/chip_top.xdc`**, generated from `pin_map` (never edit by hand). DRIVE 4 + SLEW SLOW on `chip_out[*]`, PULLDOWN on `chip_in[*]` | **Done** |
 | C4 | **`fpga/src/chip_top.sv`**; `fpga/tb/chip_top_tb.sv` (`scripts/run_chip_sim.sh`, table `config/chip_sim_test.yaml`) **11/11 [simulated]**: exact 136-bit SIPO frame, setup / hold 480 / 520 ns, 168-bit PISO read back over JTAG. **Bitstream builds**, timing met (+0.112 ns); I/O report confirms DRIVE 4 / SLOW / PULLDOWN on the right pins | **Done**, not on the board |
-| C5 | **Rahaf's request**: what she sets in the editor must be what comes out of the pins. (1) converter: an editor *mode* (`nemo_config.yaml` modes) -> a *sequence* for `chip_top` (step 0 = idle, step 1 = the mode's settings); (2) `python -m nemo_ctl.cli run-mode --mode <M> --jtag` (convert, load over J17, run); (3) **EXP-07**: program `chip_top`, run a mode, compare the **logic analyser** (MSO-X 2002A, D0-D7, threshold 0.9 V) with the editor's **Signals panel**, pin by pin. This also does the first check of the 17 unverified output pins (LA05-15, LA20-25) | **Next.** Asked Rahaf, not answered: OK to start C5? Add a "Run on board" button to Yazan's GUI, or leave it to him? |
+| C5 | **Rahaf's request**: what she sets in the editor must be what comes out of the pins. (1) converter: an editor *mode* (`nemo_config.yaml` modes) -> a *sequence* for `chip_top` (step 0 = idle, step 1 = the mode's settings); (2) `python -m nemo_ctl.cli run-mode --mode <M> --jtag` (convert, load over J17, run); (3) **EXP-07**: program `chip_top`, run a mode, compare the **logic analyser** (MSO-X 2002A, D0-D7, threshold 0.9 V) with the editor's **Signals panel**, pin by pin. This also does the first check of the 17 unverified output pins (LA05-15, LA20-25) | **PC side done 2026-10-26**: `tools/nemo_ctl/mode_seq.py`, `cli run-mode` (USER_MANUAL §8.7), tests `test_mode_seq.py` 15/15. **EXP-07 planned, not run** (`docs/experiments/EXP-07_chip_top_mode_vs_editor.md`): waits for Rahaf's OK to program `chip_top`. Open: a "Run on board" button in Yazan's GUI (default: leave it to him) |
 | C6 | **EXP-08 "virtual chip"**: Dima's SIPO/PISO models inside the FPGA, wired by jumpers to the controller's SIPO/PISO pins. Uses a variant without the 7 DFT outputs (pin budget). Risk: `sipo_wrapper.sv`'s load inside its async reset may not synthesize. Then write a labelled synthesizable equivalent (don't edit Dima's file) | Planned |
 
 Rule kept throughout: stop for Rahaf's OK before each board step.
@@ -134,7 +134,7 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## Last verified results
 
-- pytest (from `tools/`): 257 passed, 1 skipped.
+- pytest (from `tools/`): 272 passed, 1 skipped.
 - [simulated, xsim]:
   - Phase 3: 28 / 16 / 9 / 16.
   - Phase 4: 21 + `phase4_serial_tb` 2.
@@ -154,7 +154,7 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## What to do next
 
-0. **Chip pipeline C5** (above), once Rahaf OKs it. Then C6.
+0. **EXP-07** (C5 on the board, procedure written), once Rahaf OKs it. Then C6.
 1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent).
    Rahaf postponed it on 2026-10-26, but it is the critical path for the pins' *meaning*
    (polarities, edges, widths, rates; the map itself is decided, C1), the chip's **input rating below ground** (needed to judge the -0.41 V), the real

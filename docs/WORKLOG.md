@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); next C5 (mode -> sequence, run-mode, EXP-07). | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C5 PC side done (mode_seq, run-mode); next EXP-07 on the board after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
@@ -1700,4 +1700,14 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Done: `tools/nemo_ctl/mode_seq.py` (new): editor mode -> 2-step chip_top sequence (step 0 idle from pin_db idle levels, TBD -> LOW and reported; step 1 = the mode; BUS / DFT helper -> per-pin LOW/HIGH; CAPTURE -> cap modes; duration = last event + 10 %; empty SERIAL data, wrong capture edge, free-running-only mode are errors). `cli.py`: `run-mode --mode M [--config] [--duration] [--dry-run | --jtag]` (load over J17, run, print status + each cap cell's level/edges/period/high/serial capture). `link.py`: `SeqLink.read_cap_timing()`.
 - Results [simulated / PC only]: example config INFERENCE -> clear error (SIPO data '0x' empty); with data filled -> 2 steps, 350 us, dry-run exit 0. pytest 257 passed, 1 skipped (no new tests yet).
 - Not on hardware. run-mode --jtag not yet run against a board.
-- Next steps: pytest tests for mode_seq + CLI dry-run; USER_MANUAL / README / HANDOFF; EXP-07 procedure; then Rahaf's OK before programming chip_top for EXP-07. Open: GUI "Run on board" button (default: leave to Yazan).
+- Next steps: (done in part 2 below.)
+
+## 2026-10-26, Rahaf (with Claude), branch main — chip pipeline step C5 (part 2: tests, docs, EXP-07 plan)
+- Goal: finish C5's PC side and write the EXP-07 procedure.
+- Done:
+  - `tools/nemo_ctl/tests/test_mode_seq.py` (new, 15 tests): idle step sets every cell, rst_sipo / rst_piso HIGH; the mode copied as configured; DFT helper -> b0..b2 / s0..s3; raw BUS; compile for chip_top (1000 + 35000 ticks); explicit / out-of-range duration; empty and unknown modes; wrong capture edge; unknown capture mode; a pin set twice; CLI `--dry-run`, errors, and a run against a fake SeqLink (load, start, wait 2.00036 s, close; capture lines printed).
+  - Bug found by the tests: a mode with only a free-running clock got the Signals panel's display span (8 periods) as its duration instead of an error. Fix: `waves.mode_waves()` returns `"finite"` (does the mode have a last event); `mode_seq` asks for `--duration` when it doesn't.
+  - `docs/experiments/EXP-07_chip_top_mode_vs_editor.md` (procedure, 3 passes of 8 logic channels, expected waveforms for INFERENCE, pass criteria). The EXP-01 loopback jumpers must come off: J2-20 is now the output b1_dft.
+  - USER_MANUAL §8.7, `tools/nemo_ctl/README.md`, HANDOFF C5 row.
+- Results [PC only]: pytest 272 passed, 1 skipped. Nothing on the board.
+- Next steps: Rahaf's OK, then EXP-07. Open: GUI "Run on board" button (default: leave to Yazan).

@@ -163,7 +163,10 @@ def mode_waves(config: Config, mode: str, t0_ns: float | None = None,
         return [[t * TICK_NS, v] for t, v in seg]
     for ln in lanes:
         ln["segments"] = ns(ln["segments"])
-    return {"t0": t0 * TICK_NS, "t1": t1 * TICK_NS, "end": end * TICK_NS, "lanes": lanes}
+    # "finite": the mode has a last event; False -> "end" is only a display span (8 clock
+    # periods) for free-running clocks / static levels (mode_seq.py then needs a duration)
+    return {"t0": t0 * TICK_NS, "t1": t1 * TICK_NS, "end": end * TICK_NS, "lanes": lanes,
+            "finite": bool(ends)}
 
 
 def _idle(s: PinSetting) -> int | None:

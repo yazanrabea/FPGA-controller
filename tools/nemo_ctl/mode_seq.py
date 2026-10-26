@@ -124,9 +124,11 @@ def mode_steps(config: Config, mode: str, duration_s: float | None = None,
     if not sets and not caps:
         raise ModeError(f"mode {mode!r} configures nothing")
     if duration_s is None:
-        end_ns = mode_waves(config, mode)["end"]
-        if end_ns <= 0:
-            raise ModeError(f"mode {mode!r} has no finite end (free-running clocks only): give a duration")
+        w = mode_waves(config, mode)
+        end_ns = w["end"]
+        if not w.get("finite") or end_ns <= 0:
+            raise ModeError(f"mode {mode!r} has no finite end (free-running clocks / static "
+                            f"levels only): give a duration (--duration)")
         duration_s = math.ceil(end_ns * 1.1 / 1000) * 1e-6       # +10 %, whole microseconds
         notes.append(f"duration {duration_s * 1e6:g} us (the mode's last event + 10 %)")
     if not 0 < duration_s <= MAX_DURATION_S:

@@ -701,6 +701,38 @@ Simulation (no board needed): `scripts/run_phase7_sim.sh` ends with
 `phase7_link_top_tb`, a mock PC loading and running the demo over real bit-serial UART
 (`ALL TESTS PASSED (21 checks)`). The register map is in `docs/link_register_map.md` (v2).
 
+### 8.7 Run an editor mode on chip_top (`run-mode`, chip pipeline C5)
+
+What you set for a mode in the wizard / browser editor can be run on the board as it is,
+with no sequence file to write. `chip_top` must be on the board (built from the pin map,
+`docs/experiments/EXP-07_chip_top_mode_vs_editor.md`). From `tools/`:
+
+```
+python -m nemo_ctl.cli run-mode --mode INFERENCE --dry-run   # conversion only, no board
+python -m nemo_ctl.cli run-mode --mode INFERENCE --jtag      # load over J17 and run
+```
+
+The mode becomes two steps (`tools/nemo_ctl/mode_seq.py`):
+
+- **idle**, 10 µs: every chip input at its idle level from `pin_db` (`rst_sipo` and
+  `rst_piso` HIGH; a TBD level is LOW and listed in a `note:` line).
+- **the mode**: every pin as configured. BUS groups and the DFT helper become one LOW/HIGH
+  per pin. CAPTURE settings become capture modes (level / edge_count / period / serial).
+  It lasts until the mode's last event + 10 %. A mode with only free-running clocks or
+  static levels has no last event: give `--duration 2ms`.
+
+Afterwards chip_top goes back to the idle levels. `run-mode` prints `STATUS: done` (or
+FAULT) and, for each chip output, the level, the edge count, the PERIOD/HIGH counters in
+10 ns ticks, and the serial capture in hex.
+
+It refuses, with a message, anything it would have to guess: a SERIAL with no data (the
+example INFERENCE has `data: "0x"`, so fill in the frame first), an unknown capture mode,
+a pin set twice, or a capture edge that chip_top isn't wired for (`piso_out` is sampled on
+`clk_piso`'s falling edge).
+
+The editor's Signals panel draws the same mode. Before t = 0 it shows each setting's own
+idle level, the board shows step 0's idle levels; that difference is expected.
+
 ## 9. Troubleshooting
 
 | Symptom | Likely cause | Fix |
