@@ -52,7 +52,7 @@ def test_inference_becomes_idle_then_the_mode(tmp_path):
     assert run["capture"]["piso_out"] == {"mode": "SERIAL", "bits": 168, "msb_first": True}
     assert run["capture"]["sipo_out"] == {"mode": "LEVEL"}
     # duration: last event (clk_piso: 150 us + 168 us) + 10 %, whole microseconds
-    assert run["until"] == {"after": "350us"} and idle["until"] == {"after": "10us"}
+    assert run["until"] == {"after": "350000ns"} and idle["until"] == {"after": "10us"}
 
 
 def test_dft_helper_becomes_the_b_and_s_pins(tmp_path):
@@ -81,8 +81,11 @@ def test_compiles_for_chip_top(tmp_path):
 
 def test_explicit_duration(tmp_path):
     steps, notes = mode_steps(load_config(_cfg(tmp_path)), "INFERENCE", duration_s=2e-3)
-    assert steps[1]["until"] == {"after": "2000us"}
+    assert steps[1]["until"] == {"after": "2000000ns"}
     assert not any(n.startswith("duration") for n in notes)
+    # long durations (bug 2026-10-26: 20 s was written as "2e+07us" and refused)
+    table, _ = mode_table(load_config(_cfg(tmp_path)), "INFERENCE", duration_s=20.0)
+    assert table.steps[1].cond_arg == 2_000_000_000
     with pytest.raises(ModeError, match="out of range"):
         mode_steps(load_config(_cfg(tmp_path)), "INFERENCE", duration_s=60.0)
 

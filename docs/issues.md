@@ -175,3 +175,13 @@ Format: symptom, suspected cause, fix, confirmation.
   lines). Those lines are included when the server closes the connection unexpectedly.
 - Confirmation: `test_xsdb_port_survives_a_chatty_server` passes; pytest 235 passed,
   1 skipped; a real-board STATUS through the fixed class worked (2026-10-26).
+
+## 2026-10-26: `run-mode --duration 20s` refused ("not a duration: '2e+07us'")
+- Symptom: EXP-07 pass 3 diagnostic run, `run-mode --mode INFERENCE --duration 20s --jtag` ->
+  `error: not a duration: '2e+07us'`; nothing sent to the board.
+- Cause: `mode_seq.mode_steps` wrote the step length as `f"{duration_s * 1e6:g}us"`; `:g`
+  switches to exponent form above 6 digits and `units.parse_duration_ns` doesn't parse it.
+  The tests only used durations up to 2 ms.
+- Fix: write whole nanoseconds (`f"{round(duration_s * 1e9)}ns"`); test with 20 s
+  (2,000,000,000 ticks) added to `test_mode_seq.py`. Confirmed: the same command then ran
+  (`STATUS: done`). [PC + board]

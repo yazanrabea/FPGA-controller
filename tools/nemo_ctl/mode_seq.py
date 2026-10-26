@@ -133,7 +133,8 @@ def mode_steps(config: Config, mode: str, duration_s: float | None = None,
         notes.append(f"duration {duration_s * 1e6:g} us (the mode's last event + 10 %)")
     if not 0 < duration_s <= MAX_DURATION_S:
         raise ModeError(f"duration {duration_s} s out of range (0 .. {MAX_DURATION_S} s)")
-    run = {"name": mode, "set": sets, "until": {"after": f"{duration_s * 1e6:g}us"}}
+    # whole ns, never "2e+07us" (:g switches to exponent form, which units.py doesn't parse)
+    run = {"name": mode, "set": sets, "until": {"after": f"{round(duration_s * 1e9)}ns"}}
     if caps:
         run["capture"] = caps
     idle["until"] = {"after": "10us"}

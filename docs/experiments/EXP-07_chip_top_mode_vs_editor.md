@@ -158,4 +158,9 @@ and is the TBD idle levels, not a fault.
   **Check** in the Run on board card: "the check is correct, I received the expected" (the
   same 2-step sequence as `run-mode --dry-run`). First use of the button by a user; Run on
   board itself not pressed yet.
-- Pass 3: not run yet.
+- Pass 3, repeat (17:35:04-17:36:11): 7500 runs, done 7500, fault 0; the scope did **not**
+  trigger (trigger D0 rising, D0 = b1_dft J2-20).
+- Diagnostic: one run with `--duration 20s` so b1_dft / s0_dft stay HIGH for 20 s (no trigger
+  needed, scope on Run / Auto). First try refused: `error: not a duration: '2e+07us'`
+  (bug in `mode_seq.py`, fixed, `docs/issues.md`). Second try 17:39:39-17:40:04:
+  `STATUS: done; last step 1`. Logic analyser reading: waiting for Rahaf.
