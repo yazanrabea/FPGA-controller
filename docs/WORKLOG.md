@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | Signals (waveform) panel in the browser editor | `feature/yazan-gui-waves` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+| Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -361,7 +361,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Problems / fixes:
   - the "idle" label overlapped "0 ns" on the axis; moved and the lead-in widened.
   - Reading the first zoomed screenshot I thought `sipo_in` and `clk` started low. The SVG paths showed they start high, as the data says: my misreading, no bug.
-- Next steps: Yazan tries it; merge to `main` when he's happy.
+- Yazan tried it on a copy of the config (`%TEMP%\my_waves_test.yaml`, `sipo_in` = 0xA5 / 8 bits) and asked to push it: `main` fast-forwarded to this branch 2026-10-26 (no partner review).
+- Next steps: Rahaf reviews it on `main`.
 
 ---
 
