@@ -1,4 +1,4 @@
-# Handoff — NEMO generic controller (Phases 0-7 built; 4, 5, 7 and first scope timing verified on the board)
+# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C4 done, C5 next)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
 > and `docs/WORKLOG.md` (newest entry first). Rewritten 2026-10-26, end of Rahaf's lab
@@ -18,6 +18,23 @@
 | — | **Scope timing** | **EXP-06 (2026-10-26):** timing exact; ringing 0.4-0.7 V on the jumper wires; **DRIVE 4 halves it**, so it's now the rule for chip-facing outputs |
 | — | **Chip pipeline** (C1-C6) | **C1-C4 done 2026-10-26** (C4: `fpga/src/chip_top.sv`, sim 11/11 incl. a 136-bit SIPO load and 168-bit PISO read over JTAG, bitstream built with DRIVE 4 / PULLDOWN confirmed in the I/O report; C3: `gen_svh.py --chip` -> `fpga/src/gen/chip_pkg.sv` + `fpga/constraints/chip_top.xdc`, generated from the pin map with the DRIVE 4 rule): the chip-pin -> FMC map decided (jumper wires, by block) and checked by `validate`; the CHIP sequencer target (22 + 4 cells, 136 / 168-bit serial, 1024-byte entries). Next C5: mode -> sequence converter + `cli run-mode`, then EXP-07 on the board (compare the logic analyser with the editor's Signals panel) |
 | 8 | Chip-ready checklist | Not started: needs Dima's answers (the pin map no longer waits on him) |
+
+## Chip pipeline (C1-C6): prove the whole flow before the chip arrives
+
+Rahaf's idea (2026-10-26): map the chip pins now (the map is **our** choice, the chip is
+wired with **jumper wires**) and prove config -> generated files -> FPGA -> pins end to end
+on the board. Plan approved; full detail in the WORKLOG entries "chip pipeline step C1..C4".
+
+| Step | What | Status |
+|---|---|---|
+| C1 | Pin map in `config/nemo_config.yaml` (`pin_map`), by block: `clk` LA00 ... `rst_dsa` LA14, DFT LA15 / LA20-25, chip outputs LA16-19 (`docs/controller_spec.md` §3 table, `docs/decisions.md`). `tools/nemo_ctl/fmc_pins.py` (the 32 LA_P pins, from the verified XDC) + `validate` pin_map checks | **Done** |
+| C2 | `sequence.chip_target()`: 22 sig + 4 cap cells named as the chip signals; `sipo_in` 136-bit on `clk_sipo`, `piso_out` 168-bit on `clk_piso` (edges UNCONFIRMED, parameters); 1024-byte step entries (534 used); `SeqLink.load` sends 128-byte chunks | **Done** |
+| C3 | `python -m nemo_ctl.gen_svh --chip` -> `fpga/src/gen/chip_pkg.sv` + **`fpga/constraints/chip_top.xdc`**, generated from `pin_map` (never edit by hand). DRIVE 4 + SLEW SLOW on `chip_out[*]`, PULLDOWN on `chip_in[*]` | **Done** |
+| C4 | **`fpga/src/chip_top.sv`**; `fpga/tb/chip_top_tb.sv` (`scripts/run_chip_sim.sh`, table `config/chip_sim_test.yaml`) **11/11 [simulated]**: exact 136-bit SIPO frame, setup / hold 480 / 520 ns, 168-bit PISO read back over JTAG. **Bitstream builds**, timing met (+0.112 ns); I/O report confirms DRIVE 4 / SLOW / PULLDOWN on the right pins | **Done**, not on the board |
+| C5 | **Rahaf's request**: what she sets in the editor must be what comes out of the pins. (1) converter: an editor *mode* (`nemo_config.yaml` modes) -> a *sequence* for `chip_top` (step 0 = idle, step 1 = the mode's settings); (2) `python -m nemo_ctl.cli run-mode --mode <M> --jtag` (convert, load over J17, run); (3) **EXP-07**: program `chip_top`, run a mode, compare the **logic analyser** (MSO-X 2002A, D0-D7, threshold 0.9 V) with the editor's **Signals panel**, pin by pin. This also does the first check of the 17 unverified output pins (LA05-15, LA20-25) | **Next.** Asked Rahaf, not answered: OK to start C5? Add a "Run on board" button to Yazan's GUI, or leave it to him? |
+| C6 | **EXP-08 "virtual chip"**: Dima's SIPO/PISO models inside the FPGA, wired by jumpers to the controller's SIPO/PISO pins. Uses a variant without the 7 DFT outputs (pin budget). Risk: `sipo_wrapper.sv`'s load inside its async reset may not synthesize. Then write a labelled synthesizable equivalent (don't edit Dima's file) | Planned |
+
+Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## What happened on 2026-10-26 (details: WORKLOG, `docs/experiments/EXP-06_scope_timing.md`)
 
@@ -117,7 +134,7 @@
 
 ## Last verified results
 
-- pytest (from `tools/`): 236 passed, 1 skipped.
+- pytest (from `tools/`): 257 passed, 1 skipped.
 - [simulated, xsim]:
   - Phase 3: 28 / 16 / 9 / 16.
   - Phase 4: 21 + `phase4_serial_tb` 2.
@@ -125,16 +142,19 @@
   - Phase 6: 69.
   - Phase 7: 40 / 10 / 27 / 21.
   - JTAG: 9 / 19 / 11.
+  - Chip: `chip_top_tb` 11 (`scripts/run_chip_sim.sh`).
 - [Vivado reports], all met:
   - `phase4_loopback_top` +4.001 ns;
   - `phase7_seq_loopback_top` +0.100 ns (tight);
   - `phase5_link_jtag_top` and `phase5_link_jtag_slew_top` +0.206 ns;
-  - `phase7_link_jtag_top` +0.427 ns.
+  - `phase7_link_jtag_top` +0.427 ns;
+  - `chip_top` +0.112 ns (12.5k LUT, 19.4k FF, 4.5 BRAM, 35 IOB).
 - [measured on board]: EXP-01..06, all PASS (EXP-03 also rerun 2026-10-26). EXP-06's ringing is
   an open issue, not a fail.
 
 ## What to do next
 
+0. **Chip pipeline C5** (above), once Rahaf OKs it. Then C6.
 1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent).
    Rahaf postponed it on 2026-10-26, but it is the critical path for the pins' *meaning*
    (polarities, edges, widths, rates; the map itself is decided, C1), the chip's **input rating below ground** (needed to judge the -0.41 V), the real
@@ -148,8 +168,10 @@
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;
    - verify pairs 5-15 when the chip needs them.
-4. The chip pipeline C2-C6 (WORKLOG, 2026-10-26 C1 entry). Its generated chip XDC gets **DRIVE 4 + SLEW SLOW on
-   every FPGA output driving the chip** (CLAUDE.md §8), and verify those exact pins.
+4. If the pin map changes: edit `pin_map` in `config/nemo_config.yaml`, then run
+   `python -m nemo_ctl.gen_svh --chip` (regenerates the package + XDC with the DRIVE 4 rule),
+   `scripts/run_chip_sim.sh`, and rebuild `chip_top`. `test_gen_chip.py` fails if the
+   committed generated files are stale.
 
 ## Working rules
 
@@ -168,6 +190,8 @@
 - Don't edit `fpga/reference/dima_blocks/`.
 - Don't build from a time-scaled package.
 - Don't change the verified bring-up XDCs to DRIVE 4; the rule is for chip-facing outputs.
+- Don't edit `fpga/constraints/chip_top.xdc` or `fpga/src/gen/chip_pkg.sv` by hand: edit the
+  config's `pin_map` and regenerate (`gen_svh.py --chip`).
 
 ## Key files
 
@@ -185,6 +209,7 @@
 | Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
 | Sims | `scripts/run_phase{3_sims,4_sim,5_link_sim,6_sim,7_sim}.sh`, `scripts/run_jtag_sim.sh` |
 | JTAG PC side | `tools/nemo_ctl/jtag.py`, `scripts/jtag_server.tcl` |
+| Chip pipeline | `config/nemo_config.yaml` (`pin_map`), `tools/nemo_ctl/{fmc_pins,sequence,gen_svh}.py`, generated `fpga/src/gen/chip_pkg.sv` + `fpga/constraints/chip_top.xdc`, `fpga/src/chip_top.sv`, `fpga/tb/chip_top_tb.sv`, `config/chip_sim_test.yaml`, `scripts/run_chip_sim.sh` |
 | Python tool (module list, incl. `gui.py`, `waves.py`) | `tools/nemo_ctl/README.md` |
 | The task brief | `generic_controller_prompt.md` |
 
