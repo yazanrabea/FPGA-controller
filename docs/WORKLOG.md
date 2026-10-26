@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. Next C6 (EXP-08) after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6 in progress: vchip_top built + simulated, EXP-08 next. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
@@ -1737,3 +1737,15 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## 2026-10-26, Rahaf (with Claude), branch main — handoff
 - Done: `docs/HANDOFF.md` updated for C5 / EXP-07 (short version, board state with chip_top and no jumpers, scope lessons, next steps). Committed the EXP-07 run files so the experiment can be repeated: `config/exp07_test.yaml` (frame filled in + PINTEST) and `scripts/repeat_mode.py` (was a scratch script during the run).
 - Next steps: C6 / EXP-08 after Rahaf's OK.
+
+## 2026-10-26, Rahaf (with Claude), branch main — chip pipeline step C6 (virtual chip, V1-V4)
+- Goal: EXP-08: Dima's SIPO / PISO RTL as a "virtual chip" inside the FPGA, wired to the controller with jumpers.
+- Done:
+  - V1, synthesizability [Vivado, scratch OOC]: Dima's `sipo_wrapper` and `piso2`, unmodified + Tower stubs: 0 errors, 0 critical warnings. `piso2` 42 FDCE; `sipo_wrapper` 291 FDCE / 17 FDPE / **16 LDC latches** (the `sel[23:8]` load inside the async reset), `rst_n` used as a latch gate.
+  - Decisions (Rahaf): PISO data `{frame, sel, C6}`; phirst jumpered from `pulse` (`docs/decisions.md`).
+  - V2: `fpga/src/virtual_chip.sv`, `fpga/src/vchip_top.sv` (chip_top unchanged inside, DFT outputs unpinned); `config/exp08_vchip.yaml`; `gen_svh.py --vchip` -> `fpga/src/gen/vchip_pkg.sv` + `fpga/constraints/vchip_top.xdc` (validated: no pin twice, jumpers controller-out -> vchip-in and vchip-out -> controller-in, pad clocks 1 MHz with CLOCK_DEDICATED_ROUTE FALSE, async clock groups); `create_project.tcl` adds Dima's files + stubs for `vchip_top` only; `cli seq --target` (`docs/issues.md`).
+  - V3: `fpga/tb/vchip_top_tb.sv`, `scripts/run_vchip_sim.sh`. **xsim 9/9** [simulated]: frame latched by Dima's sipo, READ_CAPTURE piso_out = `5aa55a0ff0123456789abcdef0c3c3e7e70000e7c6`, sipo_out level 1. Mutant (shift jumper held 0): check 6 fails (all zeros), so the check depends on the PISO shifting. TB-only: a second rst_sipo pulse so `sel` starts at 0 (sim starts at X, board at 0).
+  - Tests: `tools/nemo_ctl/tests/test_gen_vchip.py` (13); pytest 288 passed, 1 skipped.
+  - `docs/experiments/EXP-08_virtual_chip.md` (procedure, 10 jumpers, expected readback).
+  - V4: first build stopped (`lmap`, Tcl 8.5) -> fixed. **Bitstream builds** [Vivado reports]: WNS +0.183 ns, WHS +0.024 ns, 0 critical warnings; 12,234 LUT / 19,452 FF / 4.5 BRAM / 38 IOB / 6 BUFG (sys, JTAG, 4 virtual-chip pad clocks). `u_vc`: 491 registers + the 16 LDC latches (fewer than the ~740 counted by hand: synthesis merges equivalent flip-flops by default, and the two SIPO copies are identical). I/O report: vc_in / vc_out on the planned pins (G20, E19, G19, E15, A18, D22, F18, E21 / A16, C17).
+- Next steps: V4 result; then Rahaf's OK for the board (EXP-08).

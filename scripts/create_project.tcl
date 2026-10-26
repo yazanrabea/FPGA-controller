@@ -52,8 +52,25 @@ add_files -norecurse -fileset sources_1 $srcs
 add_files -norecurse -fileset constrs_1 $xdc
 set_property top $top [get_filesets sources_1]
 
+# vchip_top (EXP-08) also builds Dima's UNMODIFIED SIPO / PISO RTL as a virtual chip
+# (fpga/src/virtual_chip.sv), with the Tower-cell stubs standing in for the PDK cells.
+# Only for this top: nothing else may depend on fpga/reference/.
+set vchip_extra {}
+if {$top eq "vchip_top"} {
+    set vchip_extra [list \
+        [file join $repo fpga reference dima_blocks sipo.sv] \
+        [file join $repo fpga reference dima_blocks sipo_wrapper.sv] \
+        [file join $repo fpga reference dima_blocks piso.sv] \
+        [file join $repo fpga tb tower_cell_stubs.sv]]
+    add_files -norecurse -fileset sources_1 $vchip_extra
+}
+
 # Testbenches: tb_<top>.sv / .v if present (convention: fpga/tb/tb_<module>.sv)
 set tbs [glob -nocomplain [file join $repo fpga tb *.v] [file join $repo fpga tb *.sv]]
+# (a file already in sources_1 can't be added to sim_1 again)
+set keep {}
+foreach f $tbs { if {[lsearch -exact $vchip_extra $f] < 0} { lappend keep $f } }   ;# Vivado's Tcl 8.5: no lmap
+set tbs $keep
 if {[llength $tbs] > 0} {
     add_files -norecurse -fileset sim_1 $tbs
     foreach tb_top [list tb_$top] {

@@ -185,3 +185,14 @@ Format: symptom, suspected cause, fix, confirmation.
 - Fix: write whole nanoseconds (`f"{round(duration_s * 1e9)}ns"`); test with 20 s
   (2,000,000,000 ticks) added to `test_mode_seq.py`. Confirmed: the same command then ran
   (`STATUS: done`). [PC + board]
+
+## 2026-10-26: `cli seq` refused chip_top sequences
+- Symptom: `config/chip_sim_test.yaml` says it can be loaded with `cli seq load ... --jtag`,
+  but `load_sequence` defaulted to the phase7 target and refused `target: chip_top`; `seq
+  read/run/status` also had no way to know chip_top's cap cells.
+- Fix: `seq` commands take `--target {phase7_seq_loopback_top, chip_top}`; `seq load` uses the
+  file's `target:` line (refuses a contradicting `--target`). Tests in `test_gen_vchip.py`.
+
+## 2026-10-26: `create_project.tcl` used `lmap` (Tcl 8.6), Vivado 2022.1 has Tcl 8.5
+- Symptom: first `vchip_top` build stopped at once: `invalid command name "lmap"`.
+- Fix: a plain `foreach` loop. Confirmed by the rebuild.

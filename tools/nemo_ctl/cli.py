@@ -112,13 +112,22 @@ def _open_link(args: argparse.Namespace):
     return open_serial(args.port, baud=args.baud, timeout=args.timeout)
 
 
+def _seq_target(name: str | None):
+    """The sequencer target of a `seq` command: phase7_seq_loopback_top (phase7_link_top's
+    5 + 5 cells, the default) or chip_top (also vchip_top, EXP-08)."""
+    from .sequence import PHASE7_LOOPBACK, chip_target
+    targets = {PHASE7_LOOPBACK.name: PHASE7_LOOPBACK, "chip_top": chip_target()}
+    return targets[name or PHASE7_LOOPBACK.name]
+
+
 def _open_seqlink(args: argparse.Namespace):
-    """SeqLink on the serial port or over JTAG (tests replace this function)."""
+    """SeqLink on the serial port or over JTAG, for args.target (tests replace this function)."""
     from .link import SeqLink, SerialTransport
+    target = _seq_target(getattr(args, "target", None))
     if args.jtag:
         from .jtag import open_jtag
-        return open_jtag(timeout=args.timeout, link_cls=SeqLink)
-    return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout))
+        return open_jtag(timeout=args.timeout, link_cls=SeqLink, target=target)
+    return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout), target=target)
 
 
 def _open_chip_link(args: argparse.Namespace):
@@ -176,9 +185,16 @@ def _print_seq_status(st, step, last) -> None:
 
 
 def cmd_seq_load(args: argparse.Namespace) -> int:
+    import yaml
     from .sequence import SequenceError, link_late_warnings, load_sequence
     try:
-        table = load_sequence(Path(args.config))
+        # the file's own `target:` (e.g. chip_top) wins; --target is for files without one
+        with open(args.config) as f:
+            named = (yaml.safe_load(f) or {}).get("target")
+        if named and args.target and named != args.target:
+            raise SequenceError(f"{args.config}: target {named!r}, but --target {args.target}")
+        args.target = named or args.target
+        table = load_sequence(Path(args.config), _seq_target(args.target))
     except SequenceError as exc:
         for line in str(exc).splitlines():
             print(f"error: {line}", file=sys.stderr)
@@ -610,8 +626,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     sq_sub = sq.add_subparsers(dest="seq_command", required=True)
+    seq_common = argparse.ArgumentParser(add_help=False, parents=[link_common])
+    seq_common.add_argument("--target", choices=["phase7_seq_loopback_top", "chip_top"], default=None,
+                            help="which bitstream's cells: phase7_seq_loopback_top (phase7_link_top, "
+                                 "the default) or chip_top (also vchip_top). `load` takes it from "
+                                 "the file's `target:` line")
     sq_load = sq_sub.add_parser(
-        "load", parents=[link_common], formatter_class=_RDF,
+        "load", parents=[seq_common], formatter_class=_RDF,
         help="check a sequence YAML, send its step table, apply its idle state",
         description=_wrap("Compile and check the sequence (same checks as "
                           "`python -m nemo_ctl.sequence`), write every step to the board, then "
@@ -620,7 +641,7 @@ def build_parser() -> argparse.ArgumentParser:
     sq_load.add_argument("config", help="sequence YAML, e.g. ../config/phase7_seq_loopback.yaml")
     sq_load.set_defaults(func=cmd_seq_load)
     sq_run = sq_sub.add_parser(
-        "run", parents=[link_common], formatter_class=_RDF,
+        "run", parents=[seq_common], formatter_class=_RDF,
         help="start the loaded sequence (optionally wait for it)",
         description=_wrap("Start the loaded sequence. With --wait N, poll STATUS for up to N "
                           "seconds and print how it ended."),
@@ -628,13 +649,13 @@ def build_parser() -> argparse.ArgumentParser:
     sq_run.add_argument("--wait", type=float, default=0.0, metavar="SECONDS",
                         help="poll until it finishes, up to this many seconds (default: don't wait)")
     sq_run.set_defaults(func=cmd_seq_run)
-    sq_stop = sq_sub.add_parser("stop", parents=[link_common], formatter_class=_RDF,
+    sq_stop = sq_sub.add_parser("stop", parents=[seq_common], formatter_class=_RDF,
                                 help="abort the running sequence (pins back to step 0)")
     sq_stop.set_defaults(func=cmd_seq_stop)
-    sq_status = sq_sub.add_parser("status", parents=[link_common], formatter_class=_RDF,
+    sq_status = sq_sub.add_parser("status", parents=[seq_common], formatter_class=_RDF,
                                   help="print STATUS flags, current and last step")
     sq_status.set_defaults(func=cmd_seq_status)
-    sq_read = sq_sub.add_parser("read", parents=[link_common], formatter_class=_RDF,
+    sq_read = sq_sub.add_parser("read", parents=[seq_common], formatter_class=_RDF,
                                 help="print a cap cell's capture register and edge count")
     sq_read.add_argument("cell", help="cap cell name, e.g. data_in")
     sq_read.set_defaults(func=cmd_seq_read)

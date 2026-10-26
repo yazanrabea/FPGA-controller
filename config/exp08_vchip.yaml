@@ -1,0 +1,38 @@
+# Chip pipeline step C6 / EXP-08: the "virtual chip" pins (Rahaf's choices, 2026-10-26).
+#
+# vchip_top = chip_top (the controller, pins from config/nemo_config.yaml pin_map, minus the
+# 7 DFT outputs) + a virtual chip made of Dima's unmodified SIPO / PISO RTL, on the pins
+# below. Jumper wires connect the controller's pins to these, like the real chip will be.
+# NOT the real chip: on the chip, phirst is made inside (docs/controller_spec.md Q4); here it
+# comes from the controller's `pulse` pin, for this test only.
+#
+# Consumed by:  cd tools && python -m nemo_ctl.gen_svh --vchip
+#   -> fpga/src/gen/vchip_pkg.sv + fpga/constraints/vchip_top.xdc (never edit those by hand)
+
+# virtual-chip signal: FMC pin. Order is fixed (vchip_top.sv vc_in / vc_out).
+vchip_pins:
+  # inputs of the virtual chip (FPGA inputs)
+  sipo_in:  LA20_P
+  clk_sipo: LA21_P
+  cs:       LA22_P
+  rst_sipo: LA23_P
+  clk_piso: LA24_P
+  shift:    LA25_P
+  rst_piso: LA26_P
+  phirst:   LA27_P
+  # outputs of the virtual chip (FPGA outputs)
+  sipo_out: LA28_P
+  piso_out: LA29_P
+
+# which controller signal (pin_map) feeds each virtual-chip input / reads each output
+jumpers:
+  sipo_in:  sipo_in
+  clk_sipo: clk_sipo
+  cs:       cs
+  rst_sipo: rst_sipo
+  clk_piso: clk_piso
+  shift:    shift
+  rst_piso: rst_piso
+  phirst:   pulse        # virtual chip only (on the chip phirst is internal)
+  sipo_out: sipo_out
+  piso_out: piso_out

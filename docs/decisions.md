@@ -128,3 +128,19 @@ Each entry: date, decision, reason, rejected options.
 - Rejected: waiting for Dima before mapping.
 - Source of truth: `config/nemo_config.yaml` `pin_map`; checked by `validate`
   (`tools/nemo_ctl/fmc_pins.py`). This is step C1 of the chip-pipeline plan (WORKLOG).
+
+## 2026-10-26: EXP-08 virtual chip design (chip pipeline C6), Rahaf
+- **Where the virtual chip lives:** in the same bitstream as the controller (`vchip_top` =
+  `chip_top` + `virtual_chip`), on separate pins, connected by jumper wires. Reason: one
+  board; the wires test the controller's pins and the 4 inputs the way the chip will use
+  them. Rejected: connecting inside the FPGA (would skip the pins and wires).
+- **Pin budget:** the controller's 7 DFT outputs are not pinned in `vchip_top`, freeing
+  LA15 / LA20-25. `chip_top` itself is unchanged (same package, same PC tools).
+- **PISO data = `{frame[135:0], sel[23:0], 8'hC6}`** (Rahaf). Reason: the frame comes back
+  through Dima's SIPO and PISO, `sel` becomes visible, `C6` shows alignment. Rejected: a fixed
+  168-bit pattern (shows neither the SIPO data nor `sel`).
+- **phirst from the controller's `pulse` pin** (J3-13 → J2-27), Rahaf. Virtual chip only;
+  on the chip phirst is internal (Q4). Rejected: tying it low (`sel` could never step).
+- **Dima's RTL unmodified**: it synthesizes (scratch OOC run: `sipo_wrapper`'s async load
+  becomes 16 latches), so no rewritten copy. A second standalone `sipo` provides the frame
+  because `sipo_wrapper` has no port for it.

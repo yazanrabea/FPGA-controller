@@ -739,6 +739,26 @@ optional (`350us`, `2ms`; empty = automatic). Opening the JTAG link takes a few 
 The editor's Signals panel draws the same mode. Before t = 0 it shows each setting's own
 idle level, the board shows step 0's idle levels; that difference is expected.
 
+### 8.8 Sequences on chip_top, and the virtual chip (EXP-08)
+
+`cli seq` works on `chip_top` (and `vchip_top`) too. `seq load` reads the file's
+`target:` line; the other `seq` commands need `--target chip_top`:
+
+```
+python -m nemo_ctl.cli seq load ../config/chip_sim_test.yaml --jtag
+python -m nemo_ctl.cli seq run --wait 5 --jtag --target chip_top
+python -m nemo_ctl.cli seq read piso_out --jtag --target chip_top
+```
+
+`vchip_top` is `chip_top` plus a "virtual chip" made of Dima's SIPO / PISO RTL, on its own
+pins (J2-20..29), connected to the controller by 10 jumper wires. The table is in the
+header of `fpga/constraints/vchip_top.xdc` and in
+`docs/experiments/EXP-08_virtual_chip.md`. The virtual chip returns
+`{frame, sel[23:0], 0xC6}` on `piso_out`. For `config/chip_sim_test.yaml`, `seq read
+piso_out` should give `0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6`. Pins: edit
+`config/exp08_vchip.yaml`, then `python -m nemo_ctl.gen_svh --vchip`; simulation:
+`scripts/run_vchip_sim.sh`.
+
 ## 9. Troubleshooting
 
 | Symptom | Likely cause | Fix |
