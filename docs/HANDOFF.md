@@ -13,17 +13,12 @@
 | 4 | `phase4_loopback_top` | **EXP-01 PASS [measured on board]** |
 | 5 | Runtime link (`link_frame` + `link_ctrl`) | **EXP-02 PASS over JTAG [measured on board]**. The UART variant has never run on hardware (no adapter) |
 | 6 | SIPO load / PISO read against Dima's RTL | [simulated] 69/69, Icarus + xsim. No hardware step possible (no chip-pin map) |
-| 7 | Mode sequencer | **EXP-03 PASS** (compile-time table), **EXP-04 PASS over JTAG** (table from the PC, `program_verify()` on hardware) |
+| 7 | Mode sequencer | **EXP-03 PASS** (compile-time table; rerun PASS 2026-10-26 on the `seq_engine`-fix bitstream), **EXP-04 PASS over JTAG** (table from the PC, `program_verify()` on hardware) |
 | — | PC link over JTAG (J17) | J1-J5 done (EXP-05 + the above) |
 | — | **Scope timing** | **EXP-06 (2026-10-26):** timing exact; ringing 0.4-0.7 V on the jumper wires; **DRIVE 4 halves it**, so it's now the rule for chip-facing outputs |
 | 8 | Chip-ready checklist | Not started: needs Dima's answers and the chip-pin -> FMC map |
 
 ## What happened on 2026-10-26 (details: WORKLOG, `docs/experiments/EXP-06_scope_timing.md`)
-
-- Later the same day:
-  - **review** of the GUI and the JTAG PC side: one latent hang fixed in `jtag.py`; two
-    display issues in `waves.py` left for Yazan (WORKLOG);
-  - **EXP-03 rerun** on the `seq_engine`-fix bitstream: identical PASS (caveat closed).
 
 - **EXP-06**, on `phase5_link_jtag_top`. Every setting was made from the PC over JTAG on one
   bitstream:
@@ -58,6 +53,20 @@
 - Housekeeping:
   - CLAUDE.md §6/§7 status rows brought up to date;
   - pytest 5 runs: 234 passed, 1 skipped each. Yazan's one unexplained failure didn't come back.
+- **Review** (handoff step 2, Rahaf's call; WORKLOG "review of unreviewed code"):
+  - scope: Yazan's GUI (`gui.py`, `waves.py`) and Claude's JTAG PC side (`jtag.py`,
+    `jtag_server.tcl`). The round-2 RTL was already reviewed on 2026-10-22;
+  - **fixed**: `XsdbScanPort` never read xsdb's stdout after READY, so a burst of output
+    would freeze the link. Now a drain thread keeps reading; regression test with a fake
+    flooding server (`tools/nemo_ctl/tests/_fake_xsdb_server.py`), which reproduced the
+    hang first;
+  - **left for Yazan** (Rahaf's decision): `waves.py` draws SERIAL data 20 ns earlier than
+    `sig_cell.sv` changes it; the DFT lane label uses `b_value` as the ADC number and shows
+    `s` as 3 bits instead of 4;
+  - `gui.py` security: fine (127.0.0.1, Host check, JSON-only POSTs, fixed save path).
+- **EXP-03 rerun** on the bitstream with the `seq_engine` `step_cnt1` fix [measured on
+  board]: pre-START levels, full sequence, FAULT, abort all identical to 2026-10-22. The
+  "measured on the old bitstream" caveat is closed.
 
 ## Machines
 
@@ -93,7 +102,8 @@
 - Jumpers (HTG-FMC P column): J3-0↔J3-16, J3-1↔J2-17, J3-2↔J2-18, J3-3↔J2-19, J3-4↔J2-20.
 - Program: `scripts/program_board.tcl -tclargs <top>`. Bitstreams live in `build/`
   (git-ignored); rebuild with `scripts/create_project.tcl -tclargs <top> build`.
-- Currently on the board: `phase5_link_jtag_slew_top`, test_clock at 1 MHz, RUN.
+- Currently on the board: `phase7_seq_loopback_top` (EXP-03 rerun, ended in Run 3 = aborted
+  at step 2, LD1 + LD7 on). Program another top to change that.
 - Settings from the PC: `nemo_ctl.jtag.open_jtag()` + `send_cell_config(...)` / `apply()` /
   `run()` / `stop()` in one Python session, or `python -m nemo_ctl.cli link ... --jtag`.
 - The person at the bench reads the instruments; you record exactly what they report. Ask
@@ -101,7 +111,7 @@
 
 ## Last verified results
 
-- pytest (from `tools/`): 234 passed, 1 skipped.
+- pytest (from `tools/`): 235 passed, 1 skipped (incl. the `XsdbScanPort` flood test).
 - [simulated, xsim]:
   - Phase 3: 28 / 16 / 9 / 16.
   - Phase 4: 21 + `phase4_serial_tb` 2.
@@ -114,7 +124,8 @@
   - `phase7_seq_loopback_top` +0.100 ns (tight);
   - `phase5_link_jtag_top` and `phase5_link_jtag_slew_top` +0.206 ns;
   - `phase7_link_jtag_top` +0.427 ns.
-- [measured on board]: EXP-01..06, all PASS. EXP-06's ringing is an open issue, not a fail.
+- [measured on board]: EXP-01..06, all PASS (EXP-03 also rerun 2026-10-26). EXP-06's ringing is
+  an open issue, not a fail.
 
 ## What to do next
 
@@ -123,18 +134,15 @@
    the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
    it's missing.
-2. **Review**: done 2026-10-26 for the GUI and the JTAG PC side (WORKLOG). **Yazan: fix
-   `waves.py` items 2-3** (SERIAL drawn 20 ns early; DFT label). Still not reviewed by
-   Rahaf herself:
-   - Yazan's round 2 + GUI;
-   - the 2026-10-22 fixes (`phase4_loopback_top`, `link_ctrl` `read_byte`, `seq_engine`
-     `step_cnt1`);
-   - the JTAG link.
-3. Optional, at the bench:
+2. **Yazan: fix `waves.py`** (review 2026-10-26, WORKLOG): SERIAL data drawn 20 ns early
+   vs `sig_cell.sv`; the DFT lane label (`b_value` as ADC number, `s` as 3 bits).
+3. A human review by Rahaf is still open if wanted. The 2026-10-26 review was Claude's; it
+   covered the GUI and the JTAG PC side, and the RTL was reviewed by Claude on 2026-10-22.
+4. Optional, at the bench:
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;
    - verify pairs 5-15 when the chip needs them.
-4. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
+5. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
    every FPGA output driving the chip** (CLAUDE.md §8), and verify those exact pins.
 
 ## Working rules
@@ -176,7 +184,8 @@
 
 ## Who's who
 
-- **Rahaf**: at the bench 2026-10-26 (EXP-06, the DRIVE 4 decision); did Phases 0-5.
+- **Rahaf**: at the bench 2026-10-26 (EXP-06, the DRIVE 4 decision, the EXP-03 rerun, the
+  review decisions); did Phases 0-5.
 - **Yazan**: owns the repo; did Phases 6-7, the JTAG bring-up runs (10-22) and the GUI.
 - **Dima**: SIPO/PISO RTL and chip details; the open questions go to him.
 - **Supervisor**: Ilan Lipschutz, ASIC² Lab, Technion, NEMO project.
