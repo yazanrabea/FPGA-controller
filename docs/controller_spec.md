@@ -112,11 +112,43 @@ explainer. **Both individual sheets are therefore incomplete or inconsistent on 
 ## 3. Reconciled pin table (26 digital signals)
 
 Pad numbers shown as `digital-sheet#/io-pins-dima#` where they disagree (see §2). `—`
-means absent from that sheet. FMC LA pin is **TBD for every signal** — no chip-pin → FMC
-LA_P assignment exists anywhere in the repo yet; this is a Phase 1/4 decision, constrained
-to the 32 verified LA_P pins (`docs/pin_verification.md`), of which only pair 0
-(`LA00_P`/`LA16_P`) has a hardware-confirmed loopback so far — the other 31 pins'
-physical-to-package mapping is known (XDC) but functionally untested.
+means absent from that sheet.
+
+**FMC pin map (decision 2026-10-26, Rahaf, `docs/decisions.md`).** The chip is wired with
+jumper wires to the HTG-FMC headers (P column), so the map is our choice. It lives in
+`config/nemo_config.yaml` → `pin_map` (the source of truth; this table is a copy, made
+2026-10-26) and is checked by `python -m nemo_ctl.cli validate`. Package pins come from the
+verified XDC mapping (`tools/nemo_ctl/fmc_pins.py`, tested against the XDCs). "Verified" =
+checked on the board in that direction (`docs/pin_verification.md`).
+
+| Block | Signal | FPGA side | FMC pin | Header | Package pin | Verified |
+|---|---|---|---|---|---|---|
+| Clock Generator | `clk` | FPGA output | LA00_P | J3-0 | M19 | yes |
+| Clock Generator | `reset` | FPGA output | LA01_P | J3-1 | N19 | yes |
+| Clock Generator | `set` | FPGA output | LA02_P | J3-2 | P17 | yes |
+| DSA | `rst_dsa` | FPGA output | LA14_P | J3-14 | K19 | **not yet** |
+| Array with Muxes | `pulse` | FPGA output | LA13_P | J3-13 | L17 | **not yet** |
+| Array with Muxes | `s0_p` | FPGA output | LA10_P | J3-10 | R19 | **not yet** |
+| Array with Muxes | `s1_p` | FPGA output | LA11_P | J3-11 | N17 | **not yet** |
+| Array with Muxes | `s2_p` | FPGA output | LA12_P | J3-12 | P20 | **not yet** |
+| DFT - All | `b0_dft` | FPGA output | LA15_P | J3-15 | J16 | **not yet** |
+| DFT - All | `b1_dft` | FPGA output | LA20_P | J2-20 | G20 | **not yet** |
+| DFT - All | `b2_dft` | FPGA output | LA21_P | J2-21 | E19 | **not yet** |
+| dft per ADC | `s0_dft` | FPGA output | LA22_P | J2-22 | G19 | **not yet** |
+| dft per ADC | `s1_dft` | FPGA output | LA23_P | J2-23 | E15 | **not yet** |
+| dft per ADC | `s2_dft` | FPGA output | LA24_P | J2-24 | A18 | **not yet** |
+| dft per ADC | `s3_dft` | FPGA output | LA25_P | J2-25 | D22 | **not yet** |
+| SIPO | `sipo_in` | FPGA output | LA03_P | J3-3 | N22 | yes |
+| SIPO | `clk_sipo` | FPGA output | LA04_P | J3-4 | M21 | yes |
+| SIPO | `cs` | FPGA output | LA05_P | J3-5 | J18 | **not yet** |
+| SIPO | `rst_sipo` | FPGA output | LA06_P | J3-6 | L21 | **not yet** |
+| PISO | `clk_piso` | FPGA output | LA07_P | J3-7 | T16 | **not yet** |
+| PISO | `shift` | FPGA output | LA08_P | J3-8 | J21 | **not yet** |
+| PISO | `rst_piso` | FPGA output | LA09_P | J3-9 | R20 | **not yet** |
+| SIPO | `sipo_out` | FPGA input | LA16_P | J3-16 | J20 | yes |
+| PISO | `piso_out` | FPGA input | LA17_P | J2-17 | B19 | yes |
+| DFT - All | `dft0_buff` | FPGA input | LA18_P | J2-18 | D20 | yes |
+| DFT - All | `dft1_buff` | FPGA input | LA19_P | J2-19 | G15 | yes |
 
 **Output drive (decision 2026-10-26, `docs/decisions.md`):** when the FMC pins are assigned,
 every FPGA output driving a chip input (Dir = `in` below) gets `DRIVE 4` + `SLEW SLOW` in the
@@ -278,7 +310,7 @@ pin_limits:        # per-pin safe limits, enforced by the Phase-1 validator
   cs:       {allowed_types: [PULSE], min_width_ticks: 1, idle_level: LOW}
   # ... one entry per of the 26 signals in §3; most limits are TBD pending §5
 
-pin_map:            # chip signal -> FMC LA_P pin; Phase 1/4 decision, TBD for all 26 now
+pin_map:            # chip signal -> FMC LA_P pin; decided 2026-10-26, see §3 (all 26 mapped)
   clk_sipo: TBD
   # ...
 ```

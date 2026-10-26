@@ -12,11 +12,12 @@
 | 3 | RTL cells `sig_cell` / `cap_cell` / `run_ctrl` | [simulated]; used in every board test |
 | 4 | `phase4_loopback_top` | **EXP-01 PASS [measured on board]** |
 | 5 | Runtime link (`link_frame` + `link_ctrl`) | **EXP-02 PASS over JTAG [measured on board]**. The UART variant has never run on hardware (no adapter) |
-| 6 | SIPO load / PISO read against Dima's RTL | [simulated] 69/69, Icarus + xsim. No hardware step possible (no chip-pin map) |
+| 6 | SIPO load / PISO read against Dima's RTL | [simulated] 69/69, Icarus + xsim. Hardware dry run planned (chip pipeline C1-C6: pin map done, then the CHIP target, generator, `chip_top`, EXP-07/08) |
 | 7 | Mode sequencer | **EXP-03 PASS** (compile-time table; rerun PASS 2026-10-26 on the `seq_engine`-fix bitstream), **EXP-04 PASS over JTAG** (table from the PC, `program_verify()` on hardware) |
 | — | PC link over JTAG (J17) | J1-J5 done (EXP-05 + the above) |
 | — | **Scope timing** | **EXP-06 (2026-10-26):** timing exact; ringing 0.4-0.7 V on the jumper wires; **DRIVE 4 halves it**, so it's now the rule for chip-facing outputs |
-| 8 | Chip-ready checklist | Not started: needs Dima's answers and the chip-pin -> FMC map |
+| — | **Chip pipeline** (C1-C6) | **C1 done 2026-10-26**: the chip-pin -> FMC map decided (jumper wires, by block) and checked by `validate`. Next C2 (WORKLOG has the plan) |
+| 8 | Chip-ready checklist | Not started: needs Dima's answers (the pin map no longer waits on him) |
 
 ## What happened on 2026-10-26 (details: WORKLOG, `docs/experiments/EXP-06_scope_timing.md`)
 
@@ -135,8 +136,8 @@
 ## What to do next
 
 1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent).
-   Rahaf postponed it on 2026-10-26, but it is the critical path: the chip-pin -> FMC map,
-   the chip's **input rating below ground** (needed to judge the -0.41 V), the real
+   Rahaf postponed it on 2026-10-26, but it is the critical path for the pins' *meaning*
+   (polarities, edges, widths, rates; the map itself is decided, C1), the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
    it's missing.
 2. Optional: a human review. All code on `main` has been reviewed by Claude, with **no open
@@ -147,7 +148,7 @@
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;
    - verify pairs 5-15 when the chip needs them.
-4. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
+4. The chip pipeline C2-C6 (WORKLOG, 2026-10-26 C1 entry). Its generated chip XDC gets **DRIVE 4 + SLEW SLOW on
    every FPGA output driving the chip** (CLAUDE.md §8), and verify those exact pins.
 
 ## Working rules

@@ -6,8 +6,38 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | EXP-06 scope timing done 2026-10-26; next housekeeping. Review of Phases 6-7 / JTAG / GUI postponed. | `main` | `docs/experiments/EXP-06_*`, `docs/{issues,pin_verification,WORKLOG}.md` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1 done 2026-10-26. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+
+---
+
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: chip pipeline step C1 (pin map)
+- Goal: Rahaf's proposal: map the chip pins now and prove the whole flow (config -> generated
+  files -> FPGA) on the board before the chip arrives. Plan C1-C6 approved:
+  - C1: pin map + validator;
+  - C2: the CHIP sequencer target;
+  - C3: generator for the package + XDC (DRIVE 4 rule built in);
+  - C4: `chip_top.sv` + testbench + Vivado build;
+  - C5: EXP-07, every output pin on the logic analyser;
+  - C6: EXP-08, a "virtual chip" dry run with Dima's SIPO/PISO models inside the FPGA.
+  Rahaf's answers: chip wiring = **jumper wires**; the layout as proposed.
+- Done (C1):
+  - `config/nemo_config.yaml` `pin_map`: all 26 signals mapped (`docs/decisions.md`).
+  - New `tools/nemo_ctl/fmc_pins.py`: the 32 LA_P pins, extracted from the verified XDC, not
+    typed; header positions; verified sets per direction (LA00-04 out, LA16-20 in).
+  - `tools/nemo_ctl/validate.py`: `pin_map` checks. Errors: unknown signal, not an LA_P pin,
+    pin used twice. Warnings: unmapped, missing, not verified in its direction.
+  - Tests: new `test_fmc_pins.py` (table == the 3 XDCs, rules, the example map);
+    `test_config.py`'s `test_pin_map_is_all_tbd` replaced by `test_pin_map_is_the_agreed_layout`.
+  - Docs: `docs/controller_spec.md` §3 (FMC map table, made from the config),
+    `docs/decisions.md`, `tools/nemo_ctl/README.md`.
+- Hardware setup: none.
+- Results: **[not hardware]** pytest 242 passed, 1 skipped. `validate` on the example config:
+  no `pin_map` errors, exactly 17 warnings (the outputs on LA05-15 / LA20-25).
+- Problems / fixes: correction recorded. The map never needed Dima; only the pins' meaning does.
+- Decisions: chip wiring = jumper wires; the layout (`docs/decisions.md`).
+- Next steps: C2 (the CHIP target in `sequence.py`). The optional pin-map view in the browser
+  editor is not done (Yazan's GUI; can come later).
 
 ---
 

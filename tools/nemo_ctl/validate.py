@@ -88,7 +88,45 @@ def validate_config(config: Config, pin_db: dict[str, Pin]) -> list[Issue]:
 
             _validate_limits(issues, mode, block, key, pin, setting, clock_pins)
 
+    _validate_pin_map(issues, config, pin_db)
     return issues
+
+
+def _validate_pin_map(issues, config: Config, pin_db: dict[str, Pin]):
+    """config.pin_map: chip signal -> FMC LA_P pin (docs/decisions.md, 2026-10-26).
+    Errors: a signal not in pin_db, a name that isn't one of the 32 LA_P pins, an LA pin
+    used twice. Warnings: a signal without a pin, a pin not yet verified on the board in
+    the direction it's used. An empty pin_map (test configs) is not checked."""
+    if not config.pin_map:
+        return
+    from .fmc_pins import FMC_PINS, is_verified
+    used: dict[str, str] = {}
+    for sig, la in config.pin_map.items():
+        pin = pin_db.get(sig)
+        block = pin.block if pin else "?"
+        if pin is None:
+            _error(issues, "pin_map", block, sig, f"unknown chip signal {sig!r} (not in pin_db)")
+            continue
+        if la is None:
+            _warn(issues, "pin_map", block, sig, "no FMC pin assigned yet")
+            continue
+        if la not in FMC_PINS:
+            _error(issues, "pin_map", block, sig,
+                   f"{la!r} is not one of the 32 FMC LA_P pins (LA00_P .. LA31_P)")
+            continue
+        if la in used:
+            _error(issues, "pin_map", block, sig, f"{la} is already used by {used[la]!r}")
+            continue
+        used[la] = sig
+        fpga_drives = pin.direction == "in"           # a chip input is an FPGA output
+        if not is_verified(la, fpga_drives):
+            f = FMC_PINS[la]
+            _warn(issues, "pin_map", block, sig,
+                  f"{la} ({f.header}, {f.package_pin}) not verified on the board as an FPGA "
+                  f"{'output' if fpga_drives else 'input'} yet (docs/pin_verification.md)")
+    for sig, pin in pin_db.items():
+        if sig not in config.pin_map:
+            _warn(issues, "pin_map", pin.block, sig, "missing from pin_map")
 
 
 def _validate_bus(issues, mode, block, key, setting: PinSetting, touch):

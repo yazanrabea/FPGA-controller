@@ -48,33 +48,35 @@ modes:
       # raw alternative, kept available per generic_controller_prompt.md §1:
       # b_dft: {type: BUS, value: 0b011}
 
-# Chip pin -> FMC LA_P pin. TBD for every signal (docs/controller_spec.md §3) — no
-# assignment exists yet; this is a Phase 1/4 decision, constrained to the 32 verified
-# LA_P pins in docs/pin_verification.md (only pair 0 has a hardware-confirmed loopback).
+# Chip pin -> FMC LA_P pin (decision 2026-10-26, Rahaf, docs/decisions.md): the chip is
+# wired with jumper wires to the HTG-FMC headers (P column), so the map is our choice.
+# Grouped by block; the 4 chip outputs land on LA16-19 (verified as FPGA inputs) and clk
+# on LA00 (the best-measured pin). `python -m nemo_ctl.cli validate` warns for every pin
+# not yet verified on the board in its direction (docs/pin_verification.md).
 pin_map:
-  clk: null
-  reset: null
-  set: null
-  rst_dsa: null
-  pulse: null
-  s0_p: null
-  s1_p: null
-  s2_p: null
-  b0_dft: null
-  b1_dft: null
-  b2_dft: null
-  s0_dft: null
-  s1_dft: null
-  s2_dft: null
-  s3_dft: null
-  sipo_in: null
-  clk_sipo: null
-  cs: null
-  rst_sipo: null
-  clk_piso: null
-  shift: null
-  rst_piso: null
-  sipo_out: null
-  piso_out: null
-  dft0_buff: null
-  dft1_buff: null
+  clk: LA00_P
+  reset: LA01_P
+  set: LA02_P
+  rst_dsa: LA14_P
+  pulse: LA13_P
+  s0_p: LA10_P
+  s1_p: LA11_P
+  s2_p: LA12_P
+  b0_dft: LA15_P
+  b1_dft: LA20_P
+  b2_dft: LA21_P
+  s0_dft: LA22_P
+  s1_dft: LA23_P
+  s2_dft: LA24_P
+  s3_dft: LA25_P
+  sipo_in: LA03_P
+  clk_sipo: LA04_P
+  cs: LA05_P
+  rst_sipo: LA06_P
+  clk_piso: LA07_P
+  shift: LA08_P
+  rst_piso: LA09_P
+  sipo_out: LA16_P
+  piso_out: LA17_P
+  dft0_buff: LA18_P
+  dft1_buff: LA19_P

@@ -104,3 +104,27 @@ Each entry: date, decision, reason, rejected options.
 - Rejected / later: a series resistor at the driver (~22-33 Ω) or shorter wires. These are
   wiring changes, kept as the next step if -0.41 V turns out to exceed the chip's input
   rating (unknown: datasheet / Dima).
+
+## Chip-pin -> FMC pin map (jumper wires, grouped by block)
+- Decision (Rahaf, 2026-10-26): the chip is connected with **jumper wires** to the HTG-FMC
+  J2/J3 headers (P column), not through a fixed adapter board. So the map is ours to choose.
+  Layout, agreed as proposed:
+  - Clock Generator: `clk` LA00, `reset` LA01, `set` LA02;
+  - SIPO: `sipo_in` LA03, `clk_sipo` LA04, `cs` LA05, `rst_sipo` LA06;
+  - PISO: `clk_piso` LA07, `shift` LA08, `rst_piso` LA09;
+  - Array: `s0_p` / `s1_p` / `s2_p` LA10-12, `pulse` LA13;
+  - DSA: `rst_dsa` LA14;
+  - DFT: `b0_dft` LA15, `b1_dft` LA20, `b2_dft` LA21, `s0..s3_dft` LA22-25;
+  - chip outputs (FPGA inputs): `sipo_out` LA16, `piso_out` LA17, `dft0_buff` LA18,
+    `dft1_buff` LA19.
+- Reason:
+  - the 4 chip outputs land on LA16-19, already verified as FPGA inputs;
+  - `clk` gets LA00, the best-measured pin;
+  - blocks sit on neighbouring pins;
+  - only the outputs on LA05-15 / LA20-25 still need checking (the validator warns for each).
+- Correction recorded: earlier docs/handoffs said the map was "waiting for Dima". It never
+  was. What needs Dima is the pins' *meaning* (polarities, edges, widths, rates, `rst_sipo`'s
+  pad, the input rating), which stays in config fields.
+- Rejected: waiting for Dima before mapping.
+- Source of truth: `config/nemo_config.yaml` `pin_map`; checked by `validate`
+  (`tools/nemo_ctl/fmc_pins.py`). This is step C1 of the chip-pipeline plan (WORKLOG).

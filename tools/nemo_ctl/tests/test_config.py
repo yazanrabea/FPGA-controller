@@ -21,10 +21,15 @@ def test_iter_settings_yields_block_key_setting():
     assert ("PISO", "piso_out") in found
 
 
-def test_pin_map_is_all_tbd():
+def test_pin_map_is_the_agreed_layout():
+    # decision 2026-10-26 (docs/decisions.md): every signal has its pin; grouped by block,
+    # clk on LA00, the 4 chip outputs on LA16-19
     cfg = load_config(EXAMPLE_CONFIG)
-    assert cfg.pin_map  # not empty
-    assert all(v is None for v in cfg.pin_map.values())
+    assert len(cfg.pin_map) == 26 and all(cfg.pin_map.values())
+    assert cfg.pin_map["clk"] == "LA00_P" and cfg.pin_map["sipo_in"] == "LA03_P"
+    assert [cfg.pin_map[s] for s in ("sipo_out", "piso_out", "dft0_buff", "dft1_buff")] == \
+        ["LA16_P", "LA17_P", "LA18_P", "LA19_P"]
+    assert len(set(cfg.pin_map.values())) == 26
 
 
 def test_setting_missing_type_raises(tmp_path):
