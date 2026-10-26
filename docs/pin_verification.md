@@ -57,4 +57,12 @@ not the analog level or ringing, and not the pin as an input.
 | LA07_P | J3-7 | clk_piso | PASS pass 1 (1.000 MHz, starts ~12 µs after clk_sipo ends) — **first check** |
 | LA08_P | J3-8 | shift | PASS pass 1 (LOW throughout; static LOW only) — **first check** |
 | LA09_P | J3-9 | rst_piso | PASS pass 1 (HIGH, −width 90 ns) — **first check** |
-| LA01, 02, 10-15, 20-25 | | | pass 2 / 3: not yet |
+| LA01_P | J3-1 | reset | PASS pass 2 (LOW, HIGH 1 µs after the step starts; by eye) |
+| LA02_P | J3-2 | set | PASS pass 2, static LOW only (weak) |
+| LA10_P | J3-10 | s0_p | PASS pass 2, static LOW only (weak) — **first check** |
+| LA11_P | J3-11 | s1_p | PASS pass 2, static LOW only (weak) — **first check** |
+| LA12_P | J3-12 | s2_p | PASS pass 2, static LOW only (weak) — **first check** |
+| LA13_P | J3-13 | pulse | PASS pass 2 (1 µs high pulse; by eye) — **first check** |
+| LA14_P | J3-14 | rst_dsa | PASS pass 2 (short high pulse; by eye) — **first check** |
+| LA15_P | J3-15 | b0_dft | PASS pass 2 (HIGH during the step; by eye) — **first check** |
+| LA20-25 | J2-20..25 | b1_dft..s3_dft | pass 3: not yet |

@@ -148,4 +148,14 @@ and is the TBD idle levels, not a fault.
   the view moved to ~+138 µs: **1.000 µs**. Expected 1 µs (100 ticks). **PASS.**
 - **Pass 1 result: PASS** on all 8 pins (J3-0, J3-3..J3-9). LA05-09 had never been checked
   before (`docs/pin_verification.md`).
-- Passes 2-3: not run yet.
+- Pass 2 (17:18:11-17:19:17): 7500 repeated runs, done 7500, fault 0. D0 reset J3-1, D1 set J3-2, D2-D4 s0_p/s1_p/s2_p
+  J3-10..12, D5 pulse J3-13 (trigger, rising), D6 rst_dsa J3-14, D7 b0_dft J3-15. Rahaf:
+  **"all channels match"** §3 (reset HIGH 1 µs after the start, set / s0_p..s2_p LOW, pulse
+  1 µs high, rst_dsa a short high pulse, b0_dft HIGH for the step). Checked by eye; no
+  photo and no width measurements for this pass. **Pass 2: PASS.** Note: set / s0_p..s2_p
+  only showed static LOW, which an unconnected clip would also show (weak check).
+- Editor (`cli gui`, http://127.0.0.1:8765/): Rahaf opened the INFERENCE tab and pressed
+  **Check** in the Run on board card: "the check is correct, I received the expected" (the
+  same 2-step sequence as `run-mode --dry-run`). First use of the button by a user; Run on
+  board itself not pressed yet.
+- Pass 3: not run yet.
