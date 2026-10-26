@@ -58,11 +58,16 @@ not the analog level or ringing, and not the pin as an input.
 | LA08_P | J3-8 | shift | PASS pass 1 (LOW throughout; static LOW only) — **first check** |
 | LA09_P | J3-9 | rst_piso | PASS pass 1 (HIGH, −width 90 ns) — **first check** |
 | LA01_P | J3-1 | reset | PASS pass 2 (LOW, HIGH 1 µs after the step starts; by eye) |
-| LA02_P | J3-2 | set | PASS pass 2, static LOW only (weak) |
-| LA10_P | J3-10 | s0_p | PASS pass 2, static LOW only (weak) — **first check** |
-| LA11_P | J3-11 | s1_p | PASS pass 2, static LOW only (weak) — **first check** |
-| LA12_P | J3-12 | s2_p | PASS pass 2, static LOW only (weak) — **first check** |
+| LA02_P | J3-2 | set | PASS pass 2, static LOW; PINTEST: HIGH 20 s and back to LOW |
+| LA10_P | J3-10 | s0_p | PASS pass 2, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+| LA11_P | J3-11 | s1_p | PASS pass 2, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+| LA12_P | J3-12 | s2_p | PASS pass 2, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
 | LA13_P | J3-13 | pulse | PASS pass 2 (1 µs high pulse; by eye) — **first check** |
 | LA14_P | J3-14 | rst_dsa | PASS pass 2 (short high pulse; by eye) — **first check** |
 | LA15_P | J3-15 | b0_dft | PASS pass 2 (HIGH during the step; by eye) — **first check** |
-| LA20-25 | J2-20..25 | b1_dft..s3_dft | pass 3: not yet |
+| LA20_P | J2-20 | b1_dft | PASS pass 3 (HIGH for the 20 s step; by eye) — **first check as an output** |
+| LA21_P | J2-21 | b2_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+| LA22_P | J2-22 | s0_dft | PASS pass 3 (HIGH for the 20 s step; by eye) — **first check** |
+| LA23_P | J2-23 | s1_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+| LA24_P | J2-24 | s2_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+| LA25_P | J2-25 | s3_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |

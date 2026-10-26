@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C5 PC side done (mode_seq, run-mode, editor Run on board button); next EXP-07 on the board after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. Next C6 (EXP-08) after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
@@ -1724,3 +1724,12 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Hardware setup (Rahaf, 2026-10-26): J18 on 1V8, loopback jumpers off.
 - Results [PC only]: pytest 276 passed, 1 skipped. The button has not run against the board.
 - Next steps: program chip_top (after Rahaf's go), EXP-07 passes 1-3.
+
+## 2026-10-26, Rahaf (with Claude), branch main — EXP-07 on the board (chip pipeline C5)
+- Goal: prove that what the editor sets for a mode is what chip_top drives on the pins.
+- Done: programmed `chip_top` (DONE=1); runs via `cli run-mode --jtag` and a repeat script (load once, start/wait in a loop) on a scratch copy of the config with the SIPO frame filled in (committed config unchanged); a scratch PINTEST mode for the static pins. Fixed `mode_seq` long-duration formatting (`docs/issues.md`). Editor opened (`cli gui`), Check used.
+- Hardware setup: J18 1V8, loopback jumpers off, J17 PROG cable; MSO-X 2002A D0-D7, threshold 0.9 V, logic ground on an SMA shell; 3 passes of 8 clips + PINTEST (`docs/experiments/EXP-07_*.md` §2, §6).
+- Results [measured on board]: **EXP-07 PASS**. Pass 1: clk / clk_sipo / clk_piso 1.000 MHz, sipo_in first byte 0x5A, cs 1.000 µs, rst_sipo / rst_piso 90 ns, order and spacing match (photo `docs/measurements/EXP-07_pass1_overview.png`). Pass 2 and pass 3: all channels match (by eye). PINTEST: the 8 static pins went HIGH together for 20 s and back to LOW. 30,200 runs, 0 faults. 17 pins (LA05-15, LA20-25) checked as outputs for the first time.
+- Problems / fixes: scope didn't trigger in pass 1 (not armed / trigger source) and pass 3 (trigger on a pin that only rises once) -> repeated runs for Auto mode, then a 20 s step watched live. "D0/D2 didn't drop" after the 20 s run was a non-live display (Normal / Single / Stop): live, all LOW, and PINTEST run 2 showed the drop. `--duration 20s` refused (`2e+07us`) -> fixed.
+- Decisions: none new.
+- Next steps: C6 (EXP-08, virtual chip with Dima's models) after Rahaf's OK; Dima's questions (idle levels, DFT mapping, edges); press the editor's Run on board button on the board once (not done yet).

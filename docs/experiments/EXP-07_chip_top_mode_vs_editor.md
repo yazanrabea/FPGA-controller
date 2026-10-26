@@ -8,7 +8,7 @@ analyser** shows on every chip-input pin with what the editor's **Signals panel*
 for the same mode. It is also the **first board check of 17 output pins** that have never
 been checked (LA05-15, LA20-25; `docs/pin_verification.md`).
 
-**Status: PLANNED, not run.** No chip is connected. Nothing below has been measured.
+**Status: PASS (2026-10-26)**, [measured on board], no chip connected. All 22 chip-input pins checked as outputs on the logic analyser (§6).
 
 ## 1. Setup
 
@@ -90,7 +90,7 @@ and is the TBD idle levels, not a fault.
   within the analyser's resolution; static pins at the right level.
 - Pass 1: the 136 `sipo_in` bits read on `clk_sipo`'s rising edges equal the frame.
 
-## 6. Results — IN PROGRESS (2026-10-26, lab PC), [measured on board]
+## 6. Results — PASS (2026-10-26, lab PC), [measured on board]
 
 ### Run record
 - Rahaf at the bench, Claude on the lab PC. Setup confirmed by Rahaf: J18 on 1V8, loopback
@@ -163,4 +163,40 @@ and is the TBD idle levels, not a fault.
 - Diagnostic: one run with `--duration 20s` so b1_dft / s0_dft stay HIGH for 20 s (no trigger
   needed, scope on Run / Auto). First try refused: `error: not a duration: '2e+07us'`
   (bug in `mode_seq.py`, fixed, `docs/issues.md`). Second try 17:39:39-17:40:04:
-  `STATUS: done; last step 1`. Logic analyser reading: waiting for Rahaf.
+  `STATUS: done; last step 1`. Logic analyser (Run / Auto, D0-D5 on J2-20..25): Rahaf:
+  **"D0 and D2 stayed high, the rest stayed low"** = b1_dft and s0_dft HIGH, b2_dft /
+  s1_dft / s2_dft / s3_dft LOW, as expected for "ADC 3, phi1" (b 0b011, s 0b0001; mapping
+  UNCONFIRMED). **Pass 3: PASS** at the static level, by eye. The 1-minute repeat not
+  triggering was the scope setup, not the pins. Return to LOW after the 20 s: Rahaf saw D0 /
+  D2 **not** drop; most likely the display wasn't live (Normal / Single / Stop keeps the last
+  picture), see below.
+- **PINTEST** (extra, the 8 pins that only showed LOW): scratch config with a mode
+  `PINTEST` = set, s0_p, s1_p, s2_p HIGH, b_dft BUS 0b111, s_dft BUS 0b1111, 20 s. Clips D0
+  set J3-2, D1 s0_p J3-10, D2 s1_p J3-11, D3 s2_p J3-12, D4 b2_dft J2-21, D5 s1_dft J2-23, D6
+  s2_dft J2-24, D7 s3_dft J2-25. Run 17:45:01-17:45:28, `STATUS: done`. What the scope showed
+  during the 20 s: not reported. After it (scope switched to Auto + Run, live): **all 8 LOW**,
+  so the pins did return to idle at the end. RTL agrees (`seq_engine` re-applies step 0 at
+  the end). The earlier "didn't drop" is put down to a non-live display, not confirmed.
+- **PINTEST, run 2** (17:48:38-17:49:03, scope live: Auto + Run), `STATUS: done`. Rahaf:
+  **"all 8 went high together, then dropped to low"**. So set, s0_p, s1_p, s2_p, b2_dft,
+  s1_dft, s2_dft, s3_dft really switch (not just a LOW that an open clip would also show),
+  and every pin returns to idle at the end of a sequence. **PASS.**
+
+### Conclusion
+- **EXP-07 PASS.** chip_top, programmed from the generated pin map, drives the mode set in the
+  editor onto the pins: every one of the 22 chip-input pins was seen on the logic analyser
+  doing what the config says (pass 1: 8 SIPO/PISO pins, frequencies 1.000 MHz, first SIPO
+  byte 0x5A, widths 1.000 µs / 90 ns; pass 2: 8 control / array pins; pass 3: 6 DFT pins;
+  PINTEST: the 8 static-LOW ones switched HIGH and back). 17 of them (LA05-15, LA20-25) were
+  checked for the first time. The editor's Check button gave the expected sequence; the
+  Run on board button itself was not pressed (runs went through `run-mode` / a repeat
+  script, same `mode_seq` code).
+- Sequencer: 30,200 back-to-back runs, 0 faults, no reload between runs.
+- Limits: logic level only (0.9 V threshold), not analog levels or ringing; positions read
+  from a photo / by eye except the [Meas] readings; 128 of the 136 sipo_in bits not read;
+  the 4 FPGA inputs (LA16-19) only seen at 0 with nothing connected; widths at 40 ns
+  resolution. The DFT helper bit pattern is still UNCONFIRMED (Dima): the pins match the
+  config, not necessarily the chip.
+- Bug found and fixed: long `--duration` written as `2e+07us` (`docs/issues.md`).
+- Lessons: trigger the scope on a pin that toggles in the pass; for static pins use a long
+  step and a live (Auto + Run) display; Normal / Single / Stop keep the last picture.
