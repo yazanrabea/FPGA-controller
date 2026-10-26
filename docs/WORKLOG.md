@@ -1758,3 +1758,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Problems / fixes: none fixed; the transient is open.
 - Decisions: none.
 - Next steps: ask whether a wire was touched during run 1; optional §5 tests (phirst stepping, sel after a reset); scope on J2-25/26 if the glitch returns.
+
+## 2026-10-26, Rahaf (with Claude), branch main — handoff after C6
+- Done: `docs/HANDOFF.md` updated for C6 / EXP-08 (short version, board state = vchip_top with its 10 jumpers, a warning about jumpers per top, the follow-ups). Committed `scripts/repeat_seq.py` (the EXP-08 repeat check, was a scratch script).
+- Next steps: Rahaf's choice of the C6 follow-ups; Dima's questions.

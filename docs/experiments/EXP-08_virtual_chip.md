@@ -131,3 +131,5 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
   repeat important reads, and the scope should look at `rst_piso` / `shift` while
   `clk_piso` runs.
 - Not done: the §5 tests (phirst stepping, sel after a reset); scope on the wires.
+- To repeat the 300-run check: `scripts/repeat_seq.py` (committed after the run; the run used
+  the same code as a scratch script).
