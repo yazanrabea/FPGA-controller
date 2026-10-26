@@ -32,6 +32,7 @@ python3 -m pytest          # from the repo root; pytest.ini points at tools/nemo
 | `jtag.py` | JTAG link (J4): the PC side of `fpga/src/jtag_link_bridge.sv`. Scan format (`pack_down` / `parse_up`), `JtagTransport` (same `write`/`read` as `SerialTransport`, applies the transport rules of `docs/link_register_map.md`), `XsdbScanPort` (runs `scripts/jtag_server.tcl` in Vivado's xsdb), `open_jtag()`. CLI: `--jtag` instead of `--port`. |
 | `link.py` | Phase 5 link client (`Link`: frames, WRITE_REG/READ_REG/RUN/STOP/APPLY/STATUS/READ_CAPTURE) and Phase 7 round 2 `SeqLink` (link v2: load a step table, start, wait, read captures; implements `sequence.Sequencer`). |
 | `gui.py` + `data/config_gui.html` | Browser form for the config (`python -m nemo_ctl.cli gui`): local server on 127.0.0.1 (standard library only); same checks (`validate_config`), achieved values (`timing.py`) and save (`save_config`, `.bak` kept) as the wizard. |
+| `waves.py` | Real edge times of one mode, per pin, in ns from RUN (same rules as `sig_cell.sv`), for the editor's Signals panel (`POST /api/waves`). Windowed; too-dense lanes flagged. |
 | `tests/` | pytest suite — run from the repo root with `python3 -m pytest`. |
 
 ## Build a mode interactively

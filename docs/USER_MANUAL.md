@@ -238,6 +238,24 @@ it. To edit another file: `--config ..\config\other.yaml`. Try it on a copy firs
 with the wizard.
 
 - **Tabs at the top** pick the mode (READ / WRITE / INFERENCE). *Add mode* makes a new one.
+- **Signals** (the panel under the tabs) draws every input pin of that mode against one
+  time axis from RUN, using the settings on the page right now, **before you save**. It
+  redraws a moment after you stop typing.
+  - The times are real: a 1 µs pulse at 140 µs is drawn there, a clock starts in its
+    high phase after its delay, and a SERIAL pin shows its actual bits, changing on the
+    chosen edge of its clock.
+  - The short dashed piece left of `0 ns` is the pin's level before RUN (an active-low
+    pulse sits high there).
+  - Bus groups and the DFT helper are drawn as one labelled bus. Chip outputs aren't
+    drawn: the chip drives them, not the FPGA.
+  - **Whole mode** fits the whole sequence; **+ / −** zoom around the middle; **◀ ▶**
+    move; or type *from* / *to* in µs.
+  - When a lane has too many edges at the current zoom (a fast clock over a long time),
+    it shows a band saying "zoom in" instead of an unreadable smear.
+  - A setting that can't be drawn, e.g. SERIAL data that isn't a number yet, shows
+    "can't draw" with the reason, on that lane.
+  - It's the timing the config asks for. The FPGA adds the same 20 ns to every pin, so
+    the timing *between* pins is exactly as drawn.
 - **One card per block** (Clock Generator, SIPO, PISO, ...). *copy from…* copies the whole
   block from another mode; *Clear block* empties it.
 - **One row per pin.** Pick the type from the dropdown: only the types that pin allows are

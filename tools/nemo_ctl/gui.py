@@ -3,7 +3,8 @@
 generic_controller_prompt.md §3 Phase 2: "A GUI is optional and only after phase 5 works."
 Phase 5 works (EXP-02), so this is it. Same data, same rules as the wizard and Excel:
 the page edits the same {modes: {mode: {block: {pin: setting}}}} structure, the checks
-are validate.validate_config, the achieved values are timing.py's, and Save writes the
+are validate.validate_config, the achieved values are timing.py's, the waveform panel is
+waves.py's (real edge times of the unsaved edits), and Save writes the
 file with config.save_config (a .bak copy of the old file is kept first; like the wizard,
 saving drops the YAML comments).
 
@@ -29,6 +30,7 @@ from .groups import PIN_GROUPS
 from .pins import Pin, load_pin_db
 from .timing import _summarize_setting
 from .validate import has_errors, validate_config
+from .waves import WaveError, mode_waves
 
 PAGE_PATH = Path(__file__).resolve().parent / "data" / "config_gui.html"
 
@@ -84,6 +86,16 @@ def check_payload(doc: dict, pin_db: dict[str, Pin]) -> dict:
         "errors": sum(1 for i in issues if i.level == "error"),
         "warnings": sum(1 for i in issues if i.level == "warning"),
     }
+
+
+def waves_payload(doc: dict) -> dict:
+    """The waveform of doc["mode"] in the config the page sent (not the saved file), over
+    [doc["t0"], doc["t1"]] ns, or the whole mode when those are missing."""
+    try:
+        config = config_from_dict(doc)
+        return mode_waves(config, doc.get("mode") or "", doc.get("t0"), doc.get("t1"))
+    except (ConfigError, WaveError, TypeError, AttributeError, ValueError) as exc:
+        return {"error": str(exc), "lanes": []}
 
 
 def save_payload(doc: dict, config_path: Path, pin_db: dict[str, Pin]) -> dict:
@@ -148,6 +160,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(400, {"error": "bad JSON"})
         if self.path == "/api/check":
             return self._json(200, check_payload(doc, self.pin_db))
+        if self.path == "/api/waves":
+            return self._json(200, waves_payload(doc))
         if self.path == "/api/save":
             return self._json(200, save_payload(doc, self.config_path, self.pin_db))
         return self._json(404, {"error": "not found"})

@@ -70,6 +70,26 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
 .iss .warning { background: var(--warn-soft); color: var(--warn); }
 .global .iss { padding: 10px 14px; }
 .empty { padding: 12px 14px; color: var(--muted); font-size: 13px; }
+.wave .head .acts input { font: 12px var(--mono); width: 90px; padding: 3px 5px; border: 1px solid var(--rule);
+  border-radius: 4px; background: var(--surface); color: var(--ink); }
+.wave .head .acts label { font-size: 12px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.wave .head .acts button { padding: 3px 9px; font-size: 13px; }
+.wbox { overflow-x: auto; padding: 4px 0 8px; }
+.wbox svg { display: block; }
+.wmsg { padding: 8px 14px; font-size: 13px; color: var(--muted); }
+.w-axis { stroke: var(--rule); }
+.w-tick { fill: var(--muted); font: 11px var(--mono); }
+.w-name { fill: var(--ink); font: 600 12px var(--mono); }
+.w-lbl { fill: var(--muted); font: 10px var(--font); }
+.w-line { stroke: var(--accent); stroke-width: 1.6; fill: none; }
+.w-idle { stroke: var(--muted); stroke-width: 1.2; fill: none; stroke-dasharray: 3 3; }
+.w-bus { stroke: var(--accent); fill: var(--surface-2); stroke-width: 1.2; }
+.w-bustxt { fill: var(--ink); font: 11px var(--mono); }
+.w-dense { fill: var(--accent); opacity: .22; }
+.w-out { stroke: var(--muted); stroke-dasharray: 2 4; }
+.w-err { fill: var(--error); font: 11px var(--font); }
+.w-grid { stroke: var(--rule); stroke-dasharray: 1 4; }
+.w-run { stroke: var(--warn); stroke-width: 1; }
 @media (max-width: 720px) {
   .row { grid-template-columns: 1fr; }
   .out { grid-column: 1; }
@@ -90,6 +110,22 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
 <main>
   <div class="status" id="status">Loading the config…</div>
   <div class="tabs" id="tabs"></div>
+  <section class="card wave" id="wavecard" aria-label="Signals">
+    <div class="head">
+      <h2>Signals</h2>
+      <span class="acts">
+        <label for="wt0">from (µs)</label><input id="wt0" type="text" inputmode="decimal">
+        <label for="wt1">to (µs)</label><input id="wt1" type="text" inputmode="decimal">
+        <button type="button" id="wfit" title="Show the whole mode">Whole mode</button>
+        <button type="button" id="wzin" title="Zoom in around the middle">+</button>
+        <button type="button" id="wzout" title="Zoom out">−</button>
+        <button type="button" id="wleft" title="Earlier">◀</button>
+        <button type="button" id="wright" title="Later">▶</button>
+      </span>
+    </div>
+    <div class="wmsg" id="wmsg">Time from RUN. These are the edits on this page, before saving.</div>
+    <div class="wbox" id="wbox"></div>
+  </section>
   <div id="blocks"></div>
 </main>
 <script>
@@ -168,7 +204,121 @@ async function check() {
   try { lastCheck = await api("/api/check", doc()); }
   catch (e) { setStatus("Check failed: " + e.message, true); return; }
   showResults();
+  waves();
 }
+
+// ---- waveform panel ----------------------------------------------------------------
+let win = null;           // [t0, t1] in ns, or null = whole mode
+let lastWaves = null;
+
+async function waves() {
+  const body = Object.assign(doc(), {mode: cur});
+  if (win) { body.t0 = win[0]; body.t1 = win[1]; }
+  try { lastWaves = await api("/api/waves", body); }
+  catch (e) { $("wmsg").textContent = "Couldn't draw the signals: " + e.message; return; }
+  drawWaves();
+}
+
+function fmtTime(ns) {
+  const a = Math.abs(ns);
+  if (a >= 1e6) return +(ns / 1e6).toPrecision(4) + " ms";
+  if (a >= 1e3) return +(ns / 1e3).toPrecision(4) + " µs";
+  return +ns.toPrecision(4) + " ns";
+}
+
+function niceStep(span, n) {
+  const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (m * p >= raw) return m * p;
+  return 10 * p;
+}
+
+function svgEl(tag, attrs, text) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function drawWaves() {
+  const w = lastWaves, box = $("wbox");
+  box.replaceChildren();
+  if (!w) return;
+  if (w.error) { $("wmsg").textContent = "Can't draw: " + w.error; return; }
+  const lanes = w.lanes.filter((l) => l.kind !== "output");
+  const outs = w.lanes.filter((l) => l.kind === "output").map((l) => l.key);
+  $("wt0").value = +(w.t0 / 1e3).toPrecision(6);
+  $("wt1").value = +(w.t1 / 1e3).toPrecision(6);
+  if (!lanes.length) { $("wmsg").textContent = "No input pins are set in " + cur + " yet."; return; }
+  $("wmsg").textContent = "Time from RUN, the edits on this page (not saved yet)." +
+    (outs.length ? " Chip outputs (" + outs.join(", ") + ") come from the chip, so they aren't drawn." : "");
+
+  const NAMEW = 112, LEAD = 34, RIGHT = 14, LANEH = 34, TOP = 26;
+  const width = Math.max(560, box.clientWidth || 900);
+  const X0 = NAMEW + LEAD, PW = width - X0 - RIGHT;
+  const H = TOP + lanes.length * LANEH + 8;
+  const t0 = w.t0, t1 = w.t1, X = (t) => X0 + (t - t0) / (t1 - t0) * PW;
+  const svg = svgEl("svg", {width, height: H, viewBox: `0 0 ${width} ${H}`, role: "img",
+                            "aria-label": `Signals of ${cur} from ${fmtTime(t0)} to ${fmtTime(t1)}`});
+  // time axis + grid
+  const step = niceStep(t1 - t0, 8);
+  for (let t = Math.ceil(t0 / step) * step; t <= t1 + 1e-9; t += step) {
+    const x = X(t);
+    svg.append(svgEl("line", {x1: x, y1: TOP - 4, x2: x, y2: H - 6, class: "w-grid"}));
+    svg.append(svgEl("text", {x: x + (t === 0 ? 3 : 0), y: TOP - 9, "text-anchor": t === 0 ? "start" : "middle", class: "w-tick"}, fmtTime(t)));
+  }
+  if (t0 === 0) {
+    svg.append(svgEl("line", {x1: X0, y1: TOP - 4, x2: X0, y2: H - 6, class: "w-run"}));
+    svg.append(svgEl("text", {x: X0 - 4, y: TOP - 9, "text-anchor": "end", class: "w-tick"}, "idle"));
+  }
+  lanes.forEach((ln, i) => {
+    const yTop = TOP + i * LANEH + 6, yHi = yTop + 4, yLo = yTop + LANEH - 14, yMid = (yHi + yLo) / 2;
+    const g = svgEl("g", {});
+    g.append(svgEl("title", {}, `${ln.block} / ${ln.key}: ${ln.label}`));
+    g.append(svgEl("text", {x: 8, y: yMid + 4, class: "w-name"}, ln.key));
+    g.append(svgEl("text", {x: X0 + 4, y: yLo + 12, class: "w-lbl"}, ln.label));
+    if (ln.kind === "error") {
+      g.append(svgEl("text", {x: X0 + 4, y: yMid + 4, class: "w-err"}, "can't draw: " + ln.label));
+    } else if (ln.kind === "bus") {
+      const seg = ln.segments[0];
+      g.append(svgEl("path", {d: `M${X0},${yMid} L${X0 + 6},${yHi} L${X0 + PW},${yHi} L${X0 + PW},${yLo} L${X0 + 6},${yLo} Z`, class: "w-bus"}));
+      g.append(svgEl("text", {x: X0 + 14, y: yMid + 4, class: "w-bustxt"}, String(seg ? seg[1] : "")));
+    } else if (ln.kind === "dense" || ln.segments.length > PW / 1.5) {
+      const start = ln.segments.length ? Math.max(X0, X(ln.segments[0][0])) : X0;
+      g.append(svgEl("rect", {x: start, y: yHi, width: Math.max(0, X0 + PW - start), height: yLo - yHi, class: "w-dense"}));
+      g.append(svgEl("text", {x: start + 6, y: yMid + 4, class: "w-bustxt"},
+                      ln.kind === "dense" ? "zoom in to see the edges" : "too many edges at this zoom, zoom in"));
+    } else {
+      if (t0 === 0 && ln.idle !== null && ln.idle !== undefined) {
+        const yi = ln.idle ? yHi : yLo;
+        g.append(svgEl("path", {d: `M${NAMEW + 4},${yi} L${X0},${yi}`, class: "w-idle"}));
+      }
+      let d = "", prevY = null;
+      ln.segments.forEach((sg, k) => {
+        const xa = X(Math.max(sg[0], t0)), xb = X(k + 1 < ln.segments.length ? ln.segments[k + 1][0] : t1);
+        const y = sg[1] ? yHi : yLo;
+        d += (prevY === null ? `M${xa},${y}` : `L${xa},${y}`) + ` L${xb},${y}`;
+        prevY = y;
+      });
+      g.append(svgEl("path", {d, class: "w-line"}));
+    }
+    svg.append(g);
+  });
+  box.append(svg);
+}
+
+function setWin(a, b) { win = [Math.max(0, a), b]; waves(); }
+function curWin() { return lastWaves && !lastWaves.error ? [lastWaves.t0, lastWaves.t1] : [0, 10000]; }
+$("wfit").addEventListener("click", () => { win = null; waves(); });
+$("wzin").addEventListener("click", () => { const [a, b] = curWin(), m = (a + b) / 2, h = (b - a) / 4; setWin(m - h, m + h); });
+$("wzout").addEventListener("click", () => { const [a, b] = curWin(), m = (a + b) / 2, h = b - a; setWin(m - h, m + h); });
+$("wleft").addEventListener("click", () => { const [a, b] = curWin(), d = (b - a) / 2; setWin(a - d, b - d); });
+$("wright").addEventListener("click", () => { const [a, b] = curWin(), d = (b - a) / 2; setWin(a + d, b + d); });
+for (const id of ["wt0", "wt1"]) $(id).addEventListener("change", () => {
+  const a = parseFloat($("wt0").value) * 1e3, b = parseFloat($("wt1").value) * 1e3;
+  if (Number.isFinite(a) && Number.isFinite(b) && b > a) setWin(a, b);
+  else $("wmsg").textContent = "From and to are microseconds, and to must be after from.";
+});
+window.addEventListener("resize", () => { clearTimeout(window._wr); window._wr = setTimeout(drawWaves, 150); });
 
 async function save() {
   let r;
@@ -205,7 +355,7 @@ function renderTabs() {
   const t = $("tabs"); t.replaceChildren();
   for (const m of Object.keys(modes)) {
     t.append(el("button", {type: "button", class: "tab" + (m === cur ? " on" : ""),
-      onclick: () => { cur = m; render(); }}, m));
+      onclick: () => { cur = m; win = null; render(); waves(); }}, m));
   }
   const inp = el("input", {type: "text", id: "newmode", placeholder: "new mode name", "aria-label": "New mode name"});
   t.append(el("span", {class: "newmode"}, inp, el("button", {type: "button", onclick: () => {
@@ -213,7 +363,7 @@ function renderTabs() {
     if (!n) return;
     if (!/^[A-Z0-9_]+$/.test(n)) { setStatus("Mode names: letters, digits and _ only.", true); return; }
     if (!modes[n]) modes[n] = {};
-    cur = n; changed(); render();
+    cur = n; win = null; changed(); render();
   }}, "Add mode")));
 }
 

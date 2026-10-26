@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
-| Yazan | Nothing in progress. Browser config editor (`cli gui`) merged to `main` 2026-10-23. | `main` | `tools/nemo_ctl/{gui.py,data/config_gui.html,config.py,cli.py}`, `tools/nemo_ctl/tests/test_gui.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md` |
+| Yazan | Signals (waveform) panel in the browser editor | `feature/yazan-gui-waves` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
 
@@ -329,6 +329,39 @@ Tag every result **[simulated]** or **[measured on board]**.
   register map stride (the map and the Python encoder stay as they are).
 - Next steps: EXP-01 then EXP-03 with someone at the board (both bitstreams are built);
   send Dima the questions; pick the PC-link option for EXP-02/EXP-04.
+
+---
+
+## 2026-10-26, Yazan, branch feature/yazan-gui-waves
+- Goal: show the signals' waveforms in the browser editor before the config is saved (Yazan's request).
+- Done:
+  - `tools/nemo_ctl/waves.py` (new): per-pin edge times of a mode, in ns from RUN, with `sig_cell.sv`'s rules.
+    - CLOCK starts high after its delay and runs `cycles` periods (blank = for ever).
+    - PULSE: polarity sets the idle level; delay, width, repeat/period.
+    - SERIAL: first bit from its delay, next bit on each `data_edge` edge of its clock, MSB/LSB first, back to 0 after the last bit; fewer clock edges than bits is labelled "incomplete".
+    - LOW/HIGH constant; BUS groups and the DFT helper as a labelled bus; outputs listed, not drawn.
+    - Windowed ([t0, t1] ns); more than 1500 edges in the window -> a `dense` lane. Settings that can't be drawn -> an `error` lane with the reason.
+    - Idle level before RUN per lane where the config says it.
+  - `tools/nemo_ctl/gui.py`: `POST /api/waves` (the page's unsaved config, mode, window).
+  - `tools/nemo_ctl/data/config_gui.html`: Signals panel between the tabs and the blocks.
+    - SVG, no libraries: time axis with readable units, a lane per input pin, the label and achieved value per lane, and the idle level drawn dashed before 0.
+    - Bus lanes; a band with "zoom in" for lanes too dense to draw.
+    - Whole mode / zoom in / zoom out / earlier / later, plus from/to in µs.
+    - Redraws after each check (350 ms after typing) and on a mode switch.
+  - `tools/nemo_ctl/tests/test_waves.py` (new, 10 tests).
+  - Docs: USER_MANUAL §3.5; `tools/nemo_ctl/README.md`.
+- Hardware setup: none.
+- Results:
+  - **[not hardware]** pytest: 234 passed, 1 skipped, in 10 runs in a row. The first full run right after the doc edits had **1 failure that never came back**; I didn't capture which test, so it is unexplained. If a failure shows up again, run `pytest -rf` and record its name.
+  - Headless Microsoft Edge on a copy of the example config (with `sipo_in` given real data, 0xA5 / 8 bits):
+    - whole mode (0-350 µs): `cs` at 140 µs, the `clk_sipo` (from 2 µs) and `clk_piso` (from 150 µs) bursts, the 1 µs active-low `reset`; free `clk` shown as "zoom in";
+    - zoomed 0-12 µs: individual `clk` edges, `sipo_in` = 1,0,1,0,0,1,0,1 changing on `clk_sipo`'s falling edges.
+    - Checked against the rendered SVG paths, not only by eye.
+  - **Not tested automatically:** clicking the zoom buttons (the zoomed view was checked by opening the page pre-zoomed).
+- Problems / fixes:
+  - the "idle" label overlapped "0 ns" on the axis; moved and the lead-in widened.
+  - Reading the first zoomed screenshot I thought `sipo_in` and `clk` started low. The SVG paths showed they start high, as the data says: my misreading, no bug.
+- Next steps: Yazan tries it; merge to `main` when he's happy.
 
 ---
 
