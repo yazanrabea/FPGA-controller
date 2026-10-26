@@ -61,8 +61,10 @@ measured rise or fall time near 5 ns is the scope's limit, not the pin's.
 - Programmed `phase5_link_jtag_top` (`DONE=1`); test_clock set over JTAG to CLOCK
   period 100 / high 50 ticks (read back 100 / 50), APPLY, RUN.
 - Instrument: first the Agilent MSO-X 2002A (only its V/div knob was set up). The readings
-  below are from a **Keysight CX3324A** (the team switched instruments). Probe/sensor,
-  coupling and ground connection: not yet recorded.
+  below are from a **Keysight CX3324A** (the team switched instruments). Coupling: AC at
+  first, then DC (see A1). **Ground: the shortest clip, connected to a ground point next to
+  the measured pin** (Rahaf, reported after the run, applies to A1/A2). Probe/sensor model:
+  not recorded.
 
 ### A1: test_clock 1 MHz, 50 %, on J3-0 (confirmed by Rahaf)
 
@@ -86,10 +88,11 @@ undershoot below 0 V on the edges. That is the ringing CLAUDE.md §5 already not
 wires on a 1 MΩ input.
 
 Cautions (not conclusions):
-- Part of it may be the measurement itself: a long probe ground lead or the sensor's input
-  adds ringing of its own. The probe/sensor model and ground connection were **not
-  recorded**, so read this as "overshoot as measured", not the pin's true behaviour. The
-  ringing zoom was not done.
+- Ground: the **shortest clip, next to the measured pin** (reported after the run). A long
+  lead would have added ringing of its own; a short clip adds much less, so most of the
+  ringing is likely on the pin itself. A ground spring on the probe tip (a few mm) would
+  settle it fully. The probe/sensor model was not recorded, and the ringing zoom was not
+  done.
 - For the chip: -0.4 V below ground on a chip input may be outside its rating. The rating
   is unknown, so it is added to the open questions (chip datasheet / Dima). If it holds up
   with a short ground, the usual fixes are shorter wires or a series resistor at the driver.
@@ -200,14 +203,15 @@ the CX3324A at 1 MΩ, DC coupling:
   justified for jumper wiring.
 
 **Caveats:**
-- The probe/sensor model and its ground connection were not recorded, and a long ground
-  lead adds ringing of its own. So these are "as measured", not proven pin behaviour.
+- Ground was the shortest clip next to the measured pin, so the ringing is likely mostly
+  real. It's not proven: a spring-tip ground would remove the last doubt, and the probe
+  model was not recorded.
 - The ringing zoom on one edge was not done.
 - Amplitude was only read at 1 MHz J3-0 and 10 MHz J3-0.
 
 **Open, before the chip is connected** (`docs/issues.md`):
-1. Repeat A1 / A2 with the shortest possible ground (spring tip) and a recorded probe, to
-   see how much of the ringing is real.
+1. Optional: repeat A1 / A2 with a ground spring on the probe tip and a recorded probe
+   model (A1/A2 already used the shortest clip next to the pin).
 2. Check the chip's input rating below ground (datasheet / Dima). -0.7 V undershoot may be
    outside it.
 3. If the ringing is real: shorter wires, a series resistor at the driver, or a lower drive

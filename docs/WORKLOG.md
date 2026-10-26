@@ -22,8 +22,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Hardware setup: unchanged from 2026-10-22 (J18 1V8, EXP-01 jumpers, switches down, J17),
   confirmed by Rahaf. Instruments: started on the Agilent MSO-X 2002A, then the
   **Keysight CX3324A** for the analog readings (1 MΩ; AC coupling first, then DC), and the
-  **MSO-X 2002A logic cable** for row E. Probe/sensor model and ground connection were not
-  recorded.
+  **MSO-X 2002A logic cable** for row E. Ground for A1/A2: the shortest clip, next to the
+  measured pin (Rahaf, reported after the run). Probe/sensor model not recorded.
 - Results **[measured on board]** (tables in EXP-06 §4):
   - 1 MHz: frequency and duty exact; J3-0 max 2.2 / min -0.4 V, rise 17.8 / fall 17.0 ns;
     J3-16 2.42 / -0.7 V, ~18 ns.

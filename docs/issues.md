@@ -149,11 +149,12 @@ Format: symptom, suspected cause, fix, confirmation.
     2.42 V / -0.7 V;
   - at 10 MHz, 2.1 / -0.4 V and ~2.3 / -0.64 V;
   - edges ~18 ns at 1 MHz.
-- Suspected: reflections on the unterminated jumper wire (the far end rings more), plus
-  possibly the probe's ground lead. The probe/sensor and its ground were **not recorded**, so
-  how much is measurement is unknown.
+- Suspected: reflections on the unterminated jumper wire (the far end rings more). The
+  ground was the **shortest clip next to the measured pin** (reported 2026-10-26 after the
+  run), so a long ground lead is ruled out, and most of the ringing is likely real. The
+  probe/sensor model was not recorded.
 - Why it matters: the chip's inputs will see this. -0.7 V below ground may be outside the
   chip's input rating (unknown: datasheet / Dima).
-- Next: re-measure with a spring-tip ground and a recorded probe. If it is real, try
-  `SLEW SLOW` / a lower `DRIVE` in the XDC, a series resistor or shorter wires, and measure
-  again. Not fixed.
+- Next: try `SLEW SLOW` / a lower `DRIVE` in the XDC (FPGA side only, no new wiring),
+  rebuild and measure again; then a series resistor or shorter wires if needed. Optional:
+  a spring-tip ground for a final check of the measurement. Not fixed.
