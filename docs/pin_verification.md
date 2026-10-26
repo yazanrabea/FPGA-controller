@@ -39,3 +39,22 @@ and assume they work, because no current experiment uses them. Nothing has been 
 them; the "–" above means *not tested*, not *passed*. Verify a pair (e.g. with
 `fmc_selectable_loopback` / `fmc_clock_loopback_slow`, which select pairs 0-15 with
 `sw[3:0]`) before the chip uses that pin.
+
+## chip_top outputs, logic analyser (EXP-07)
+
+`docs/experiments/EXP-07_chip_top_mode_vs_editor.md`, 2026-10-26 [measured on board]:
+`chip_top` (DRIVE 4 / SLEW SLOW) running INFERENCE, MSO-X 2002A digital channels, threshold
+0.9 V. Checks the pin **as an FPGA output** at the logic level (right signal, right timing);
+not the analog level or ringing, and not the pin as an input.
+
+| LA | Header | chip signal | EXP-07 |
+|---|---|---|---|
+| LA00_P | J3-0 | clk | PASS pass 1 (1.000 MHz, runs the whole step) |
+| LA03_P | J3-3 | sipo_in | PASS pass 1 (first byte 0x5A read against clk_sipo) |
+| LA04_P | J3-4 | clk_sipo | PASS pass 1 (1.000 MHz, one block ~136 µs) |
+| LA05_P | J3-5 | cs | PASS pass 1 (+width 1.000 µs, after clk_sipo) — **first check of this pin** |
+| LA06_P | J3-6 | rst_sipo | PASS pass 1 (HIGH, −width 90 ns, expected 100 ns ±40 ns sample) — **first check** |
+| LA07_P | J3-7 | clk_piso | PASS pass 1 (1.000 MHz, starts ~12 µs after clk_sipo ends) — **first check** |
+| LA08_P | J3-8 | shift | PASS pass 1 (LOW throughout; static LOW only) — **first check** |
+| LA09_P | J3-9 | rst_piso | PASS pass 1 (HIGH, −width 90 ns) — **first check** |
+| LA01, 02, 10-15, 20-25 | | | pass 2 / 3: not yet |

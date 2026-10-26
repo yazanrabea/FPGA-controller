@@ -102,4 +102,50 @@ and is the TBD idle levels, not a fault.
   status run 0 / busy 0 / done 0 / fault 0 / aborted 0 / late 0 / table_rejected 0 /
   rx_overflow 0. All 4 cap cells (sipo_out, piso_out, dft0_buff, dft1_buff): level 0, edges 0,
   as expected with nothing connected (PULLDOWN).
-- Passes 1-3: not run yet.
+- Pass 1, run 1: `run-mode --mode INFERENCE --jtag` with a copy of `config/nemo_config.yaml`
+  whose `sipo_in` data is `0x5AA55A0FF0123456789ABCDEF0C3C3E7E7` (the committed config is
+  unchanged). Output: 2 steps (idle 1000 ticks, INFERENCE 35000 ticks), **`STATUS: done; last
+  step 1`**, no FAULT, exit 0. Captures: all 4 cap cells level 0 / edges 0 / period 0 / high 0;
+  piso_out capture 0x000...0 (42 hex digits). Expected with nothing on the inputs (PULLDOWN).
+- Pass 1, runs 2 (16:25:00) and 3 (16:31:51): same output, done, no FAULT. The scope did not
+  trigger on either (run 2: not armed; run 3: armed in Normal / Single, `Trig'd?`, but it
+  never triggered although Rahaf saw D2 go up). Trigger source not yet checked: likely not
+  set to D2 (open).
+- Workaround: repeat the run in one JTAG session (scratchpad script: `SeqLink.load` once,
+  then `start` + `wait` in a loop) so the scope can use Auto / Run. 200 runs in 1.6 s
+  (7.9 ms each), done 200, fault 0 (16:37:22); then **7500 runs in 60.0 s (8.0 ms each),
+  done 7500, fault 0** (16:37:39-16:38:44). The sequencer restarts reliably with no reload.
+- Repeat 2: 7500 runs in 60.3 s, done 7500, fault 0 (16:40:29-16:41:34).
+- **Pass 1 logic analyser capture** (`docs/measurements/EXP-07_pass1_overview.png`, a phone
+  photo of the screen): MSO-X 2002A, D0-D7, threshold 900 mV, trigger D2 rising, 50 µs/div,
+  0 s at the centre, Peak Detect, 25 MSa/s, Stop (triggered during the repeated runs). Read
+  from the photo (positions are only as good as a photo of the screen, about ±5 µs):
+
+  | Ch | Pin | Seen | Expected (§3) | |
+  |---|---|---|---|---|
+  | D0 | clk | toggling from the trigger to past the right edge (+250 µs) | 1 MHz for the whole 350 µs step | matches |
+  | D1 | sipo_in | an irregular bit pattern over the same span as D2 | the frame, 136 bits | pattern seen; bits not yet read |
+  | D2 | clk_sipo | toggling, one block of ~130-136 µs from the trigger | 136 cycles, 2-138 µs | matches |
+  | D3 | cs | one short pulse just after D2's block ends | 1 µs at 140 µs (2 µs after clk_sipo ends) | matches |
+  | D4 | rst_sipo | HIGH, one short dip at the trigger point | HIGH, 100 ns low at the start | matches |
+  | D5 | clk_piso | toggling from ~10-12 µs after D2's block ends, to past the right edge | from 150 µs (12 µs after clk_sipo ends) to 318 µs | matches |
+  | D6 | shift | LOW throughout | LOW | matches |
+  | D7 | rst_piso | HIGH (top line), one short dip at the trigger point | same as rst_sipo | matches |
+
+  The order and relative timing of all 8 signals match the config. Not yet measured: cycle
+  counts, the 1 µs / 100 ns widths, and the sipo_in bits (needs zooming in).
+- **Frequency** (scope [Meas] → Frequency on the stored capture, digital channels):
+  D2 clk_sipo **1.000 MHz**, D0 clk **1.000 MHz**, D5 clk_piso **1.000 MHz**. Expected 1 MHz
+  (period 100 ticks of 10 ns), exact to the scope's 4 digits. **PASS.**
+- **sipo_in bits**: zoomed to 2 µs/div at the start of clk_sipo, D1 read at each rising edge
+  of D2: **0 1 0 1 1 0 1 0** = 0x5A, the frame's first byte (MSB first). Expected
+  0 1 0 1 1 0 1 0. **PASS.** (Rest of the 136 bits not read.)
+- **Reset pulse widths** ([Meas] → − Width, stored capture at 25 MSa/s = 40 ns per sample):
+  D4 rst_sipo **90 ns**, D7 rst_piso **90 ns**. Expected 100 ns (10 ticks); 90 ns is within
+  the ±40 ns sample resolution of this capture. **PASS** at this resolution (a sharper
+  reading needs a capture at a faster sample rate).
+- cs width (D3, + Width): not shown at first (the pulse was outside the zoomed window); with
+  the view moved to ~+138 µs: **1.000 µs**. Expected 1 µs (100 ticks). **PASS.**
+- **Pass 1 result: PASS** on all 8 pins (J3-0, J3-3..J3-9). LA05-09 had never been checked
+  before (`docs/pin_verification.md`).
+- Passes 2-3: not run yet.
