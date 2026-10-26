@@ -461,6 +461,13 @@ class SeqLink(Link):
             raise LinkError(f"expected a 1-byte STATUS response, got CMD 0x{cmd:02X} / {len(data)} bytes")
         return V2Status.decode(data[0])
 
+    def read_cap_timing(self, cap_cell: str) -> dict:
+        """PERIOD / HIGH counters of a cap cell, in ticks: {'period', 'high'} (chip_top
+        fills them; phase7_link_top returns 0)."""
+        k = self.target.cap_index(cap_cell)
+        b = self.read_capture_raw(k * v2_cap_stride(self.target) + V2_CAP_PERIOD, 8)
+        return {"period": int.from_bytes(b[0:4], "little"), "high": int.from_bytes(b[4:8], "little")}
+
     def read_cap_counts(self, cap_cell: str) -> dict:
         """flags + edge count of a cap cell: {'level', 'done', 'edges'}."""
         k = self.target.cap_index(cap_cell)

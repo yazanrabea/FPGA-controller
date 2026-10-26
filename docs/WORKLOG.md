@@ -1694,3 +1694,10 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Next steps: use the Pinout sheets to plan the chip-pin to FMC LA-pin mapping for the SIPO/PISO and phase signals.
 - Moved Rahaf's `session1/` (SIPO/PISO/Y-Flash explanation PDF + 6 diagrams) to `docs/session1/` to match the repo layout; contents unchanged. CLAUDE.md layout and SIPO/PISO task now point there.
 - Deleted the old lab-PC `NEMO_Tracking.xlsx`; Rahaf's version renamed to `docs/project/NEMO_Tracking.xlsx` (the only copy now; the old one remains in git history).
+
+## 2026-10-26, Rahaf (with Claude), branch main — chip pipeline step C5 (part 1, in progress)
+- Goal: what is set in the editor for a mode is what chip_top drives (Rahaf's request).
+- Done: `tools/nemo_ctl/mode_seq.py` (new): editor mode -> 2-step chip_top sequence (step 0 idle from pin_db idle levels, TBD -> LOW and reported; step 1 = the mode; BUS / DFT helper -> per-pin LOW/HIGH; CAPTURE -> cap modes; duration = last event + 10 %; empty SERIAL data, wrong capture edge, free-running-only mode are errors). `cli.py`: `run-mode --mode M [--config] [--duration] [--dry-run | --jtag]` (load over J17, run, print status + each cap cell's level/edges/period/high/serial capture). `link.py`: `SeqLink.read_cap_timing()`.
+- Results [simulated / PC only]: example config INFERENCE -> clear error (SIPO data '0x' empty); with data filled -> 2 steps, 350 us, dry-run exit 0. pytest 257 passed, 1 skipped (no new tests yet).
+- Not on hardware. run-mode --jtag not yet run against a board.
+- Next steps: pytest tests for mode_seq + CLI dry-run; USER_MANUAL / README / HANDOFF; EXP-07 procedure; then Rahaf's OK before programming chip_top for EXP-07. Open: GUI "Run on board" button (default: leave to Yazan).

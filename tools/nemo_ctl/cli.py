@@ -121,6 +121,58 @@ def _open_seqlink(args: argparse.Namespace):
     return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout))
 
 
+def _open_chip_link(args: argparse.Namespace):
+    """SeqLink to chip_top (target chip_top) over JTAG or a serial port (tests replace this)."""
+    from .link import SeqLink, SerialTransport
+    from .sequence import chip_target
+    if args.jtag:
+        from .jtag import open_jtag
+        return open_jtag(timeout=args.timeout, link_cls=SeqLink, target=chip_target())
+    return SeqLink(SerialTransport(args.port, baud=args.baud, timeout=args.timeout), target=chip_target())
+
+
+def cmd_run_mode(args: argparse.Namespace) -> int:
+    from .config import load_config
+    from .mode_seq import mode_table
+    from .sequence import SequenceError
+    from .units import UnitsError, parse_duration_ns
+    try:
+        dur = parse_duration_ns(args.duration) * 1e-9 if args.duration else None
+        table, notes = mode_table(load_config(args.config), args.mode, dur)
+    except (SequenceError, UnitsError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"mode {args.mode} -> sequence for chip_top:")
+    for line in table.summary():
+        print(f"  {line}")
+    for n in notes:
+        print(f"note: {n}")
+    for w in table.warnings:
+        print(f"warning: {w}")
+    if args.dry_run:
+        return 0
+    if not (args.jtag or args.port):
+        print("error: give --jtag (or --port) to run it on the board, or --dry-run", file=sys.stderr)
+        return 1
+    run_s = table.steps[-1].cond_arg / 1e8 + table.steps[0].cond_arg / 1e8
+    sl = _open_chip_link(args)
+    try:
+        sl.load(table)
+        sl.start()
+        r = sl.wait(run_s + 2.0)
+        print(f"STATUS: {'done' if r.done else 'NOT done'}{', FAULT' if r.fault else ''}; last step {r.step}")
+        for c in sl.target.cap_cells:
+            cnt, tim = sl.read_cap_counts(c.name), sl.read_cap_timing(c.name)
+            line = (f"  {c.name}: level {int(cnt['level'])}, edges {cnt['edges']}, "
+                    f"period {tim['period']} ticks, high {tim['high']} ticks")
+            if c.cap_w > 1:
+                line += f", capture 0x{sl.read_capture(c.name):0{(c.cap_w + 3) // 4}X}"
+            print(line)
+    finally:
+        sl.close()
+    return 0 if r.done and not r.fault else 1
+
+
 def _print_seq_status(st, step, last) -> None:
     flags = [n for n in ("run", "busy", "done", "fault", "aborted", "late", "table_rejected",
                          "rx_overflow") if getattr(st, n)]
@@ -523,6 +575,34 @@ def build_parser() -> argparse.ArgumentParser:
     lk_cap.set_defaults(func=cmd_link_read_captures)
 
     # ---- seq: Phase 7 round 2, the step sequencer over link v2 (phase7_link_top) ----
+    rm = sub.add_parser(
+        "run-mode", formatter_class=_RDF,
+        help="run one mode of the config on chip_top (chip pipeline C5)",
+        description=_wrap(
+            "Turn one mode of the config (what the wizard / browser editor set) into a sequence "
+            "for chip_top (step 0 = every pin at its idle level, step 1 = the mode), load it "
+            "over the link and run it, then print what each chip output captured. With "
+            "--dry-run only the conversion is shown (no board). The editor's Signals panel "
+            "shows the same mode's waveforms; EXP-07 compares the two on the logic analyser. "
+            "Needs chip_top on the board (build: create_project.tcl -tclargs chip_top build)."),
+        epilog=_wrap("Example (from tools/):\n"
+                     "  python -m nemo_ctl.cli run-mode --mode INFERENCE --dry-run\n"
+                     "  python -m nemo_ctl.cli run-mode --mode INFERENCE --jtag"),
+    )
+    rm.add_argument("--mode", required=True, help="mode name, e.g. INFERENCE")
+    rm.add_argument("--config", default=str(DEFAULT_CONFIG_PATH),
+                    help="config file (default: config/nemo_config.yaml)")
+    rm.add_argument("--duration", default=None,
+                    help="how long the mode runs, e.g. 350us or 2s (default: its last event + 10 %%; "
+                         "needed for a mode with only free-running clocks)")
+    rm.add_argument("--dry-run", action="store_true", help="only convert and print, no board")
+    rm.add_argument("--jtag", action="store_true",
+                    help="run over the JTAG link on J17 (chip_top uses JTAG)")
+    rm.add_argument("--port", default=None, help="serial port instead (not used by chip_top today)")
+    rm.add_argument("--baud", type=int, default=115_200, help="with --port")
+    rm.add_argument("--timeout", type=float, default=1.0, help="link response timeout, seconds")
+    rm.set_defaults(func=cmd_run_mode)
+
     sq = sub.add_parser(
         "seq",
         help="load / run / read a step sequence on a phase7_link_top bitstream",
