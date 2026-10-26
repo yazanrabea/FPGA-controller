@@ -20,6 +20,11 @@
 
 ## What happened on 2026-10-26 (details: WORKLOG, `docs/experiments/EXP-06_scope_timing.md`)
 
+- Later the same day:
+  - **review** of the GUI and the JTAG PC side: one latent hang fixed in `jtag.py`; two
+    display issues in `waves.py` left for Yazan (WORKLOG);
+  - **EXP-03 rerun** on the `seq_engine`-fix bitstream: identical PASS (caveat closed).
+
 - **EXP-06**, on `phase5_link_jtag_top`. Every setting was made from the PC over JTAG on one
   bitstream:
   - 1 MHz / 50 %, 100 kHz / 25 % and a 1 µs pulse every 10 µs: all exact;
@@ -118,7 +123,9 @@
    the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
    it's missing.
-2. **Review of unreviewed work on `main`** (also postponed by Rahaf on 2026-10-26):
+2. **Review**: done 2026-10-26 for the GUI and the JTAG PC side (WORKLOG). **Yazan: fix
+   `waves.py` items 2-3** (SERIAL drawn 20 ns early; DFT label). Still not reviewed by
+   Rahaf herself:
    - Yazan's round 2 + GUI;
    - the 2026-10-22 fixes (`phase4_loopback_top`, `link_ctrl` `read_byte`, `seq_engine`
      `step_cnt1`);
@@ -126,7 +133,6 @@
 3. Optional, at the bench:
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;
-   - rerun EXP-03 on the current `phase7_seq_loopback_top` bitstream;
    - verify pairs 5-15 when the chip needs them.
 4. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
    every FPGA output driving the chip** (CLAUDE.md §8), and verify those exact pins.

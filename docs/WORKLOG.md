@@ -36,7 +36,15 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Decisions (Rahaf): fix 1; leave 2 and 3 for Yazan; bench check (a) = rerun EXP-03 next.
 - Results: **[not hardware]** pytest 235 passed, 1 skipped. **[measured on board]** a STATUS
   through the fixed `XsdbScanPort` worked.
-- Next steps: EXP-03 rerun on the current `phase7_seq_loopback_top` bitstream. Yazan: items 2-3.
+- Bench check (a), same session: **EXP-03 rerun** on the bitstream with the `seq_engine`
+  `step_cnt1` fix (programmed `phase7_seq_loopback_top.bit`, DONE=1).
+  **[measured on board]**, Rahaf:
+  - pre-START: J3-1 1.8 V, the others 0 V, LEDs off;
+  - Run 1: LD0/LD2/LD4/LD6;
+  - Run 2 (J2-20 pulled): LD2/LD5/LD6, jumper put back;
+  - Run 3 (abort): LD1/LD7.
+  All identical to 2026-10-22: PASS. Caveat closed (EXP-03, `docs/issues.md`, CLAUDE.md §6, HANDOFF).
+- Next steps: Yazan: `waves.py` items 2-3. Dima's questions (critical path).
 
 ---
 

@@ -179,6 +179,23 @@ J3-0 after the abort: not measured.
 
 **Fill a row only with an actual reading from the board.**
 
+### Rerun, 2026-10-26, on the bitstream with the `seq_engine` timing fix [measured on board]
+
+The 2026-10-22 runs used the bitstream from before `seq_engine.sv`'s `step_cnt1` change
+(`docs/issues.md`). This rerun uses the rebuild with it: timing met, WNS +0.100 ns, sources
+unchanged since `e8a098c`.
+- Rahaf at the board: switches down, the 5 jumpers in; J18 1V8 and J17 as before.
+- Programmed `phase7_seq_loopback_top.bit` (`DONE=1`).
+
+| Check | Reported | Expected | Pass |
+|---|---|---|---|
+| Before START | J3-1 1.8 V, the others 0 V, all LEDs off | the same | PASS |
+| Run 1 (full sequence) | LD0, LD2, LD4, LD6 on, others off | step 5, done, 0xA5 matched | PASS |
+| Run 2 (J2-20 pulled) | LD2, LD5, LD6 on, others off; jumper put back | step 4, FAULT, 0xA5 captured before the fault | PASS |
+| Run 3 (abort in step 2) | LD1, LD7 on, others off | step 2, aborted | PASS |
+
+Identical to 2026-10-22, so the `step_cnt1` change is confirmed on the board.
+
 ## 6. Conclusion
 
 **PASS, 2026-10-22.** `seq_engine` ran the 6-step compile-time sequence on the board end to
