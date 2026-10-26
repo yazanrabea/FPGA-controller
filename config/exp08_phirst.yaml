@@ -1,0 +1,73 @@
+# EXP-08 follow-up (2026-10-26, Rahaf): one phirst pulse on the virtual chip (vchip_top).
+# Same SIPO load / PISO read as config/chip_sim_test.yaml, plus:
+#   - a rst_sipo pulse first, so Dima's sipo_wrapper `index` is back at 24 on every run
+#     (each phirst adds 16 for good, so without it every run would read the next slice);
+#   - one 1 us pulse on `pulse` after the load = the virtual chip's phirst (jumper J3-13 ->
+#     J2-27; virtual chip only, on the real chip phirst is internal).
+# Expected (Dima's sipo_wrapper as written): phirst loads sel[23:8] = frame[index +: 16] =
+# frame[39:24] = 0xF0C3, so piso_out = frame + F0C3 + E7 (sel[7:0] = frame[7:0]) + C6:
+#   0x5AA55A0FF0123456789ABCDEF0C3C3E7E7_F0C3E7C6
+# Every polarity / edge here is UNCONFIRMED for the real chip (Dima).
+#
+# Board:  cd tools && python -m nemo_ctl.cli seq load ../config/exp08_phirst.yaml --jtag
+# Sim:    scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3
+
+target: chip_top
+
+steps:
+  - name: idle                 # step 0: every cell (as chip_sim_test.yaml)
+    set:
+      clk:       {type: LOW}
+      reset:     {type: HIGH}
+      set:       {type: LOW}
+      rst_dsa:   {type: LOW}
+      pulse:     {type: LOW}
+      s0_p:      {type: LOW}
+      s1_p:      {type: LOW}
+      s2_p:      {type: LOW}
+      b0_dft:    {type: LOW}
+      b1_dft:    {type: LOW}
+      b2_dft:    {type: LOW}
+      s0_dft:    {type: LOW}
+      s1_dft:    {type: LOW}
+      s2_dft:    {type: LOW}
+      s3_dft:    {type: LOW}
+      sipo_in:   {type: LOW}
+      clk_sipo:  {type: LOW}
+      cs:        {type: LOW}
+      rst_sipo:  {type: HIGH}  # active-low (sipo.sv rst_n), held inactive
+      clk_piso:  {type: LOW}
+      shift:     {type: LOW}
+      rst_piso:  {type: HIGH}  # active-low (piso.sv rst_n), held inactive
+    capture:
+      sipo_out:  {mode: LEVEL}
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true}
+      dft0_buff: {mode: PERIOD}
+      dft1_buff: {mode: PERIOD}
+    until: {after: 5us}
+
+  - name: sipo_reset           # index back to 24 (and the SIPO registers to 0)
+    set:
+      rst_sipo:  {type: PULSE, width: 1us, delay: 1us, polarity: active_low}
+    until: {after: 5us}
+
+  - name: sipo_load            # as chip_sim_test.yaml
+    set:
+      clk_sipo:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 136, delay: 2us}
+      sipo_in:   {type: SERIAL, data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7", bits: 136, msb_first: true,
+                  clock: clk_sipo, data_edge: falling, delay: 1us}
+      cs:        {type: PULSE, width: 1us, delay: 140us}
+    until: {after: 145us}
+
+  - name: phirst               # one rising edge on the virtual chip's phirst
+    set:
+      pulse:     {type: PULSE, width: 1us, delay: 1us}
+    until: {after: 5us}
+
+  - name: piso_read            # as chip_sim_test.yaml
+    set:
+      clk_piso:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 168, delay: 2us}
+      shift:     {type: PULSE, width: 170us, delay: 2700ns}
+    capture:
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true}
+    until: {captured: piso_out, timeout: 300us}

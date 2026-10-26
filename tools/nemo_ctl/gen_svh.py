@@ -909,6 +909,9 @@ def main(argv: list[str] | None = None) -> None:
                          "table here as package phase7_link_tb_pkg (simulation), at --time-scale; "
                          "--chip: write config/chip_sim_test.yaml's encoded table here as package "
                          "chip_tb_pkg (simulation) INSTEAD of the chip package / XDC")
+    ap.add_argument("--seq", type=Path, default=None,
+                    help="--chip --table-out: encode this chip_top sequence instead of "
+                         "config/chip_sim_test.yaml (e.g. config/exp08_phirst.yaml)")
     ap.add_argument("--time-scale", type=float, default=1.0,
                     help="--phase7 only: multiply every time by this (e.g. 1e-4) for a "
                          "simulation copy; use with --out, never for the hardware package")
@@ -917,6 +920,8 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     if args.out and not args.phase7:
         ap.error("--out only applies to --phase7")
+    if args.seq and not (args.chip and args.table_out):
+        ap.error("--seq only applies to --chip --table-out")
     if args.table_out and not (args.phase7_link or args.chip):
         ap.error("--table-out only applies to --phase7-link or --chip")
     if args.time_scale != 1.0 and not (args.phase7 or args.table_out):
@@ -932,7 +937,7 @@ def main(argv: list[str] | None = None) -> None:
             out = args.out or PHASE7_OUT_PATH
             text, warnings = generate_phase7(scale=args.time_scale)
         elif args.chip and args.table_out:
-            out, text = args.table_out, chip_table_package()
+            out, text = args.table_out, chip_table_package(args.seq)
         elif args.chip:
             pkg_text, xdc_text = generate_chip()
             CHIP_XDC_OUT_PATH.write_text(xdc_text)

@@ -82,7 +82,8 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
     a glitch on `rst_piso`, then on `shift` (J2-26 / J2-25, next to `clk_piso`). The jumpers
     had just been put on.
   - Then 309 exact: 5 + 300 in a row, 3 with a fresh CLI load, 1 right after re-programming.
-  - Rahaf was asked whether a wire was touched; no answer yet.
+  - Rahaf: no one touched the wires. After that, the phirst follow-up (EXP-08 §7)
+    passed: `sel` stepped to `F0C3`, 101 / 101 exact. So far 1 bad run out of 411.
 - New tests: `test_gen_vchip.py` (13). pytest 288 passed, 1 skipped.
 - Files to repeat it: `config/chip_sim_test.yaml`, `scripts/repeat_seq.py`,
   EXP-08 §3 for the commands.
@@ -245,7 +246,7 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 ## What to do next
 
 0. **Optional C6 follow-ups** (EXP-08 §5), each with Rahaf's OK and a simulation first:
-   - **phirst stepping**: one `pulse` after the load should give `sel = F0C3E7`;
+   - ~~phirst stepping~~: **done, PASS** (EXP-08 §7: `F0C3E7`, 101 / 101 on the board);
    - **`sel` after a reset**: the FPGA's latches may give `0000` where the simulation of
      Dima's RTL gives the previous slice `C3E7`. That's a real behaviour difference worth
      telling Dima;

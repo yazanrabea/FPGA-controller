@@ -15,13 +15,17 @@
 // board registers start at 0. The second reset, with parallel_out already 0,
 // gives the board's starting point (sel = 0) in simulation too.
 //
+// The sequence and the expected sel[23:8] come from scripts/run_vchip_sim.sh
+// (packages chip_tb_pkg and vchip_tb_expect): config/chip_sim_test.yaml with
+// sel[23:8] = 0000 (no phirst), or config/exp08_phirst.yaml with F0C3 (one phirst).
+//
 // Pass, all must hold:
 //   1. STATUS answers over JTAG, idle.  2. The 3-step table loads, N_STEPS = 3.
 //   3. Before RUN: ctl_out at step 0 (reset / rst_sipo / rst_piso high, rest low);
 //      after the extra reset the virtual chip's frame and sel are 0.
 //   4. RUN: Dima's sipo latched exactly the config's 136-bit frame on cs.
 //   5. STATUS done, no fault; LD4 on, LD5 / LD7 off.
-//   6. READ_CAPTURE piso_out = {frame, sel[23:0] = {16'h0, frame[7:0]}, 8'hC6}:
+//   6. READ_CAPTURE piso_out = {frame, sel[23:0] = {SEL_HI, frame[7:0]}, 8'hC6}:
 //      the frame went PC -> controller -> jumpers -> Dima's SIPO -> PISO -> back.
 //   7. sipo_out's cap cell reads level = frame[0] (sipo_wrapper's shift_reg[0]).
 // On the board: EXP-08 (docs/experiments/EXP-08_virtual_chip.md).
@@ -49,7 +53,8 @@ module vchip_top_tb;
     localparam int NC   = chip_pkg::N_CAP;
     localparam int NCTL = vchip_pkg::N_CTL;
     localparam logic [135:0] FRAME = chip_tb_pkg::SIPO_FRAME;
-    localparam logic [167:0] WANT  = {FRAME, 16'h0000, FRAME[7:0], 8'hC6};
+    localparam logic [15:0]  SEL_HI = vchip_tb_expect::SEL_HI;   // sel[23:8] expected at the read
+    localparam logic [167:0] WANT  = {FRAME, SEL_HI, FRAME[7:0], 8'hC6};
 
     logic clk = 0, tck = 0;
     always #5 clk = ~clk;
@@ -185,7 +190,8 @@ module vchip_top_tb;
     bit ok;
 
     initial begin
-        $display("== vchip_top_tb: controller (%0d pinned outputs) + virtual chip, table from config/chip_sim_test.yaml ==", NCTL);
+        $display("== vchip_top_tb: controller (%0d pinned outputs) + virtual chip, %0d-step table, expect sel[23:8] = %h ==",
+                 NCTL, chip_tb_pkg::N_STEPS, SEL_HI);
         repeat (100) @(posedge clk);
         transport_scan();                        // learn `free`
 
@@ -208,7 +214,8 @@ module vchip_top_tb;
         send_frame(8'h04, 16'h0000, none);       // APPLY: step 0 = idle state
         flush();
         request(8'h02, chip_pkg::REG_N_STEPS, 1, rc, rd, ok);
-        check(ok && rd.size() == 1 && rd[0] == chip_tb_pkg::N_STEPS, "2. table loaded, N_STEPS read back = 3");
+        check(ok && rd.size() == 1 && rd[0] == chip_tb_pkg::N_STEPS,
+              $sformatf("2. table loaded, N_STEPS read back = %0d", chip_tb_pkg::N_STEPS));
 
         // 3. idle levels on the pinned outputs, then the testbench's second reset
         begin
@@ -223,10 +230,10 @@ module vchip_top_tb;
               $sformatf("3. virtual chip after the second reset: frame %h, sel %h (board power-up = 0)",
                         w.dut.u_vc.frame, w.dut.u_vc.sel));
 
-        // 4. RUN; the sequence takes ~330 us
+        // 4. RUN; the sequences take ~330-345 us
         send_frame(8'h05, 16'h0000, none);
         flush(0);
-        #400000;
+        #420000;
         check(w.dut.u_vc.frame === FRAME,
               $sformatf("4. Dima's sipo latched the config's frame on cs (%h)", w.dut.u_vc.frame));
 

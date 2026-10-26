@@ -85,9 +85,7 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
 
 ## 5. Open questions this experiment can answer next (planned, need your OK)
 
-1. **phirst**: a sequence that pulses `pulse` (= phirst) once after the load should give
-   `sel[23:8] = frame[39:24] = F0C3` (index 24 → 40), so the tail `F0C3E7C6`. Needs a sequence
-   file + simulation first.
+1. **phirst**: **done 2026-10-26, PASS** (§7).
 2. **sel after a reset** (Dima Q1): in simulation of Dima's RTL, `sel[23:8]` after a
    `rst_sipo` pulse holds the previous frame's slice 0 (`C3E7`). Vivado built that load
    from latches gated by `rst_n`, which may give `0000` instead. A sequence with a
@@ -126,10 +124,31 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
 - **Open: run 1's corruption, 1 of 310, not reproduced** (`docs/issues.md`). The bits fit a
   short glitch on `rst_piso` (J2-26) and then on `shift` (J2-25), the virtual chip's inputs
   next to `clk_piso` (J2-24). They have no filtering and the jumpers had just been put on.
-  Not known whether a wire was being touched at 18:35:15-25 (asked). Lesson for the real
+  Rahaf (asked afterwards): **no one touched the wires** during run 1, so it was not handling. Lesson for the real
   chip: an unfiltered reset or control pad on a jumper wire can be hit by a glitch, so
   repeat important reads, and the scope should look at `rst_piso` / `shift` while
   `clk_piso` runs.
 - Not done: the §5 tests (phirst stepping, sel after a reset); scope on the wires.
 - To repeat the 300-run check: `scripts/repeat_seq.py` (committed after the run; the run used
   the same code as a scratch script).
+
+## 7. Follow-up: one phirst pulse (2026-10-26), PASS
+
+- **Sequence** `config/exp08_phirst.yaml` (5 steps): idle → `rst_sipo` pulse (1 µs low, puts
+  Dima's `index` back to 24 so every run is the same) → the same SIPO load → one 1 µs `pulse`
+  (= the virtual chip's phirst, jumper J3-13 → J2-27) → the same PISO read.
+- **Expected** (Dima's `sipo_wrapper` as written): `sel[23:8] <= parallel_out[index +: 16]` with
+  index 24 → `frame[39:24]` = **F0C3**, so `piso_out` = frame + `F0C3` + `E7` + `C6`.
+- **[simulated]** `scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3`: xsim 9/9, readback
+  `…e7e7f0c3e7c6`. The same run with the expectation `0000` fails check 6 (so the check sees
+  the phirst); the default run (chip_sim_test.yaml, `0000`) still 9/9.
+- **[measured on board]** (`vchip_top` as programmed at 18:38:14, the same 10 jumpers),
+  18:48:06-18:48:21: `seq load ../config/exp08_phirst.yaml --jtag` (5 steps), `seq run --wait 5
+  --target chip_top` → done, last step 4; `seq read piso_out` →
+  **0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6**; then `scripts/repeat_seq.py 100 piso_out
+  0x…F0C3E7C6` → **100 / 100 PASS**.
+- **Conclusion:** the phirst path works (controller `pulse` → J3-13 → J2-27 → `sipo_wrapper`),
+  and the FPGA build of Dima's `sel` stepping (`index` 24 → `frame[39:24]`) matches the
+  simulation. J2-27 now checked as an input with a real edge. The `rst_sipo` pulse at the
+  start also ran 101 times without a problem. What `sel[23:8]` holds right *after* that
+  reset was not visible here, because phirst overwrites it (§5, question 2, still open).

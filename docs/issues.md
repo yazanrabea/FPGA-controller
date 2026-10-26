@@ -206,5 +206,7 @@ Format: symptom, suspected cause, fix, confirmation.
   jumper wires next to `clk_piso` (J2-24); the jumpers had just been put on. Not confirmed.
 - Not reproduced: 309 later runs exact (300 in a row, 3 with a fresh load, 1 right after
   re-programming).
-- Next: ask whether a wire was touched; if it comes back, scope `rst_piso` / `shift` at J2-25/26
-  while `clk_piso` runs (1 MΩ, short ground). Relevant for the real chip's reset pads.
+- Rahaf: no one touched the wires during run 1 (so not handling). 101 more runs of the
+  phirst sequence were also exact (EXP-08 §7): 1 bad out of 411 so far.
+- Next: if it comes back, scope `rst_piso` / `shift` at J2-25/26 while `clk_piso` runs (1 MΩ,
+  short ground). Relevant for the real chip's reset pads.

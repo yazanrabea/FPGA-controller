@@ -1762,3 +1762,10 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## 2026-10-26, Rahaf (with Claude), branch main — handoff after C6
 - Done: `docs/HANDOFF.md` updated for C6 / EXP-08 (short version, board state = vchip_top with its 10 jumpers, a warning about jumpers per top, the follow-ups). Committed `scripts/repeat_seq.py` (the EXP-08 repeat check, was a scratch script).
 - Next steps: Rahaf's choice of the C6 follow-ups; Dima's questions.
+
+## 2026-10-26, Rahaf (with Claude), branch main — EXP-08 follow-up: phirst test
+- Goal: Rahaf: "no one touched the wires, do the phirst test".
+- Done: `config/exp08_phirst.yaml` (idle, rst_sipo pulse so index = 24, SIPO load, one `pulse` = phirst, PISO read). `gen_svh.py --chip --table-out --seq <file>`; `vchip_top_tb` takes the expected sel[23:8] from a package the script writes (`scripts/run_vchip_sim.sh [seq] [sel_hi]`, defaults unchanged). EXP-08 §7, issues (no handling), pin_verification (J2-27), USER_MANUAL §8.8.
+- Hardware setup: unchanged (vchip_top, the 10 jumpers).
+- Results: [simulated] xsim 9/9 with F0C3; the same with expectation 0000 fails check 6; default run 9/9. pytest 288 passed, 1 skipped. [measured on board] 18:48: readback 0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6 and 100 / 100 repeats exact. **PASS.**
+- Next steps: optional: sel right after a reset (EXP-08 §5 q2); scope on J2-25/26 if the transient returns.

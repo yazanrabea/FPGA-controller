@@ -5,19 +5,26 @@
 # a temp package. Dima's files are used unmodified; under Icarus 12 sipo_wrapper.sv needs
 # the shim (fpga/tb/sipo_wrapper_icarus_shim.sv, as in run_phase6_sim.sh).
 #
-# Usage: scripts/run_vchip_sim.sh   (run from the repo root; SIM=xsim to force xsim)
+# Usage (from the repo root; SIM=xsim to force xsim):
+#   scripts/run_vchip_sim.sh                                   config/chip_sim_test.yaml, sel[23:8] = 0000
+#   scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3     one phirst: sel[23:8] = F0C3
 set -euo pipefail
 source "$(dirname "$0")/sim_lib.sh"
 
 SRC=fpga/src
 TB=fpga/tb
 DIMA=fpga/reference/dima_blocks
+SEQ=${1:-config/chip_sim_test.yaml}
+SEL_HI=${2:-0000}
 
 echo "Regenerating chip_pkg / vchip_pkg + XDCs from config/nemo_config.yaml + config/exp08_vchip.yaml..."
 (cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --chip && "$(sim_python)" -m nemo_ctl.gen_svh --vchip)
 TBL="$WORK/chip_tb_pkg.sv"
-(cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --chip \
+(cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --chip --seq "../$SEQ" \
     --table-out "$(cd "$(dirname "$TBL")" && pwd)/$(basename "$TBL")")
+EXP="$WORK/vchip_tb_expect.sv"
+printf 'package vchip_tb_expect;\n    localparam logic [15:0] SEL_HI = 16%sh%s;\nendpackage\n' "'" "$SEL_HI" > "$EXP"
+echo "Sequence: $SEQ, expected sel[23:8] = $SEL_HI"
 echo
 
 if [ "$SIM" = icarus ]; then
@@ -29,7 +36,7 @@ fi
 
 echo "=== vchip_top_tb (controller + virtual chip over jumpers: 136-bit frame in, 168 bits back) ==="
 sim_run vchip_top_tb \
-    "$SRC/gen/chip_pkg.sv" "$SRC/gen/vchip_pkg.sv" "$TBL" \
+    "$SRC/gen/chip_pkg.sv" "$SRC/gen/vchip_pkg.sv" "$TBL" "$EXP" \
     "$SRC/link_frame.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$SRC/seq_engine.sv" "$SRC/seq_bank.sv" \
     "$SRC/jtag_link_bridge.sv" "$SRC/jtag_link_bscan.sv" "$SRC/chip_top.sv" \

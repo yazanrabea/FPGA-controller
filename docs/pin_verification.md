@@ -89,6 +89,6 @@ not reproduced, `docs/issues.md`). Logic level only, checked by the data, not by
 | LA24_P | J2-24 | FPGA input | virtual chip clk_piso | PASS |
 | LA25_P | J2-25 | FPGA input | virtual chip shift | PASS (suspected in the one bad run) |
 | LA26_P | J2-26 | FPGA input | virtual chip rst_piso | PASS (suspected in the one bad run) |
-| LA27_P | J2-27 | FPGA input | virtual chip phirst | wired, LOW only (not exercised yet) |
+| LA27_P | J2-27 | FPGA input | virtual chip phirst | PASS (phirst test: one edge steps sel, 101 / 101 runs, EXP-08 §7) |
 | LA28_P | J2-28 | FPGA output | virtual chip sipo_out | PASS |
 | LA29_P | J2-29 | FPGA output | virtual chip piso_out | PASS |
