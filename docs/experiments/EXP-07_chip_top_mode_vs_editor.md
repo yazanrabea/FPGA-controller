@@ -198,5 +198,7 @@ and is the TBD idle levels, not a fault.
   resolution. The DFT helper bit pattern is still UNCONFIRMED (Dima): the pins match the
   config, not necessarily the chip.
 - Bug found and fixed: long `--duration` written as `2e+07us` (`docs/issues.md`).
+- To repeat: `config/exp07_test.yaml` (the config of that day with the frame filled in, plus
+  PINTEST) and `scripts/repeat_mode.py` (the repeat script, committed after the run).
 - Lessons: trigger the scope on a pin that toggles in the pass; for static pins use a long
   step and a live (Auto + Run) display; Normal / Single / Stop keep the last picture.

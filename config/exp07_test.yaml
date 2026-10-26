@@ -1,0 +1,96 @@
+# EXP-07 test config (2026-10-26): a copy of config/nemo_config.yaml as it was that day, with
+# INFERENCE's sipo_in frame filled in (0x5AA55A0FF0123456789ABCDEF0C3C3E7E7) and an extra
+# mode PINTEST (8 pins HIGH, run with --duration 20s). Used only for EXP-07; the real config
+# is config/nemo_config.yaml.
+# NEMO / Y-Flash FPGA controller config — source of truth.
+#
+# Edited by hand, by the Phase-2 wizard, or via the Excel round-trip (tools/nemo_ctl).
+# Pin names, blocks, allowed types and known limits come from
+# tools/nemo_ctl/data/pin_db.yaml (generated from the lab workbooks, see
+# tools/nemo_ctl/gen_pin_db.py and docs/controller_spec.md §2/§3).
+#
+# Anything marked TBD/UNCONFIRMED here mirrors an open question in
+# docs/controller_spec.md §5 — do not treat these values as chip-verified.
+
+modes:
+  READ: {}
+  PINTEST:   # EXP-07 extra: the 8 pins that only showed LOW go HIGH
+    Clock Generator:
+      set: {type: HIGH}
+    Array with Muxes:
+      s0_p: {type: HIGH}
+      s1_p: {type: HIGH}
+      s2_p: {type: HIGH}
+    DFT - All:
+      b_dft: {type: BUS, value: 0b111}
+      s_dft: {type: BUS, value: 0b1111}   # not built out yet — Y-Flash read-mode timing is TBD (session1 explainer §5)
+
+  WRITE: {}  # TBD — kept as one mode per generic_controller_prompt.md §1, to be split
+             # into PROGRAM / ERASE once v_write/v_erase sequencing is confirmed with Dima
+
+  INFERENCE:
+    Clock Generator:
+      clk:   {type: CLOCK, freq: 1MHz, duty: 50%}
+      reset: {type: PULSE, width: 1us, delay: 0, polarity: active_low}   # polarity TBD, Q6
+      set:   {type: LOW}                                                 # TBD, Q6
+
+    Array with Muxes:
+      s0_p:  {type: LOW}            # TBD meaning, Q6
+      s1_p:  {type: LOW}
+      s2_p:  {type: LOW}
+      pulse: {type: PULSE, width: 1us, delay: 0}   # TBD meaning/width, Q6/Q7
+
+    DSA:
+      rst_dsa: {type: PULSE, width: 100ns, polarity: active_high}        # TBD, Q6
+
+    SIPO:
+      rst_sipo: {type: PULSE, width: 100ns, polarity: active_low, delay: 0}
+      clk_sipo: {type: CLOCK, freq: 1MHz, cycles: 136, delay: 2us}
+      sipo_in:  {type: SERIAL, clock: clk_sipo, data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7",
+                 msb_first: true, data_edge: falling, bits: 136}
+      cs:       {type: PULSE, width: 1us, delay: 140us}
+      sipo_out: {type: CAPTURE, mode: level}   # liveness echo only, not a real output
+
+    PISO:
+      rst_piso: {type: PULSE, width: 100ns, polarity: active_low, delay: 0}
+      clk_piso: {type: CLOCK, freq: 1MHz, cycles: 168, delay: 150us}
+      shift:    {type: LOW}        # sequenced in Phase 7: 0 for the load edge, then 1
+      piso_out: {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling}
+
+    DFT - All:
+      dft_select: {adc: 3, signal: phi1}   # helper -> b0..b2, s0..s3 — UNCONFIRMED, spec §4
+      # raw alternative, kept available per generic_controller_prompt.md §1:
+      # b_dft: {type: BUS, value: 0b011}
+
+# Chip pin -> FMC LA_P pin (decision 2026-10-26, Rahaf, docs/decisions.md): the chip is
+# wired with jumper wires to the HTG-FMC headers (P column), so the map is our choice.
+# Grouped by block; the 4 chip outputs land on LA16-19 (verified as FPGA inputs) and clk
+# on LA00 (the best-measured pin). `python -m nemo_ctl.cli validate` warns for every pin
+# not yet verified on the board in its direction (docs/pin_verification.md).
+pin_map:
+  clk: LA00_P
+  reset: LA01_P
+  set: LA02_P
+  rst_dsa: LA14_P
+  pulse: LA13_P
+  s0_p: LA10_P
+  s1_p: LA11_P
+  s2_p: LA12_P
+  b0_dft: LA15_P
+  b1_dft: LA20_P
+  b2_dft: LA21_P
+  s0_dft: LA22_P
+  s1_dft: LA23_P
+  s2_dft: LA24_P
+  s3_dft: LA25_P
+  sipo_in: LA03_P
+  clk_sipo: LA04_P
+  cs: LA05_P
+  rst_sipo: LA06_P
+  clk_piso: LA07_P
+  shift: LA08_P
+  rst_piso: LA09_P
+  sipo_out: LA16_P
+  piso_out: LA17_P
+  dft0_buff: LA18_P
+  dft1_buff: LA19_P

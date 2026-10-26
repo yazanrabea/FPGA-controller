@@ -1733,3 +1733,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Problems / fixes: scope didn't trigger in pass 1 (not armed / trigger source) and pass 3 (trigger on a pin that only rises once) -> repeated runs for Auto mode, then a 20 s step watched live. "D0/D2 didn't drop" after the 20 s run was a non-live display (Normal / Single / Stop): live, all LOW, and PINTEST run 2 showed the drop. `--duration 20s` refused (`2e+07us`) -> fixed.
 - Decisions: none new.
 - Next steps: C6 (EXP-08, virtual chip with Dima's models) after Rahaf's OK; Dima's questions (idle levels, DFT mapping, edges); press the editor's Run on board button on the board once (not done yet).
+
+## 2026-10-26, Rahaf (with Claude), branch main — handoff
+- Done: `docs/HANDOFF.md` updated for C5 / EXP-07 (short version, board state with chip_top and no jumpers, scope lessons, next steps). Committed the EXP-07 run files so the experiment can be repeated: `config/exp07_test.yaml` (frame filled in + PINTEST) and `scripts/repeat_mode.py` (was a scratch script during the run).
+- Next steps: C6 / EXP-08 after Rahaf's OK.
