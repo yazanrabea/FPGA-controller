@@ -44,6 +44,14 @@ Tag every result **[simulated]** or **[measured on board]**.
   - re-measure A1/A2 with a spring-tip ground and a recorded probe;
   - the chip's input rating below ground (datasheet / Dima);
   - housekeeping (CLAUDE.md §6 stale rows, pytest rerun, record pairs 5-15 as "not verified").
+- Housekeeping, same session:
+  - pytest, 5 runs in a row: 234 passed, 1 skipped each time. Yazan's one unexplained
+    failure (2026-10-26 entry below) did not come back.
+  - CLAUDE.md §6: stale status rows updated, no new claims (sig_cell/cap_cell/run_ctrl,
+    jtag_link_bridge, JTAG tops, phase6 xsim, seq_engine 40/40, link_frame, phase7 tops).
+    §7 items 1, 2, 5 updated.
+  - `docs/pin_verification.md`: pairs 5-15 recorded as **not verified**, skipped and assumed
+    OK by Rahaf's decision.
 
 ---
 

@@ -33,3 +33,9 @@ pairs 0/3/4 also with the Fluke 115. This is the first signal on pairs 1-4. The 
 stay "–" for pairs 1-4 because those designs were not run on them.
 
 Scope column: `docs/experiments/EXP-06_scope_timing.md`, 2026-10-26 [measured on board] (Keysight CX3324A analog, Agilent MSO-X 2002A digital channels), driven by `phase5_link_jtag_top`. Signal quality (ringing) is an open issue in `docs/issues.md`.
+
+**Pairs 5-15: not verified.** On 2026-10-26 Rahaf decided to skip their verification for now
+and assume they work, because no current experiment uses them. Nothing has been measured on
+them; the "–" above means *not tested*, not *passed*. Verify a pair (e.g. with
+`fmc_selectable_loopback` / `fmc_clock_loopback_slow`, which select pairs 0-15 with
+`sw[3:0]`) before the chip uses that pin.
