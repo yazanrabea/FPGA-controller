@@ -6,8 +6,66 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C3 done 2026-10-26 (C3: generated chip_pkg.sv + chip_top.xdc, awaiting OK). | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); next C5 (mode -> sequence, run-mode, EXP-07). | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+
+---
+
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: chip pipeline step C4 (chip_top)
+- Goal: C4 (Rahaf: "go on with C4"): the chip controller design, its testbench and a Vivado build.
+- Done:
+  - **`fpga/src/chip_top.sv`**: the Phase 7 round-2 sequencer, generalised to 22 + 4 cells.
+    - Blocks: JTAG link (`jtag_link_bscan`), `link_frame`, `seq_bank` (1024-byte entries),
+      `seq_engine`, and a `generate` loop of `sig_cell` / `cap_cell` with every offset and
+      width from the generated `chip_pkg.sv`. No pin, width or offset of its own.
+    - `sipo_in` shifts on `clk_sipo`'s edge and `piso_out` captures on `clk_piso`'s
+      (`SIPO_ON_FALLING` / `PISO_ON_FALLING`).
+    - The capture region also returns the PERIOD / HIGH counters (`phase7_link_top` returned
+      0 there), for Phase 8's phi1 / phi2 measurement. Its cell lookup is a range compare
+      (stride 40, not a power of 2: the 2026-10-22 divide lesson).
+    - 2-FF sync on `chip_in`; LEDs as `phase7_link_top`.
+  - `config/chip_sim_test.yaml`: a test sequence for target `chip_top` (idle, a 136-bit SIPO
+    load at 1 MHz + `cs`, a 168-bit PISO read with `shift`). All polarities / edges UNCONFIRMED.
+  - `tools/nemo_ctl/gen_svh.py`: `chip_table_package()`, `--chip --table-out <file>` = the
+    encoded sequence as package `chip_tb_pkg` (simulation only, temp folder).
+  - **`fpga/tb/chip_top_tb.sv`**: chip_top unmodified, BSCANE2 stubbed, the PC model over JTAG.
+    It loads the table in 128-byte frames and runs it, with a PISO model (one bit per
+    `clk_piso` rising edge, like the chip). `scripts/run_chip_sim.sh`.
+  - Tests: `test_gen_chip.py` + 1 (the table package).
+- Hardware setup: none.
+- Results:
+  - **[simulated, xsim]** `chip_top_tb` **11/11**:
+    - STATUS; table loaded, N_STEPS 3; every chip_out at step 0's level before RUN;
+    - exactly 136 `clk_sipo` rising edges, `sipo_in` = the config's 136-bit frame
+      `5aa55a0f...e7e7`; `cs` after the 136th edge;
+    - `sipo_in` setup / hold around `clk_sipo` rising: min 480 / 520 ns (>= 200 ns required);
+    - 168 `clk_piso` edges, READ_CAPTURE over JTAG = the 168-bit pattern; STATUS done, LD4 on.
+  - **Mutation check**: `sipo_in` on the wrong strobe edge first **passed**. Right bits alone
+    don't prove the edge: in zero-delay simulation data changing 20 ns after the sampling edge
+    still reads right. Hence the setup / hold check; with it the mutant fails (hold 20 ns).
+  - **[Vivado 2022.1 report, not a measurement]** `chip_top` bitstream built:
+    - timing met, sys clk WNS +0.112 ns, TCK +22.7 ns;
+    - 12,491 LUT, 19,446 FF, 4.5 BRAM, 35 IOB;
+    - **I/O report: all 22 `chip_out` LVCMOS18, DRIVE 4, SLOW; all 4 `chip_in` LVCMOS18,
+      PULLDOWN; every pin on its generated package pin** (C3's open item, closed).
+  - **[not hardware]** pytest 257 passed, 1 skipped.
+- Problems / fixes (testbench, during development; the RTL was right):
+  - a block variable in the testbench's `initial` was static by default, so the 128-byte
+    chunk buffer kept growing (13,568 bytes sent, LEN wrapped); now `automatic`. Found by
+    comparing the bytes sent with the bytes the parser received: identical, so the link was
+    fine;
+  - power-up X: before a table is loaded the step RAM is uninitialised in simulation (block
+    RAM is 0 on the board), so the pins went 0 -> X, which Verilog counts as a posedge. The
+    monitors are now armed at RUN;
+  - the PISO pattern literal had 46 hex digits (truncated); now 42.
+- Decisions:
+  - no time scaling for the chip test (300 µs at 1 MHz simulates quickly);
+  - Rahaf asked to check, after everything, that **what she sets in the editor is what comes
+    out of the pins**. Added to C5: a mode -> sequence converter, `cli run-mode --mode <M>
+    --jtag`, and EXP-07 compares the logic analyser with the editor's Signals panel. Whether
+    to add a "Run on board" button to Yazan's GUI: asked, not decided.
+- Next steps: C5 (converter + `run-mode` + EXP-07 on the board). Stop for Rahaf's OK before
+  the board step.
 
 ---
 

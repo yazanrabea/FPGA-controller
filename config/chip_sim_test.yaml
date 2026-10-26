@@ -1,0 +1,60 @@
+# Chip pipeline step C4: a test sequence for fpga/src/chip_top.sv, target chip_top
+# (tools/nemo_ctl/sequence.py chip_target(): the chip's 22 inputs + 4 outputs).
+# NOT a chip mode: a SIPO load and a PISO read in the shape Phase 6 / docs/session1 describe,
+# used by fpga/tb/chip_top_tb.sv (simulation) and later the board dry runs (EXP-07 / EXP-08).
+# Every polarity / edge here is UNCONFIRMED (Dima); they are config values, not RTL.
+#
+# Consumed by:  cd tools && python -m nemo_ctl.gen_svh --chip --table-out <file>  (simulation)
+#          or:  python -m nemo_ctl.cli seq load ../config/chip_sim_test.yaml --jtag  (board)
+
+target: chip_top
+
+steps:
+  - name: idle                 # step 0 = the idle state: every cell
+    set:
+      clk:       {type: LOW}
+      reset:     {type: HIGH}  # active-low assumed, held inactive (UNCONFIRMED)
+      set:       {type: LOW}
+      rst_dsa:   {type: LOW}
+      pulse:     {type: LOW}
+      s0_p:      {type: LOW}
+      s1_p:      {type: LOW}
+      s2_p:      {type: LOW}
+      b0_dft:    {type: LOW}
+      b1_dft:    {type: LOW}
+      b2_dft:    {type: LOW}
+      s0_dft:    {type: LOW}
+      s1_dft:    {type: LOW}
+      s2_dft:    {type: LOW}
+      s3_dft:    {type: LOW}
+      sipo_in:   {type: LOW}
+      clk_sipo:  {type: LOW}
+      cs:        {type: LOW}
+      rst_sipo:  {type: HIGH}  # active-low (sipo.sv rst_n), held inactive
+      clk_piso:  {type: LOW}
+      shift:     {type: LOW}
+      rst_piso:  {type: HIGH}  # active-low (piso.sv rst_n), held inactive
+    capture:
+      sipo_out:  {mode: LEVEL}
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true}
+      dft0_buff: {mode: PERIOD}
+      dft1_buff: {mode: PERIOD}
+    until: {after: 5us}
+
+  - name: sipo_load            # 136 bits, MSB first, sipo_in changes on clk_sipo's falling edge
+    set:
+      # clk_sipo starts 2 us in, so sipo_in's first bit (from 1 us) is stable at rising edge 1
+      clk_sipo:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 136, delay: 2us}
+      sipo_in:   {type: SERIAL, data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7", bits: 136, msb_first: true,
+                  clock: clk_sipo, data_edge: falling, delay: 1us}
+      cs:        {type: PULSE, width: 1us, delay: 140us}   # after the 136th edge (at 137.5 us)
+    until: {after: 145us}
+
+  - name: piso_read            # 168 bits: rising edge 1 loads (shift=0), 167 shifts after
+    set:
+      clk_piso:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 168, delay: 2us}
+      # shift rises inside clk_piso's first low phase (2.5 .. 3.0 us), after the load edge
+      shift:     {type: PULSE, width: 170us, delay: 2700ns}
+    capture:
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true}  # sampled on clk_piso's falling edge
+    until: {captured: piso_out, timeout: 300us}

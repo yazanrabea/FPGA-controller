@@ -92,3 +92,13 @@ def test_refuses_a_duplicate_pin(tmp_path):
     cfg.write_text(CONFIG.read_text().replace("  reset: LA01_P", "  reset: LA00_P"))
     with pytest.raises(gen_svh.GenError, match="already used"):
         gen_svh.generate_chip(cfg)
+
+
+def test_chip_table_package_for_the_testbench():
+    # what fpga/tb/chip_top_tb.sv sends over the link (C4): config/chip_sim_test.yaml encoded
+    text = gen_svh.chip_table_package()
+    assert "package chip_tb_pkg;" in text and "SIMULATION ONLY" in text
+    assert "localparam int N_STEPS = 3;" in text and "localparam int USED_BYTES = 534;" in text
+    assert "localparam logic [135:0] SIPO_FRAME = 136'h5aa55a0ff0123456789abcdef0c3c3e7e7;" in text
+    table = re.search(r"TABLE = (\d+)'h([0-9a-f]+);", text)
+    assert int(table.group(1)) == 3 * CHIP.entry_bytes * 8      # 3 steps x 1024 bytes
