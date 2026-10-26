@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6 in progress: vchip_top built + simulated, EXP-08 next. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
@@ -1749,3 +1749,12 @@ Tag every result **[simulated]** or **[measured on board]**.
   - `docs/experiments/EXP-08_virtual_chip.md` (procedure, 10 jumpers, expected readback).
   - V4: first build stopped (`lmap`, Tcl 8.5) -> fixed. **Bitstream builds** [Vivado reports]: WNS +0.183 ns, WHS +0.024 ns, 0 critical warnings; 12,234 LUT / 19,452 FF / 4.5 BRAM / 38 IOB / 6 BUFG (sys, JTAG, 4 virtual-chip pad clocks). `u_vc`: 491 registers + the 16 LDC latches (fewer than the ~740 counted by hand: synthesis merges equivalent flip-flops by default, and the two SIPO copies are identical). I/O report: vc_in / vc_out on the planned pins (G20, E19, G19, E15, A18, D22, F18, E21 / A16, C17).
 - Next steps: V4 result; then Rahaf's OK for the board (EXP-08).
+
+## 2026-10-26, Rahaf (with Claude), branch main — EXP-08 on the board (chip pipeline C6, V5)
+- Goal: run the virtual chip on the board.
+- Hardware setup: J18 1V8, J17; 10 jumper wires per `vchip_top.xdc` (J3-3..9 -> J2-20..26, J3-13 -> J2-27, J2-28 -> J3-16, J2-29 -> J2-17); logic clips off.
+- Done: programmed `vchip_top` (DONE=1, 18:35:06); `cli seq load ../config/chip_sim_test.yaml --jtag`, `seq run --wait 5 --target chip_top`, `seq read piso_out / sipo_out`; a scratch repeat script (start / wait / read N times); re-programmed once (18:38:14).
+- Results [measured on board]: **EXP-08 PASS, 309 / 310 runs exact**: piso_out = 0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6 (frame + sel 0000E7 + C6), sipo_out level 1. Run 1 corrupted (bits 0-11 right, 41 zeros, then a restart): fits a glitch on rst_piso then shift; not reproduced in 309 runs, incl. a fresh load and right after re-programming (`docs/issues.md`, OPEN).
+- Problems / fixes: none fixed; the transient is open.
+- Decisions: none.
+- Next steps: ask whether a wire was touched during run 1; optional §5 tests (phirst stepping, sel after a reset); scope on J2-25/26 if the glitch returns.

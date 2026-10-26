@@ -8,7 +8,7 @@ separate pins, and connects it to the controller with jumper wires, the way the 
 be connected. One sequence then sends a 136-bit frame PC → controller → wires → Dima's SIPO,
 and reads 168 bits back from Dima's PISO → wires → controller → PC.
 
-**Status: PLANNED, not run.** [simulated] `vchip_top_tb` 9/9 (xsim, 2026-10-26). Bitstream built 2026-10-26: timing met (WNS +0.183 ns), 0 critical warnings.
+**Status: PASS (2026-10-26)**, [measured on board]: 309 of 310 runs returned exactly the expected 168 bits; 1 run (the first) did not (§6). [simulated] `vchip_top_tb` 9/9. Bitstream: timing met (WNS +0.183 ns), 0 critical warnings.
 
 ## 1. Design
 
@@ -94,6 +94,40 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
    `rst_sipo` pulse after a load would show which. Not a fault either way: it shows that
    Dima's RTL as written behaves differently in simulation and in hardware.
 
-## 6. Results
+## 6. Results — PASS with one transient (2026-10-26, lab PC), [measured on board]
 
-Not run yet.
+### Run record
+- Rahaf at the bench, Claude on the lab PC. Rahaf: "jumpers are on" (the 10 of §2); J18 1V8,
+  J17 as in EXP-07. Logic clips taken off (§2).
+- 18:35:06 `program_board.tcl -tclargs vchip_top` -> `PROGRAMMED ... (DONE=1)`.
+- **Run 1** (18:35:14-18:35:25, CLI `seq load` / `seq run --wait 5` / `seq read`): load OK (3
+  steps), `STATUS: done; last step 2`, no fault. `sipo_out` level **1** (expected 1).
+  `piso_out` capture **0x5AA00000000002D52AD07F8091A2B3C4D5E6F7861E: WRONG**. Bit by bit:
+  bits 0-11 = the expected bits 0-11 (`5AA`); bits 12-52 = 0 (41 zeros); bits 53-167 = the
+  expected bits 0-114 (the stream restarts from its first bit). In `piso2` that is a reset
+  of the stages (`rst_piso` low) around bit 12, then a reload (`shift` = 0 at a clk_piso edge)
+  around bit 53, i.e. ~12 µs and ~53 µs into the read.
+- **Runs 2-6** (one JTAG session, start / wait / read): all **exact**,
+  `0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6`.
+- **Runs 7-306** (18:36:25-18:36:33, 300 runs): **300 / 300 exact**.
+- **Runs 307-309** (CLI load + run + read, three times, a new JTAG session each): all exact.
+  So `seq load` / a fresh session is not the trigger.
+- 18:38:14 re-programmed `vchip_top`; **run 310** = the same first-run steps as run 1: exact.
+  So "first run after programming" is not the trigger either.
+
+### Conclusion
+- **EXP-08 PASS.** The whole chip path works on the board without the chip: a 136-bit frame
+  from the PC goes controller -> 7 jumper wires -> Dima's unmodified SIPO, comes back through
+  Dima's PISO -> jumper -> controller -> PC, bit-exact, including `sel[23:0] = 0000E7` and the
+  `C6` tail, as simulated. `sipo_out` (J3-16) reads 1 = frame bit 0. First real signal on
+  the controller inputs J3-16 and J2-17; J2-20..J2-27 work as inputs, J2-28/29 as outputs.
+- Dima's RTL as Vivado built it (16 latches in `sipo_wrapper`) behaves like the simulation
+  for this sequence.
+- **Open: run 1's corruption, 1 of 310, not reproduced** (`docs/issues.md`). The bits fit a
+  short glitch on `rst_piso` (J2-26) and then on `shift` (J2-25), the virtual chip's inputs
+  next to `clk_piso` (J2-24). They have no filtering and the jumpers had just been put on.
+  Not known whether a wire was being touched at 18:35:15-25 (asked). Lesson for the real
+  chip: an unfiltered reset or control pad on a jumper wire can be hit by a glitch, so
+  repeat important reads, and the scope should look at `rst_piso` / `shift` while
+  `clk_piso` runs.
+- Not done: the §5 tests (phirst stepping, sel after a reset); scope on the wires.

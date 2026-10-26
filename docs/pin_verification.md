@@ -71,3 +71,24 @@ not the analog level or ringing, and not the pin as an input.
 | LA23_P | J2-23 | s1_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
 | LA24_P | J2-24 | s2_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
 | LA25_P | J2-25 | s3_dft | PASS pass 3, static LOW; PINTEST: HIGH 20 s and back to LOW — **first check** |
+
+## Inputs and virtual-chip pins, EXP-08
+
+`docs/experiments/EXP-08_virtual_chip.md`, 2026-10-26 [measured on board], `vchip_top`:
+PASS = the 168-bit readback through these pins was exact (309 / 310 runs; 1 corrupted run,
+not reproduced, `docs/issues.md`). Logic level only, checked by the data, not by a scope.
+
+| LA | Header | Direction in vchip_top | Signal | EXP-08 |
+|---|---|---|---|---|
+| LA16_P | J3-16 | FPGA input | controller sipo_out | PASS (level 1 = frame bit 0) — first real signal |
+| LA17_P | J2-17 | FPGA input | controller piso_out | PASS (168 bits exact) — first real signal |
+| LA20_P | J2-20 | FPGA input | virtual chip sipo_in | PASS (frame arrives) |
+| LA21_P | J2-21 | FPGA input | virtual chip clk_sipo | PASS |
+| LA22_P | J2-22 | FPGA input | virtual chip cs | PASS |
+| LA23_P | J2-23 | FPGA input | virtual chip rst_sipo | PASS |
+| LA24_P | J2-24 | FPGA input | virtual chip clk_piso | PASS |
+| LA25_P | J2-25 | FPGA input | virtual chip shift | PASS (suspected in the one bad run) |
+| LA26_P | J2-26 | FPGA input | virtual chip rst_piso | PASS (suspected in the one bad run) |
+| LA27_P | J2-27 | FPGA input | virtual chip phirst | wired, LOW only (not exercised yet) |
+| LA28_P | J2-28 | FPGA output | virtual chip sipo_out | PASS |
+| LA29_P | J2-29 | FPGA output | virtual chip piso_out | PASS |

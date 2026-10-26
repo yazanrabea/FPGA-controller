@@ -196,3 +196,15 @@ Format: symptom, suspected cause, fix, confirmation.
 ## 2026-10-26: `create_project.tcl` used `lmap` (Tcl 8.6), Vivado 2022.1 has Tcl 8.5
 - Symptom: first `vchip_top` build stopped at once: `invalid command name "lmap"`.
 - Fix: a plain `foreach` loop. Confirmed by the rebuild.
+
+## 2026-10-26: EXP-08 run 1, PISO readback corrupted once (OPEN, not reproduced)
+- Symptom: first run on `vchip_top`: `piso_out` = 0x5AA00000000002D52AD07F8091A2B3C4D5E6F7861E
+  instead of 0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6. Bits 0-11 right, 41 zeros, then the
+  stream restarted from bit 0. STATUS done, no fault.
+- Suspected cause: a short low glitch on the virtual chip's `rst_piso` (J2-26, resets the
+  stages -> zeros), then on `shift` (J2-25, reload -> restart). Both are unfiltered pad inputs on
+  jumper wires next to `clk_piso` (J2-24); the jumpers had just been put on. Not confirmed.
+- Not reproduced: 309 later runs exact (300 in a row, 3 with a fresh load, 1 right after
+  re-programming).
+- Next: ask whether a wire was touched; if it comes back, scope `rst_piso` / `shift` at J2-25/26
+  while `clk_piso` runs (1 MΩ, short ground). Relevant for the real chip's reset pads.
