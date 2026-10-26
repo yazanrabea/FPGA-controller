@@ -247,9 +247,9 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 0. **Optional C6 follow-ups** (EXP-08 §5), each with Rahaf's OK and a simulation first:
    - ~~phirst stepping~~: **done, PASS** (EXP-08 §7: `F0C3E7`, 101 / 101 on the board);
-   - **`sel` after a reset**: the FPGA's latches may give `0000` where the simulation of
-     Dima's RTL gives the previous slice `C3E7`. That's a real behaviour difference worth
-     telling Dima;
+   - ~~`sel` after a reset~~: **done** (EXP-08 §8): simulation `C3E7`, FPGA **`0000`** (100/100).
+     Same RTL, different result; added to Dima's Q1. Until he answers, don't use `sel[23:8]`
+     between a reset and the first phirst;
    - **scope on J2-25 / J2-26** while `clk_piso` runs, for the run-1 glitch (`docs/issues.md`).
 1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent).
    Rahaf postponed it on 2026-10-26, but it is the critical path for the pins' *meaning*

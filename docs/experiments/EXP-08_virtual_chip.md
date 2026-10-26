@@ -86,11 +86,7 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
 ## 5. Open questions this experiment can answer next (planned, need your OK)
 
 1. **phirst**: **done 2026-10-26, PASS** (§7).
-2. **sel after a reset** (Dima Q1): in simulation of Dima's RTL, `sel[23:8]` after a
-   `rst_sipo` pulse holds the previous frame's slice 0 (`C3E7`). Vivado built that load
-   from latches gated by `rst_n`, which may give `0000` instead. A sequence with a
-   `rst_sipo` pulse after a load would show which. Not a fault either way: it shows that
-   Dima's RTL as written behaves differently in simulation and in hardware.
+2. **sel after a reset** (Dima Q1): **done 2026-10-26** (§8): simulation `C3E7`, FPGA `0000`.
 
 ## 6. Results — PASS with one transient (2026-10-26, lab PC), [measured on board]
 
@@ -139,7 +135,8 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
   (= the virtual chip's phirst, jumper J3-13 → J2-27) → the same PISO read.
 - **Expected** (Dima's `sipo_wrapper` as written): `sel[23:8] <= parallel_out[index +: 16]` with
   index 24 → `frame[39:24]` = **F0C3**, so `piso_out` = frame + `F0C3` + `E7` + `C6`.
-- **[simulated]** `scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3`: xsim 9/9, readback
+- **[simulated]** `scripts/run_vchip_sim.sh config/exp08_phirst.yaml 0x…E7E7F0C3E7C6` (the
+  script then took sel[23:8] only; now the whole expected readback): xsim 9/9, readback
   `…e7e7f0c3e7c6`. The same run with the expectation `0000` fails check 6 (so the check sees
   the phirst); the default run (chip_sim_test.yaml, `0000`) still 9/9.
 - **[measured on board]** (`vchip_top` as programmed at 18:38:14, the same 10 jumpers),
@@ -152,3 +149,31 @@ timing problem on the wires; `C6` missing at the end → the read is misaligned.
   simulation. J2-27 now checked as an input with a real edge. The `rst_sipo` pulse at the
   start also ran 101 times without a problem. What `sel[23:8]` holds right *after* that
   reset was not visible here, because phirst overwrites it (§5, question 2, still open).
+
+## 8. Follow-up: what sel[23:8] holds right after a reset (2026-10-26)
+
+- **Question** (Dima Q1, CLAUDE.md §5): `sipo_wrapper`'s reset branch does
+  `sel[23:8] <= parallel_out[23:8]` while `sipo`'s reset clears `parallel_out`. In simulation
+  the nonblocking read gets the old value; Vivado built the line from 16 latches gated by
+  `rst_n` (EXP-08 §1). Same RTL, does the hardware agree?
+- **Sequence** `config/exp08_sel_reset.yaml`: idle → SIPO load (the frame) → `rst_sipo` pulse
+  (1 µs low; no new load, no phirst) → PISO read. `piso_out` = `{frame, sel[23:0], C6}` at the read.
+- **[simulated]** `scripts/run_vchip_sim.sh config/exp08_sel_reset.yaml
+  0x0000000000000000000000000000000000C3E700C6`: xsim 9/9: frame 0, **`sel[23:8]` = C3E7** (the
+  previous frame's slice 0 = frame[23:8]), `sel[7:0]` = 0, sipo_out 0. The other two sequences
+  still 9/9 with the generalised testbench.
+- **[measured on board]** (`vchip_top`, the same 10 jumpers), 18:51:36-18:51:53: `seq load`
+  (4 steps), `seq run` → done, last step 3; `seq read piso_out` → **0xC6** (= 0x000…0000C6);
+  `seq read sipo_out` → level 0; `repeat_seq.py 100` → the same **0x…0000C6 in all 100 runs**.
+  Just before this test `sel[23:8]` held F0C3 (left from the phirst runs, §7), so the reset did
+  change it, to 0000.
+- **Result:** **simulation and FPGA differ**: after `rst_sipo`, `sel[23:8]` = **C3E7 in
+  simulation, 0000 on the FPGA**, from the same unmodified RTL. The FPGA's latch is
+  transparent while `rst_n` is low and follows `parallel_out` as it clears. The simulation
+  samples `parallel_out` once, at the reset edge, before it clears. Everything else matches
+  (frame 0, `sel[7:0]` 0, `C6`, sipo_out 0).
+- **Meaning for the chip:** what the real chip does depends on how Dima's ASIC flow built
+  that line (a third implementation), so neither result is "the chip's". Asking Dima:
+  is `sel[23:8]` after reset meant to be 0, or the previous slice? Either way the controller
+  shouldn't depend on it: the safe order is reset → load → `cs` → phirst before using
+  `sel[23:8]` (§7). Added to `docs/questions_for_dima_2026-10-22.md` (Q1).

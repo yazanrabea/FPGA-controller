@@ -26,7 +26,12 @@ list (`docs/controller_spec.md` §5).
 
 ### A. SIPO
 
-1. **(Q1, updated) What should `sel[23:8]` be before the first `phirst`?**
+1. **(Q1, updated 2026-10-26 with a hardware result) What should `sel[23:8]` be before the first `phirst`?**
+   New: we built your `sipo_wrapper` unmodified on our FPGA (EXP-08). Right after
+   `rst_sipo`, the FPGA gives `sel[23:8] = 0000`, but simulating the same RTL gives the previous
+   frame's slice 0 (e.g. C3E7): the reset branch loads `parallel_out[23:8]` while the same
+   reset clears it, and Vivado builds that from latches. What does your ASIC netlist do, and
+   which one did you intend?
    In `sipo_wrapper.sv` the reset branch does `sel[23:8] <= parallel_out[23:8]` while `sipo.sv` resets `parallel_out` on the same `rst_n`. Both are nonblocking, so in simulation `sel[23:8]` gets the value from the **previous** load (0 only the first time). The slice 0 of the frame being loaded (bits [23:8]) never reaches `sel`. Is that intended? Should slice 0 be a dummy?
    Also: a reset branch that loads data instead of a constant is not a normal reset flip-flop. How did this synthesize, and does the silicon behave like the RTL here?
 2. **(Q2) How many `phirst` cycles per inference?** `index` goes 24 → 40 → … → 136 and never wraps, so the 8th `phirst` reads past bit 135. Do we have to pulse `rst_sipo` and reload the full 136-bit frame before every inference?

@@ -210,3 +210,14 @@ Format: symptom, suspected cause, fix, confirmation.
   phirst sequence were also exact (EXP-08 §7): 1 bad out of 411 so far.
 - Next: if it comes back, scope `rst_piso` / `shift` at J2-25/26 while `clk_piso` runs (1 MΩ,
   short ground). Relevant for the real chip's reset pads.
+
+## 2026-10-26: Dima's sipo_wrapper: sel[23:8] after rst_sipo differs, simulation vs FPGA
+- Found by EXP-08 §8 (`config/exp08_sel_reset.yaml`, 100 / 100 runs the same).
+- Simulation (xsim, and Icarus earlier, Q1): `sel[23:8]` = the previous frame's slice 0
+  (C3E7). FPGA (`vchip_top`, Vivado 2022.1: 16 LDC latches gated by `rst_n`): **0000**.
+- Cause: the reset branch loads a non-constant value (`sel[23:8] <= parallel_out[23:8]`)
+  inside an async reset while the same reset clears `parallel_out`. Simulation reads it once,
+  at the edge; a latch follows it while the reset is low. Not a bug in our code; Dima's RTL
+  is left unmodified (`fpga/reference/dima_blocks/`).
+- Status: reported for Dima (questions file, Q1). Controller rule until answered: don't use
+  `sel[23:8]` between a reset and the first phirst.

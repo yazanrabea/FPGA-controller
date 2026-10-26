@@ -6,8 +6,10 @@
 # the shim (fpga/tb/sipo_wrapper_icarus_shim.sv, as in run_phase6_sim.sh).
 #
 # Usage (from the repo root; SIM=xsim to force xsim):
-#   scripts/run_vchip_sim.sh                                   config/chip_sim_test.yaml, sel[23:8] = 0000
-#   scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3     one phirst: sel[23:8] = F0C3
+#   scripts/run_vchip_sim.sh                     config/chip_sim_test.yaml, expect {frame, 0000E7, C6}
+#   scripts/run_vchip_sim.sh <sequence> <0x168-bit expected piso_out>, e.g.
+#     config/exp08_phirst.yaml    0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6
+#     config/exp08_sel_reset.yaml 0x0000000000000000000000000000000000C3E700C6
 set -euo pipefail
 source "$(dirname "$0")/sim_lib.sh"
 
@@ -15,7 +17,8 @@ SRC=fpga/src
 TB=fpga/tb
 DIMA=fpga/reference/dima_blocks
 SEQ=${1:-config/chip_sim_test.yaml}
-SEL_HI=${2:-0000}
+WANT=${2:-0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6}
+WANT=${WANT#0x}
 
 echo "Regenerating chip_pkg / vchip_pkg + XDCs from config/nemo_config.yaml + config/exp08_vchip.yaml..."
 (cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --chip && "$(sim_python)" -m nemo_ctl.gen_svh --vchip)
@@ -23,8 +26,8 @@ TBL="$WORK/chip_tb_pkg.sv"
 (cd tools && "$(sim_python)" -m nemo_ctl.gen_svh --chip --seq "../$SEQ" \
     --table-out "$(cd "$(dirname "$TBL")" && pwd)/$(basename "$TBL")")
 EXP="$WORK/vchip_tb_expect.sv"
-printf 'package vchip_tb_expect;\n    localparam logic [15:0] SEL_HI = 16%sh%s;\nendpackage\n' "'" "$SEL_HI" > "$EXP"
-echo "Sequence: $SEQ, expected sel[23:8] = $SEL_HI"
+printf 'package vchip_tb_expect;\n    localparam logic [167:0] WANT = 168%sh%s;\nendpackage\n' "'" "$WANT" > "$EXP"
+echo "Sequence: $SEQ, expected piso_out = 0x$WANT"
 echo
 
 if [ "$SIM" = icarus ]; then

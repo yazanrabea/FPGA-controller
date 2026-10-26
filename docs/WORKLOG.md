@@ -1769,3 +1769,11 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Hardware setup: unchanged (vchip_top, the 10 jumpers).
 - Results: [simulated] xsim 9/9 with F0C3; the same with expectation 0000 fails check 6; default run 9/9. pytest 288 passed, 1 skipped. [measured on board] 18:48: readback 0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6 and 100 / 100 repeats exact. **PASS.**
 - Next steps: optional: sel right after a reset (EXP-08 §5 q2); scope on J2-25/26 if the transient returns.
+
+## 2026-10-26, Rahaf (with Claude), branch main — EXP-08 follow-up: sel[23:8] after a reset
+- Goal: Rahaf: "do the sel after reset test".
+- Done: `config/exp08_sel_reset.yaml` (load, rst_sipo pulse, read). `vchip_top_tb` now takes the whole expected 168-bit readback (`vchip_tb_expect::WANT`; frame / sipo_out checks use its frame part); `scripts/run_vchip_sim.sh <seq> <0xWANT>`. EXP-08 §8, issues, questions for Dima (Q1), CLAUDE.md §5, USER_MANUAL §8.8.
+- Hardware setup: unchanged (vchip_top, the 10 jumpers).
+- Results: [simulated] xsim 9/9 for all three sequences; sel_reset: sel[23:8] = C3E7. [measured on board] 18:51: piso_out = 0x…0000C6 (sel[23:8] = **0000**), sipo_out 0, 100 / 100 identical; sel was F0C3 just before, so the reset changed it. **Simulation and FPGA differ** for Dima's RTL as written.
+- Decisions: controller rule until Dima answers: don't use sel[23:8] between a reset and the first phirst.
+- Next steps: send Dima's questions (Q1 updated); scope on J2-25/26 if the EXP-08 transient returns.

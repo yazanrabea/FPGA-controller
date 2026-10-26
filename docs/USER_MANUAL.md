@@ -757,8 +757,9 @@ header of `fpga/constraints/vchip_top.xdc` and in
 `{frame, sel[23:0], 0xC6}` on `piso_out`. For `config/chip_sim_test.yaml`, `seq read
 piso_out` should give `0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6`. Pins: edit
 `config/exp08_vchip.yaml`, then `python -m nemo_ctl.gen_svh --vchip`; simulation:
-`scripts/run_vchip_sim.sh` (or `scripts/run_vchip_sim.sh <sequence.yaml> <expected sel[23:8]>`,
-e.g. `config/exp08_phirst.yaml F0C3` for the phirst test). To repeat a loaded sequence and
+`scripts/run_vchip_sim.sh` (or `scripts/run_vchip_sim.sh <sequence.yaml> <0x expected 168-bit
+piso_out>`, e.g. `config/exp08_phirst.yaml 0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6`; the
+commands for each sequence are in its header). To repeat a loaded sequence and
 compare: `PYTHONPATH=. python ../scripts/repeat_seq.py 100 piso_out 0x…`.
 
 ## 9. Troubleshooting

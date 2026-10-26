@@ -10,7 +10,7 @@
 # Every polarity / edge here is UNCONFIRMED for the real chip (Dima).
 #
 # Board:  cd tools && python -m nemo_ctl.cli seq load ../config/exp08_phirst.yaml --jtag
-# Sim:    scripts/run_vchip_sim.sh config/exp08_phirst.yaml F0C3
+# Sim:    scripts/run_vchip_sim.sh config/exp08_phirst.yaml 0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6
 
 target: chip_top
 
