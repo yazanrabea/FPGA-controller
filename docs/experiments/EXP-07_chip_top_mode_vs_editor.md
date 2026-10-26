@@ -90,6 +90,16 @@ and is the TBD idle levels, not a fault.
   within the analyser's resolution; static pins at the right level.
 - Pass 1: the 136 `sipo_in` bits read on `clk_sipo`'s rising edges equal the frame.
 
-## 6. Results
+## 6. Results — IN PROGRESS (2026-10-26, lab PC), [measured on board]
 
-Not run yet.
+### Run record
+- Rahaf at the bench, Claude on the lab PC. Setup confirmed by Rahaf: J18 on 1V8, loopback
+  jumpers off; the J17 PROG cable is connected (xsdb `jtag targets`: `Digilent Zed
+  210248B4A8BD`, `arm_dap`, `xc7z020`).
+- Step 2: `program_board.tcl -tclargs chip_top` -> `PROGRAMMED: xc7z020_1 with chip_top.bit
+  (DONE=1)`, 16:14.
+- Link check (read-only, `open_jtag(link_cls=SeqLink, target=chip_target())`): the link answers;
+  status run 0 / busy 0 / done 0 / fault 0 / aborted 0 / late 0 / table_rejected 0 /
+  rx_overflow 0. All 4 cap cells (sipo_out, piso_out, dft0_buff, dft1_buff): level 0, edges 0,
+  as expected with nothing connected (PULLDOWN).
+- Passes 1-3: not run yet.
