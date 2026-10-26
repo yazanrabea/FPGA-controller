@@ -1,5 +1,6 @@
 """Chip pipeline step C5 (2026-10-26): an editor mode -> a chip_top sequence (mode_seq.py)
 and `cli run-mode`. Configs are the real config/nemo_config.yaml with small text edits."""
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -188,3 +189,56 @@ def test_cli_run_on_a_fake_board(tmp_path, monkeypatch, capsys):
     assert "STATUS: done; last step 1" in out
     assert "piso_out: level 1, edges 3, period 100 ticks, high 50 ticks, capture 0x" + "0" * 40 + "A5" in out
     assert "sipo_out: level 1, edges 3, period 100 ticks, high 50 ticks\n" in out
+
+
+# ---- the editor's Run on board button (gui.py /api/run) ----
+
+def _page_doc(tmp_path, **extra):
+    from nemo_ctl.config import config_to_dict
+    return {**config_to_dict(load_config(_cfg(tmp_path))), "mode": "INFERENCE", **extra}
+
+
+def test_gui_check_only_converts(tmp_path):
+    from nemo_ctl import gui
+    opened = []
+    r = gui.run_payload(_page_doc(tmp_path, dry=True), open_link=lambda: opened.append(1))
+    assert r["ok"] and not opened and "done" not in r
+    assert any("ends after 35000 ticks" in l for l in r["summary"])
+
+
+def test_gui_run_on_a_fake_board(tmp_path):
+    from nemo_ctl import gui
+    fake = _FakeLink()
+    r = gui.run_payload(_page_doc(tmp_path, duration="1ms"), open_link=lambda: fake)
+    assert r["ok"] and r["done"] and not r["fault"]
+    assert fake.calls == [("load", 2), "start", ("wait", 2.00101), "close"]
+    assert {c["name"] for c in r["captures"]} == {c.name for c in CHIP.cap_cells}
+    assert [c for c in r["captures"] if c["name"] == "piso_out"][0]["capture"].endswith("A5")
+
+
+def test_gui_run_errors_are_reported_not_raised(tmp_path):
+    from nemo_ctl import gui
+    r = gui.run_payload({**_page_doc(tmp_path), "mode": "WRITE"}, open_link=_FakeLink)
+    assert not r["ok"] and "configures nothing" in r["error"]
+
+    def no_cable():
+        raise RuntimeError("no JTAG cable")
+    r = gui.run_payload(_page_doc(tmp_path), open_link=no_cable)
+    assert not r["ok"] and "board run failed: no JTAG cable" in r["error"] and r["summary"]
+
+
+def test_gui_server_has_the_endpoint(tmp_path):
+    import http.client, threading
+    from nemo_ctl import gui
+    srv = gui.make_server(_cfg(tmp_path), port=0, open_link=_FakeLink)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        c = http.client.HTTPConnection("127.0.0.1", srv.server_address[1], timeout=10)
+        c.request("POST", "/api/run", json.dumps(_page_doc(tmp_path)), {"Content-Type": "application/json"})
+        r = json.loads(c.getresponse().read())
+        assert r["ok"] and r["done"]
+        c.request("GET", "/")
+        page = c.getresponse().read().decode("utf-8")
+        assert 'id="rrun"' in page and "/api/run" in page
+    finally:
+        srv.shutdown(); srv.server_close()

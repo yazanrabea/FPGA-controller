@@ -144,3 +144,22 @@ def mode_table(config: Config, mode: str, duration_s: float | None = None) -> tu
     """The mode compiled for chip_top (errors as SequenceError, one per line)."""
     steps, notes = mode_steps(config, mode, duration_s)
     return compile_steps(steps, chip_target()), notes
+
+
+def run_table(link, table: StepTable, margin_s: float = 2.0) -> dict:
+    """Load `table` into chip_top over `link` (a SeqLink with target chip_top), run it, wait
+    for the end (+ margin) and read every cap cell. Shared by `cli run-mode` and the
+    editor's Run on board button. The caller opens and closes the link."""
+    run_s = sum(st.cond_arg for st in table.steps) / 1e8           # every step is "after N ticks"
+    link.load(table)
+    link.start()
+    r = link.wait(run_s + margin_s)
+    caps = []
+    for c in link.target.cap_cells:
+        cnt, tim = link.read_cap_counts(c.name), link.read_cap_timing(c.name)
+        cap = {"name": c.name, "level": int(cnt["level"]), "edges": cnt["edges"],
+               "period": tim["period"], "high": tim["high"]}
+        if c.cap_w > 1:
+            cap["capture"] = f"0x{link.read_capture(c.name):0{(c.cap_w + 3) // 4}X}"
+        caps.append(cap)
+    return {"done": bool(r.done), "fault": bool(r.fault), "step": r.step, "captures": caps}

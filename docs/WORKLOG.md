@@ -6,7 +6,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C5 PC side done (mode_seq, run-mode); next EXP-07 on the board after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C5 PC side done (mode_seq, run-mode, editor Run on board button); next EXP-07 on the board after Rahaf's OK. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
 
 ---
@@ -1711,3 +1711,16 @@ Tag every result **[simulated]** or **[measured on board]**.
   - USER_MANUAL §8.7, `tools/nemo_ctl/README.md`, HANDOFF C5 row.
 - Results [PC only]: pytest 272 passed, 1 skipped. Nothing on the board.
 - Next steps: Rahaf's OK, then EXP-07. Open: GUI "Run on board" button (default: leave to Yazan).
+
+## 2026-10-26, Rahaf (with Claude), branch main — chip pipeline step C5 (part 3: Run on board button)
+- Goal: Rahaf asked for a "Run on board" button in the editor (answer to the open question), so a mode can be run from the page.
+- Done:
+  - `tools/nemo_ctl/mode_seq.py`: `run_table(link, table)` (load, start, wait for every step + 2 s, read each cap cell), now shared by `cli run-mode` and the editor.
+  - `tools/nemo_ctl/gui.py`: `POST /api/run` -> `run_payload()`: converts the page's unsaved config for the shown mode; `dry` = convert only; otherwise opens JTAG (`open_jtag`, target chip_top), runs, closes. One run at a time (lock). Errors (bad mode, no cable, xsdb) come back as a message, the server keeps running. `make_server(open_link=...)` for tests.
+  - `tools/nemo_ctl/data/config_gui.html`: "Run on board" card under Signals: duration box, *Check*, *Run on board* (with a confirm dialog), output box (red on error / FAULT / not done).
+  - Tests: 4 more in `test_mode_seq.py` (check-only doesn't open the link, a run against a fake SeqLink, errors reported, the endpoint on a live server). The page-script syntax check (`test_gui.py`, uses node) caught literal newlines in two JS strings, fixed.
+  - USER_MANUAL §8.7, `tools/nemo_ctl/README.md`, HANDOFF.
+  - J17 check (no programming): xsdb `jtag targets` lists `Digilent Zed 210248B4A8BD`, `arm_dap`, `xc7z020`, so the PROG cable on J17 is connected.
+- Hardware setup (Rahaf, 2026-10-26): J18 on 1V8, loopback jumpers off.
+- Results [PC only]: pytest 276 passed, 1 skipped. The button has not run against the board.
+- Next steps: program chip_top (after Rahaf's go), EXP-07 passes 1-3.

@@ -6,7 +6,8 @@ the page edits the same {modes: {mode: {block: {pin: setting}}}} structure, the 
 are validate.validate_config, the achieved values are timing.py's, the waveform panel is
 waves.py's (real edge times of the unsaved edits), and Save writes the
 file with config.save_config (a .bak copy of the old file is kept first; like the wizard,
-saving drops the YAML comments).
+saving drops the YAML comments). "Run on board" (chip pipeline C5) runs the shown mode, as
+edited, on chip_top over the JTAG cable (mode_seq.py, same as `cli run-mode --jtag`).
 
     cd tools && python -m nemo_ctl.cli gui [--config ../config/nemo_config.yaml]
 
@@ -31,6 +32,9 @@ from .pins import Pin, load_pin_db
 from .timing import _summarize_setting
 from .validate import has_errors, validate_config
 from .waves import WaveError, mode_waves
+from .mode_seq import mode_table, run_table
+from .sequence import SequenceError
+from .units import UnitsError, parse_duration_ns
 
 PAGE_PATH = Path(__file__).resolve().parent / "data" / "config_gui.html"
 
@@ -116,10 +120,50 @@ def save_payload(doc: dict, config_path: Path, pin_db: dict[str, Pin]) -> dict:
     return result
 
 
+def _open_board():
+    """SeqLink to chip_top over the J17 JTAG cable (tests replace it)."""
+    from .jtag import open_jtag
+    from .link import SeqLink
+    from .sequence import chip_target
+    return open_jtag(link_cls=SeqLink, target=chip_target())
+
+
+_RUN_LOCK = threading.Lock()   # one board run at a time
+
+
+def run_payload(doc: dict, open_link=_open_board) -> dict:
+    """Run doc["mode"] of the config the page sent on chip_top (doc["dry"]: only convert).
+    doc["duration"]: "350us" etc., empty = the mode's last event + 10 %."""
+    try:
+        config = config_from_dict(doc)
+        dur = doc.get("duration")
+        dur_s = parse_duration_ns(dur) * 1e-9 if dur else None
+        table, notes = mode_table(config, doc.get("mode") or "", dur_s)
+    except (ConfigError, SequenceError, UnitsError, TypeError, AttributeError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    out = {"ok": True, "summary": table.summary(), "notes": notes, "warnings": list(table.warnings)}
+    if doc.get("dry"):
+        return out
+    if not _RUN_LOCK.acquire(blocking=False):
+        return {"ok": False, "error": "a board run is already going"}
+    try:
+        link = open_link()
+        try:
+            out.update(run_table(link, table))
+        finally:
+            link.close()
+    except Exception as exc:          # the cable, xsdb, the link: report, don't crash the server
+        return {**out, "ok": False, "error": f"board run failed: {exc}"}
+    finally:
+        _RUN_LOCK.release()
+    return out
+
+
 class _Handler(BaseHTTPRequestHandler):
     config_path: Path
     pin_db: dict[str, Pin]
     port: int
+    open_link = staticmethod(_open_board)
 
     def log_message(self, *_args):  # keep the terminal quiet
         pass
@@ -162,18 +206,22 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, check_payload(doc, self.pin_db))
         if self.path == "/api/waves":
             return self._json(200, waves_payload(doc))
+        if self.path == "/api/run":
+            return self._json(200, run_payload(doc, self.open_link))
         if self.path == "/api/save":
             return self._json(200, save_payload(doc, self.config_path, self.pin_db))
         return self._json(404, {"error": "not found"})
 
 
 def make_server(config_path: Path | None = None, port: int = 0,
-                pin_db: dict[str, Pin] | None = None) -> ThreadingHTTPServer:
-    """A server bound to 127.0.0.1 (port 0 = any free port); call serve_forever()."""
+                pin_db: dict[str, Pin] | None = None, open_link=None) -> ThreadingHTTPServer:
+    """A server bound to 127.0.0.1 (port 0 = any free port); call serve_forever().
+    `open_link`: how Run on board reaches chip_top (default: JTAG on J17)."""
     config_path = Path(config_path or DEFAULT_CONFIG_PATH).resolve()
     handler = type("Handler", (_Handler,), {
         "config_path": config_path,
         "pin_db": pin_db or load_pin_db(),
+        "open_link": staticmethod(open_link or _open_board),
     })
     return ThreadingHTTPServer(("127.0.0.1", port), handler)
 

@@ -95,6 +95,10 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
   .out { grid-column: 1; }
   .f input.wide { width: 100%; }
 }
+.run .runout { font: 12px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; margin: 8px 0 0;
+  padding: 8px 10px; border-radius: 5px; background: var(--surface-2); max-height: 320px; overflow: auto; }
+.run .runout:empty { display: none; }
+.run .runout.err { background: var(--error-soft); color: var(--error); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -125,6 +129,18 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
     </div>
     <div class="wmsg" id="wmsg">Time from RUN. These are the edits on this page, before saving.</div>
     <div class="wbox" id="wbox"></div>
+  </section>
+  <section class="card wave run" id="runcard" aria-label="Run on board">
+    <div class="head">
+      <h2>Run on board</h2>
+      <span class="acts">
+        <label for="rdur">duration</label><input id="rdur" type="text" placeholder="auto" title="e.g. 350us or 2ms; empty = the mode's last event + 10 %">
+        <button type="button" id="rdry" title="Show the sequence this mode becomes, without the board">Check</button>
+        <button type="button" id="rrun" class="primary" title="Run this mode, as edited, on chip_top over the JTAG cable (J17)">Run on board</button>
+      </span>
+    </div>
+    <div class="wmsg">Runs the mode shown, as edited on this page, on <b>chip_top</b> over the JTAG cable (J17): 10 µs at the idle levels, then the mode, then back to idle. chip_top must be programmed on the board.</div>
+    <pre class="runout" id="runout"></pre>
   </section>
   <div id="blocks"></div>
 </main>
@@ -327,6 +343,31 @@ async function save() {
   lastCheck = r; showResults();
   if (r.saved) { dirty = false; setStatus(r.message); } else setStatus(r.message, true);
 }
+
+// ---- run on board (chip_top, mode_seq.py) -------------------------------------------
+async function runMode(dry) {
+  const out = $("runout");
+  if (!dry && !confirm(`Run mode ${cur} on the board now?\n\nchip_top must be programmed, J18 on 1V8.`)) return;
+  out.className = "runout"; out.textContent = dry ? "Converting…" : `Running ${cur} on the board (opening the JTAG link takes a few seconds)…`;
+  $("rrun").disabled = $("rdry").disabled = true;
+  let r;
+  try { r = await api("/api/run", Object.assign(doc(), {mode: cur, duration: $("rdur").value.trim(), dry: dry})); }
+  catch (e) { r = {ok: false, error: e.message}; }
+  finally { $("rrun").disabled = $("rdry").disabled = false; }
+  const lines = [];
+  if (r.summary) { lines.push(`mode ${cur} -> sequence for chip_top:`); for (const l of r.summary) lines.push("  " + l); }
+  for (const n of r.notes || []) lines.push("note: " + n);
+  for (const w of r.warnings || []) lines.push("warning: " + w);
+  if (r.done !== undefined) {
+    lines.push("", `STATUS: ${r.done ? "done" : "NOT done"}${r.fault ? ", FAULT" : ""}; last step ${r.step}`);
+    for (const c of r.captures) lines.push(`  ${c.name}: level ${c.level}, edges ${c.edges}, period ${c.period} ticks, high ${c.high} ticks` + (c.capture ? `, capture ${c.capture}` : ""));
+  }
+  if (r.error) lines.push((lines.length ? "\n" : "") + "error: " + r.error);
+  out.textContent = lines.join("\n");
+  out.className = "runout" + (!r.ok || r.fault || r.done === false ? " err" : "");
+}
+$("rdry").addEventListener("click", () => runMode(true));
+$("rrun").addEventListener("click", () => runMode(false));
 
 function setStatus(text, err) { const s = $("status"); s.textContent = text; s.className = "status" + (err ? " err" : ""); }
 

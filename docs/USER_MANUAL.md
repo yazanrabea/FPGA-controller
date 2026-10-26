@@ -730,6 +730,12 @@ example INFERENCE has `data: "0x"`, so fill in the frame first), an unknown capt
 a pin set twice, or a capture edge that chip_top isn't wired for (`piso_out` is sampled on
 `clk_piso`'s falling edge).
 
+**From the editor:** `python -m nemo_ctl.cli gui` has a **Run on board** card under the
+Signals panel. *Check* shows the sequence the shown tab becomes (no board); *Run on board*
+asks for confirmation, then runs that mode, as edited on the page (no need to save), over
+J17 and prints the same STATUS and capture lines as `run-mode`. The duration box is
+optional (`350us`, `2ms`; empty = automatic). Opening the JTAG link takes a few seconds.
+
 The editor's Signals panel draws the same mode. Before t = 0 it shows each setting's own
 idle level, the board shows step 0's idle levels; that difference is expected.
 

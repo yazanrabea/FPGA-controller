@@ -77,7 +77,8 @@ and is the TBD idle levels, not a fault.
 5. For each pass of §2: wire D0-D7, single-shot trigger (e.g. rising edge of `clk_sipo`
    in pass 1, of `pulse` in pass 2, any edge on D0 in pass 3; pass 3 is static, so a
    run-mode while watching is enough), run
-   `python -m nemo_ctl.cli run-mode --mode INFERENCE --jtag`, save a screenshot to
+   `python -m nemo_ctl.cli run-mode --mode INFERENCE --jtag` (or the editor's
+   **Run on board** button), save a screenshot to
    `docs/measurements/`, compare pin by pin with §3 and the panel.
 6. Record `run-mode`'s printout (STATUS, the 4 capture lines).
 7. Mark each checked pin in `docs/pin_verification.md` (output, logic analyser).

@@ -133,7 +133,7 @@ def _open_chip_link(args: argparse.Namespace):
 
 def cmd_run_mode(args: argparse.Namespace) -> int:
     from .config import load_config
-    from .mode_seq import mode_table
+    from .mode_seq import mode_table, run_table
     from .sequence import SequenceError
     from .units import UnitsError, parse_duration_ns
     try:
@@ -154,23 +154,19 @@ def cmd_run_mode(args: argparse.Namespace) -> int:
     if not (args.jtag or args.port):
         print("error: give --jtag (or --port) to run it on the board, or --dry-run", file=sys.stderr)
         return 1
-    run_s = table.steps[-1].cond_arg / 1e8 + table.steps[0].cond_arg / 1e8
     sl = _open_chip_link(args)
     try:
-        sl.load(table)
-        sl.start()
-        r = sl.wait(run_s + 2.0)
-        print(f"STATUS: {'done' if r.done else 'NOT done'}{', FAULT' if r.fault else ''}; last step {r.step}")
-        for c in sl.target.cap_cells:
-            cnt, tim = sl.read_cap_counts(c.name), sl.read_cap_timing(c.name)
-            line = (f"  {c.name}: level {int(cnt['level'])}, edges {cnt['edges']}, "
-                    f"period {tim['period']} ticks, high {tim['high']} ticks")
-            if c.cap_w > 1:
-                line += f", capture 0x{sl.read_capture(c.name):0{(c.cap_w + 3) // 4}X}"
-            print(line)
+        r = run_table(sl, table)
     finally:
         sl.close()
-    return 0 if r.done and not r.fault else 1
+    print(f"STATUS: {'done' if r['done'] else 'NOT done'}{', FAULT' if r['fault'] else ''}; last step {r['step']}")
+    for c in r["captures"]:
+        line = (f"  {c['name']}: level {c['level']}, edges {c['edges']}, "
+                f"period {c['period']} ticks, high {c['high']} ticks")
+        if "capture" in c:
+            line += f", capture {c['capture']}"
+        print(line)
+    return 0 if r["done"] and not r["fault"] else 1
 
 
 def _print_seq_status(st, step, last) -> None:
