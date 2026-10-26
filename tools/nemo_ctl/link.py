@@ -351,7 +351,7 @@ V2_STEP = 0x0004        # R: current step
 V2_LAST_STEP = 0x0005   # R: step the last run ended on
 V2_N_STEPS = 0x0006     # R/W: number of steps in the table (1..16); write ignored while busy
 V2_CAP_BASE = 0x0100    # cap cell k's results at V2_CAP_BASE + k * stride (READ_CAPTURE offset)
-V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * ENTRY_BYTES (write-only)
+V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * target.entry_bytes (write-only)
 # byte offsets inside one cap cell's result block
 V2_CAP_FLAGS, V2_CAP_EDGES, V2_CAP_PERIOD, V2_CAP_HIGH, V2_CAP_DATA = 0, 1, 5, 9, 13
 
@@ -399,19 +399,25 @@ class SeqLink(Link):
         self._clock = clock or _time.monotonic
         self._sleep = sleep or _time.sleep
 
+    WRITE_CHUNK = 128   # bytes per WRITE_REG frame when loading a table
+
     # ---- Sequencer protocol ----
     def load(self, table) -> None:
         """Write every step's entry and N_STEPS, then APPLY (pins go to the new step 0's
         idle state). Refuses a table for another target. Raises LinkError if the device
         reports the writes were refused (a sequence was still running)."""
-        from .sequence import ENTRY_BYTES, MAX_STEPS, encode_step, entry_layout
+        from .sequence import MAX_STEPS, encode_step, entry_layout
         if table.target != self.target:
             raise LinkError(f"table is for {table.target.name}, this link drives {self.target.name}")
         if not 1 <= len(table.steps) <= MAX_STEPS:
             raise LinkError(f"{len(table.steps)} steps; the device holds 1..{MAX_STEPS}")
         lay = entry_layout(self.target)
         for k, st in enumerate(table.steps):
-            self.write_reg(V2_TABLE_BASE + k * ENTRY_BYTES, encode_step(st, lay))
+            entry = encode_step(st, lay)
+            base = V2_TABLE_BASE + k * self.target.entry_bytes
+            # one frame carries at most 255 bytes; the chip's ~534-byte entries go in pieces
+            for o in range(0, len(entry), self.WRITE_CHUNK):
+                self.write_reg(base + o, entry[o:o + self.WRITE_CHUNK])
         self.write_reg(V2_N_STEPS, bytes([len(table.steps)]))
         st = self.seq_status()
         if st.table_rejected:

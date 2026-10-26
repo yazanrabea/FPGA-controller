@@ -16,7 +16,7 @@
 | 7 | Mode sequencer | **EXP-03 PASS** (compile-time table; rerun PASS 2026-10-26 on the `seq_engine`-fix bitstream), **EXP-04 PASS over JTAG** (table from the PC, `program_verify()` on hardware) |
 | — | PC link over JTAG (J17) | J1-J5 done (EXP-05 + the above) |
 | — | **Scope timing** | **EXP-06 (2026-10-26):** timing exact; ringing 0.4-0.7 V on the jumper wires; **DRIVE 4 halves it**, so it's now the rule for chip-facing outputs |
-| — | **Chip pipeline** (C1-C6) | **C1 done 2026-10-26**: the chip-pin -> FMC map decided (jumper wires, by block) and checked by `validate`. Next C2 (WORKLOG has the plan) |
+| — | **Chip pipeline** (C1-C6) | **C1, C2 done 2026-10-26**: the chip-pin -> FMC map decided (jumper wires, by block) and checked by `validate`; the CHIP sequencer target (22 + 4 cells, 136 / 168-bit serial, 1024-byte entries). Next C3 (WORKLOG has the plan) |
 | 8 | Chip-ready checklist | Not started: needs Dima's answers (the pin map no longer waits on him) |
 
 ## What happened on 2026-10-26 (details: WORKLOG, `docs/experiments/EXP-06_scope_timing.md`)

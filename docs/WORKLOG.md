@@ -6,8 +6,35 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1 done 2026-10-26. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1, C2 done 2026-10-26. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+
+---
+
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: chip pipeline step C2 (CHIP target)
+- Goal: C2 (Rahaf: "go on with C2"): the real chip as a sequencer target.
+- Done:
+  - `tools/nemo_ctl/sequence.py`: new `chip_target()`, built from the pin database:
+    - one sig cell per chip **input** (22) and one cap cell per chip **output** (4), named as
+      the chip signals, in pin_db order;
+    - `sipo_in` SERIAL `SIPO_BITS` = 136, strobe `clk_sipo` falling;
+    - `piso_out` SERIAL capture `PISO_BITS` = 168, strobe `clk_piso` falling;
+    - both edges are parameters, defaults from Phase 6, UNCONFIRMED (Dima).
+  - `Target` got `entry_bytes` (default 256, so PHASE7_LOOPBACK is unchanged; the chip is
+    1024, because one step entry is **534 bytes**). `entry_layout` checks against it.
+  - `tools/nemo_ctl/link.py` `SeqLink.load`: entries at `V2_TABLE_BASE + k * target.entry_bytes`,
+    written in 128-byte frames (`WRITE_CHUNK`). A frame carries at most 255 bytes, so the chip's
+    entries didn't fit one.
+  - Tests: new `tools/nemo_ctl/tests/test_chip_target.py` (6). Cells / directions, widths and
+    strobes, edge parameters, layout 534 B / capture stride 40 B, a 136-bit SIPO load compiled
+    and encoded bit-exact, `SeqLink.load` chunks <= 128 B reassembling every entry.
+- Hardware setup: none.
+- Results: **[not hardware]** pytest 248 passed, 1 skipped.
+- Problems / fixes: none.
+- Decisions: entry size per target, not one global 256 (keeps the verified loopback tops
+  byte-identical).
+- Next steps: C3, `gen_svh.py --chip`: the chip package + `fpga/constraints/chip_top.xdc`
+  generated from `pin_map` (DRIVE 4 + SLEW SLOW on outputs). Stop for Rahaf's OK after C3.
 
 ---
 

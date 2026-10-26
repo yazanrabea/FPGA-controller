@@ -20,8 +20,9 @@ What the hardware (fpga/src/seq_engine.sv) does with the compiled table:
   * After the last step: RUN low, step 0 re-applied (same as STOP).
 
 A *target* describes the cells a top level actually has (names, index order, SERIAL
-widths, the hard-wired strobe sources). PHASE7_LOOPBACK is the one for
-fpga/src/phase7_seq_loopback_top.sv; its wiring must match that file.
+widths, the hard-wired strobe sources, the table entry size). PHASE7_LOOPBACK is the one for
+fpga/src/phase7_seq_loopback_top.sv; its wiring must match that file. CHIP (chip_target())
+is the real chip's 22 inputs + 4 outputs, for the chip top (chip pipeline C2-C4).
 
 The program-verify loop (pulse -> read -> compare -> repeat) is `program_verify()`,
 written against the small `Sequencer` protocol so it runs the same over a real link
@@ -77,6 +78,7 @@ class Target:
     name: str
     sig_cells: tuple[SigCellSpec, ...]
     cap_cells: tuple[CapCellSpec, ...]
+    entry_bytes: int = 256   # table RAM stride per step (power of 2); the RTL uses the same
 
     def sig_index(self, name: str) -> int:
         return [c.name for c in self.sig_cells].index(name)
@@ -105,6 +107,37 @@ PHASE7_LOOPBACK = Target(
         CapCellSpec("en_in"),
     ),
 )
+
+
+def chip_target(sipo_data_edge: str = "falling", piso_sample_edge: str = "falling") -> Target:
+    """The real chip as a sequencer target (chip pipeline step C2, 2026-10-26).
+
+    One sig cell per chip **input** (22, FPGA outputs) and one cap cell per chip **output**
+    (4, FPGA inputs), named exactly as the chip signals, in pin_db order (the order the
+    generated chip package and chip_top.sv use; the FMC pin of each comes from the config's
+    pin_map, C3).
+    - `sipo_in`: SERIAL, SIPO_BITS (136) wide, shifted on `clk_sipo`'s `sipo_data_edge`;
+    - `piso_out`: SERIAL capture, PISO_BITS (168), sampled on `clk_piso`'s `piso_sample_edge`;
+    - every other cell 1 bit.
+    The defaults are Phase 6's (docs/session1, sipo_piso.py); both edges are UNCONFIRMED
+    until Dima answers, so they stay parameters. A step entry is ~534 bytes, so entry_bytes
+    is 1024 (the next power of 2).
+    """
+    from .pins import load_pin_db
+    from .sipo_piso import PISO_BITS, SIPO_BITS
+    for e in (sipo_data_edge, piso_sample_edge):
+        if e not in ("rising", "falling"):
+            raise SequenceError(f"edge must be 'rising' or 'falling', got {e!r}")
+    db = load_pin_db()
+    sig, cap = [], []
+    for p in db.values():
+        if p.direction == "in":
+            sig.append(SigCellSpec(p.name, SIPO_BITS, ("clk_sipo", sipo_data_edge))
+                       if p.name == "sipo_in" else SigCellSpec(p.name))
+        else:
+            cap.append(CapCellSpec(p.name, PISO_BITS, ("clk_piso", piso_sample_edge))
+                       if p.name == "piso_out" else CapCellSpec(p.name))
+    return Target(name="chip_top", sig_cells=tuple(sig), cap_cells=tuple(cap), entry_bytes=1024)
 
 
 # ======================================================================================
@@ -489,7 +522,7 @@ if __name__ == "__main__":
 # Phase 7 round 2: step-table entry layout (link v2, seq_bank.sv)
 # ======================================================================================
 
-ENTRY_BYTES = 256  # address stride per step in the table RAM (power of 2)
+ENTRY_BYTES = 256  # PHASE7_LOOPBACK's stride per step in the table RAM (Target.entry_bytes)
 
 
 @dataclass(frozen=True)
@@ -541,8 +574,8 @@ def entry_layout(target: Target = PHASE7_LOOPBACK) -> EntryLayout:
     for _ in target.cap_cells:
         cap_base.append(off)
         off += EntryLayout.CAP_SIZE
-    if off > ENTRY_BYTES:
-        raise SequenceError(f"{target.name}: a step entry needs {off} bytes, more than {ENTRY_BYTES}")
+    if off > target.entry_bytes:
+        raise SequenceError(f"{target.name}: a step entry needs {off} bytes, more than {target.entry_bytes}")
     return EntryLayout(target, sig_mask, cap_mask, cond, cond_cell, cond_arg, timeout, hdr,
                        tuple(sig_base), tuple(cap_base), off)
 
