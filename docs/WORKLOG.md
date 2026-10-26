@@ -6,8 +6,44 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1, C2 done 2026-10-26. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
+| Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C3 done 2026-10-26 (C3: generated chip_pkg.sv + chip_top.xdc, awaiting OK). | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+
+---
+
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: chip pipeline step C3 (generator)
+- Goal: C3 (Rahaf: "go on with C3"): the chip top's FPGA files generated from the config.
+- Done:
+  - `tools/nemo_ctl/gen_svh.py --chip` (`generate_chip()`): reads `config/nemo_config.yaml`
+    `pin_map` and refuses (nothing written) unless the map is complete and valid. Writes:
+    - **`fpga/src/gen/chip_pkg.sv`**: N_SIG 22 / N_CAP 4, ENTRY_BYTES 1024, USED_BYTES 534;
+      the link v2 register map with CAP_STRIDE 40; header / field offsets; per-cell arrays
+      (`SIG_BASE`, `SIG_SERIAL_W`, `CAP_BLOCK`, `CAP_W`, `SIG_LA` / `CAP_LA`); the serial cells
+      and strobes (`SIPO_CELL` 15 on `clk_sipo` (cell 16), falling; `PISO_CELL` 1 on
+      `clk_piso` (cell 19), falling; UNCONFIRMED); cell-name indices.
+    - **`fpga/constraints/chip_top.xdc`**: the verified clk / LED lines; one PACKAGE_PIN per
+      chip signal from `fmc_pins.py`, with the signal and header as a comment. `chip_out[*]`:
+      LVCMOS18, **DRIVE 4, SLEW SLOW**. `chip_in[*]`: LVCMOS18, **PULLDOWN**. The jtag_tck
+      clock + async groups.
+  - chip_top's port contract fixed now for C4: `chip_out[i]` = sig cell i, `chip_in[j]` =
+    cap cell j (chip_target order); plus `clk`, `led[7:0]`.
+  - Tests: new `tools/nemo_ctl/tests/test_gen_chip.py` (8):
+    - every generated pin == the verified `phase4_loopback_top.xdc` mapping (checked
+      directly, not through fmc_pins);
+    - 26 + 9 ports, none twice; the DRIVE / SLEW / PULLDOWN lines; the clk / LED lines;
+    - the package == target / layout; the committed files == regenerated;
+    - an incomplete map and a duplicate pin are refused.
+- Hardware setup: none.
+- Results:
+  - **[simulated, xsim]** `chip_pkg.sv` compiles; the values read back (22 / 4 / 1024 / 136 / 168,
+    `rst_dsa` -> LA14).
+  - **[not hardware]** pytest 256 passed, 1 skipped.
+  - Not checked yet: whether Vivado applies DRIVE 4 / SLOW / PULLDOWN. That needs a design
+    using the XDC; it goes on C4's checklist (I/O report).
+- Problems / fixes: none (a shell-quoting failure while editing; nothing was written by it).
+- Decisions: per-signal ports `chip_out` / `chip_in` instead of a 32-bit `fmc_pins` bus, so
+  only the 26 used pins are constrained and the XDC lines name the signal.
+- Next steps: **stop for Rahaf's OK on the generated files**, then C4 (`chip_top.sv`).
 
 ---
 
