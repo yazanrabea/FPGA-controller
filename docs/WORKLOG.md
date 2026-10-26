@@ -1777,3 +1777,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Results: [simulated] xsim 9/9 for all three sequences; sel_reset: sel[23:8] = C3E7. [measured on board] 18:51: piso_out = 0x…0000C6 (sel[23:8] = **0000**), sipo_out 0, 100 / 100 identical; sel was F0C3 just before, so the reset changed it. **Simulation and FPGA differ** for Dima's RTL as written.
 - Decisions: controller rule until Dima answers: don't use sel[23:8] between a reset and the first phirst.
 - Next steps: send Dima's questions (Q1 updated); scope on J2-25/26 if the EXP-08 transient returns.
+
+## 2026-10-26, Rahaf (with Claude), branch main — handoff after the EXP-08 follow-ups
+- Done: `docs/HANDOFF.md`: short version with the phirst result (F0C3, 101/101) and the simulation-vs-FPGA difference after `rst_sipo` (C3E7 vs 0000, 100/100); next steps (send Dima's questions first); the sim command for all three virtual-chip sequences. Board unchanged: `vchip_top`, 10 jumpers on.
+- Next steps: send Dima's questions; review of the C5 / C6 code.

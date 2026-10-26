@@ -1,8 +1,9 @@
-# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done: EXP-07 + EXP-08 PASS)
+# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done: EXP-07 + EXP-08 PASS, both EXP-08 follow-ups done)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
 > and `docs/WORKLOG.md` (newest entry first). Updated 2026-10-26, late evening, end of
-> Rahaf's lab session (Rahaf at the bench, Claude on the lab PC): C5 + EXP-07, then C6 + EXP-08.
+> Rahaf's lab session (Rahaf at the bench, Claude on the lab PC): C5 + EXP-07, then C6 + EXP-08
+> and its two follow-ups (phirst, sel after a reset).
 
 ## Short version (2026-10-26, late evening)
 
@@ -10,12 +11,21 @@
   136-bit frame from the PC goes through the controller, 10 jumper wires and Dima's
   **unmodified** SIPO, and comes back through his PISO, bit-exact
   (`0x5AA5…E7E7` + sel `0000E7` + `C6`) in **309 of 310 runs**. The first run was
-  corrupted once and could not be reproduced (`docs/issues.md`, OPEN).
+  corrupted once and could not be reproduced (`docs/issues.md`, OPEN). No one touched the
+  wires (Rahaf). Counting the follow-ups: **1 bad run out of 511**.
+- **phirst works** (EXP-08 §7, `config/exp08_phirst.yaml`): one `pulse` after a load steps
+  `sel[23:8]` to `frame[39:24]` = `F0C3`, as simulated; 101 / 101 on the board.
+- **Found: Dima's RTL behaves differently in simulation and in hardware** (EXP-08 §8,
+  `config/exp08_sel_reset.yaml`). Right after `rst_sipo`, `sel[23:8]` = **`C3E7` in
+  simulation** (the previous frame's slice 0, Q1), **`0000` on the FPGA** (100 / 100). His
+  reset branch loads `parallel_out[23:8]` while the same reset clears it; Vivado makes that
+  a latch, which follows it to 0. Added to Dima's Q1. Rule until he answers: don't use
+  `sel[23:8]` between a reset and the first phirst.
 - **Board right now:** **`vchip_top`** programmed, **10 jumper wires on** (J3-3..9 → J2-20..26,
   J3-13 → J2-27, J2-28 → J3-16, J2-29 → J2-17). **Take them off before programming any other
   top**: in `chip_top`, J2-20..25 are outputs, so J3-3..8 ↔ J2-20..25 would join two outputs.
-- **Next:** Rahaf's choice of the optional C6 follow-ups (phirst stepping, sel after a reset,
-  scope on J2-25/26), Dima's questions, a review of the C5/C6 code.
+- **Next:** **send Dima's questions** (now with the hardware result in Q1); a review of the
+  C5/C6 code; scope on J2-25/26 only if the transient comes back.
 
 ### Earlier the same evening (C5)
 
@@ -232,7 +242,9 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
   - Phase 6: 69.
   - Phase 7: 40 / 10 / 27 / 21.
   - JTAG: 9 / 19 / 11.
-  - Chip: `chip_top_tb` 11 (`scripts/run_chip_sim.sh`); virtual chip: `vchip_top_tb` 9 (`scripts/run_vchip_sim.sh`).
+  - Chip: `chip_top_tb` 11 (`scripts/run_chip_sim.sh`); virtual chip: `vchip_top_tb` 9 for each
+    of the three sequences (`scripts/run_vchip_sim.sh [sequence] [0x expected readback]`;
+    the command for each sequence is in its header).
 - [Vivado reports], all met:
   - `phase4_loopback_top` +4.001 ns;
   - `phase7_seq_loopback_top` +0.100 ns (tight);
@@ -245,13 +257,15 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## What to do next
 
-0. **Optional C6 follow-ups** (EXP-08 §5), each with Rahaf's OK and a simulation first:
+0. **C6 follow-ups** (EXP-08 §5), both done:
    - ~~phirst stepping~~: **done, PASS** (EXP-08 §7: `F0C3E7`, 101 / 101 on the board);
    - ~~`sel` after a reset~~: **done** (EXP-08 §8): simulation `C3E7`, FPGA **`0000`** (100/100).
      Same RTL, different result; added to Dima's Q1. Until he answers, don't use `sel[23:8]`
      between a reset and the first phirst;
-   - **scope on J2-25 / J2-26** while `clk_piso` runs, for the run-1 glitch (`docs/issues.md`).
-1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent).
+   - left, only if the run-1 glitch comes back: **scope on J2-25 / J2-26** while `clk_piso` runs
+     (`docs/issues.md`).
+1. **Dima's questions** (`docs/questions_for_dima_2026-10-22.md`, drafted, still not sent;
+   Q1 now has the EXP-08 hardware result, simulation `C3E7` vs FPGA `0000`).
    Rahaf postponed it on 2026-10-26, but it is the critical path for the pins' *meaning*
    (polarities, edges, widths, rates; the map itself is decided, C1), the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
