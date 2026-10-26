@@ -44,7 +44,7 @@ def _summarize_setting(block: str, key: str, setting) -> TimingRow:
         sel = resolve_dft(p.get("adc"), p.get("signal"))
         return TimingRow(block, key, t, None, None,
                           f"adc={p.get('adc')} signal={p.get('signal')!r} -> "
-                          f"b={sel.b_value:03b} s={sel.s_value:03b} (UNCONFIRMED)")
+                          f"b={sel.b_value:03b} s={sel.s_value:04b} (UNCONFIRMED)")
 
     if key in PIN_GROUPS:
         value = p.get("value")

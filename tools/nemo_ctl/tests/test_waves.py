@@ -34,9 +34,10 @@ def test_serial_shifts_each_bit_on_its_clock_edge():
         "k": {"type": "CLOCK", "freq": "1MHz", "cycles": 8},
         "d": {"type": "SERIAL", "clock": "k", "data": "0xA5", "bits": 8, "msb_first": True, "data_edge": "falling"},
     }), "M", 0, 12000)
-    # 0xA5 = 1010 0101, MSB first; the bit changes on each falling edge (500, 1500, ...); after bit 0, back to 0
-    assert _lane(w, "d")["segments"] == [[0, 1], [500, 0], [1500, 1], [2500, 0], [4500, 1],
-                                         [5500, 0], [6500, 1], [7500, 0]]
+    # 0xA5 = 1010 0101, MSB first; the bit changes 20 ns (2 ticks, sig_cell's registered strobe +
+    # shift, measured in xsim 2026-10-26) after each falling edge (500, 1500, ...); after bit 0, back to 0
+    assert _lane(w, "d")["segments"] == [[0, 1], [520, 0], [1520, 1], [2520, 0], [4520, 1],
+                                         [5520, 0], [6520, 1], [7520, 0]]
 
 
 def test_lsb_first_and_rising_edge():
@@ -45,9 +46,10 @@ def test_lsb_first_and_rising_edge():
         "d": {"type": "SERIAL", "clock": "k", "data": "0b0011", "bits": 4, "msb_first": False,
               "data_edge": "rising", "delay": "100ns"},
     }), "M", 0, 6000)
-    # LSB first: 1,1,0,0; rising edges after 100 ns: 1000, 2000, 3000, then back to 0 at 4000 (no 4th edge)
+    # LSB first: 1,1,0,0; rising edges after 100 ns: 1000, 2000, 3000 (+20 ns each), back to 0 after
+    # the 4th bit. The first bit is on the pin from its delay, with no lag (it isn't strobe-driven)
     seg = _lane(w, "d")["segments"]
-    assert seg[:3] == [[0, 0], [100, 1], [2000, 0]]
+    assert seg[:3] == [[0, 0], [100, 1], [2020, 0]]
 
 
 def test_constants_buses_and_outputs():
@@ -100,3 +102,12 @@ def test_waves_payload_uses_the_unsaved_edit_and_reports_errors():
     w = gui.waves_payload(dict(d, mode="INFERENCE"))
     assert [10000, 1] in _lane(w, "cs")["segments"]
     assert "error" in gui.waves_payload(dict(d, mode="INFERENCE", t0=5, t1=1))
+
+
+def test_dft_lane_label_uses_the_configured_adc_and_4_s_bits():
+    # review 2026-10-26: the label printed b_value as the ADC number and s as 3 bits
+    # (s drives 4 pins, s0..s3_dft)
+    w = mode_waves(_cfg({"dft_select": {"type": "DFT_HELPER", "adc": 3, "signal": "phi1"}}), "M")
+    ln = _lane(w, "dft_select")
+    assert ln["kind"] == "bus" and ln["label"].startswith("ADC 3, phi1")
+    assert "s=0001" in ln["label"] and ln["segments"][0][1].endswith("s=0001")

@@ -200,7 +200,7 @@ def _run_dft_helper(config: Config, mode: str, ask: Ask, tell: Tell, dft_handled
         sel = resolve_dft(int(adc_raw), signal)
     except (ValueError, TypeError) as exc:
         raise WizardError(str(exc)) from None
-    tell(f"  -> pair {sel.pair_letter!r}, b={sel.b_value:03b}, s={sel.s_value:03b} "
+    tell(f"  -> pair {sel.pair_letter!r}, b={sel.b_value:03b}, s={sel.s_value:04b} "
          f"(b2..b0 / s0..s2) — {sel.note}")
     for g in DFT_GROUPS:
         for blk in config.modes[mode].values():
@@ -218,7 +218,7 @@ def _run_group(config: Config, pin_db: dict[str, Pin], mode: str, block: str, gr
     tell(f"-- group {group} ({', '.join(members)}) --")
     if group in dft_handled:
         sel = dft_handled[group]
-        tell(f"   currently set via DFT helper: adc(b)={sel.b_value:03b} s={sel.s_value:03b}, "
+        tell(f"   currently set via DFT helper: adc(b)={sel.b_value:03b} s={sel.s_value:04b}, "
              f"pair={sel.pair_letter!r}")
     else:
         current = config.modes[mode][block].get(group)

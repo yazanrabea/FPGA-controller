@@ -60,9 +60,9 @@
     would freeze the link. Now a drain thread keeps reading; regression test with a fake
     flooding server (`tools/nemo_ctl/tests/_fake_xsdb_server.py`), which reproduced the
     hang first;
-  - **left for Yazan** (Rahaf's decision): `waves.py` draws SERIAL data 20 ns earlier than
-    `sig_cell.sv` changes it; the DFT lane label uses `b_value` as the ADC number and shows
-    `s` as 3 bits instead of 4;
+  - `waves.py` drew SERIAL data 20 ns earlier than `sig_cell.sv` changes it, and the DFT
+    label used `b_value` / 3-bit `s`: first left for Yazan, then **fixed** at Rahaf's request
+    (lag measured in xsim);
   - `gui.py` security: fine (127.0.0.1, Host check, JSON-only POSTs, fixed save path).
 - **EXP-03 rerun** on the bitstream with the `seq_engine` `step_cnt1` fix [measured on
   board]: pre-START levels, full sequence, FAULT, abort all identical to 2026-10-22. The
@@ -111,7 +111,7 @@
 
 ## Last verified results
 
-- pytest (from `tools/`): 235 passed, 1 skipped (incl. the `XsdbScanPort` flood test).
+- pytest (from `tools/`): 236 passed, 1 skipped.
 - [simulated, xsim]:
   - Phase 3: 28 / 16 / 9 / 16.
   - Phase 4: 21 + `phase4_serial_tb` 2.
@@ -134,11 +134,11 @@
    the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
    it's missing.
-2. **Yazan: fix `waves.py`** (review 2026-10-26, WORKLOG): SERIAL data drawn 20 ns early
-   vs `sig_cell.sv`; the DFT lane label (`b_value` as ADC number, `s` as 3 bits).
+2. ~~Yazan: fix `waves.py`~~ **fixed 2026-10-26 by Claude at Rahaf's request** (SERIAL
+   +20 ns, measured in xsim; DFT label). Yazan: FYI, your `waves.py` / `test_waves.py` changed.
 3. Review: **all code on `main` has now been reviewed by Claude**: round-2 RTL 2026-10-22;
-   GUI + JTAG PC side, then JTAG RTL + the 2026-10-22 fixes, on 2026-10-26 (WORKLOG). The only
-   open findings are Yazan's `waves.py` items. A human review is still optional.
+   GUI + JTAG PC side, then JTAG RTL + the 2026-10-22 fixes, on 2026-10-26 (WORKLOG). **No
+   open findings.** A human review is still optional.
 4. Optional, at the bench:
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;

@@ -9,13 +9,17 @@ fpga/src/sig_cell.sv:
   - CLOCK: from `delay`, high for H ticks then low for N-H, `cycles` times (0/blank =
     for ever); starts in its high phase.
   - SERIAL: the first bit is on the pin from `delay`; each `data_edge` edge of its clock
-    (after that) moves to the next bit; after the last one it goes back to 0.
+    (after that) moves to the next bit, SERIAL_STROBE_LAG_TICKS after that edge; after the
+    last one it goes back to 0.
   - BUS groups and the DFT helper: a constant value, drawn as a labelled bus.
 Outputs (CAPTURE) are driven by the chip, not the FPGA, so they're listed as such.
 
-The cells' fixed 2-tick output latency is the same for every pin, so it is left out:
+The cells' fixed output latency from RUN is the same for every pin, so it is left out:
 the drawing is RUN-relative and shows the timing *between* pins, which is what the
-config sets. Only the part of the waveform inside [t0, t1] is returned; a lane with more
+config sets. The one exception is a SERIAL pin's bit changes. They follow its clock's
+edge strobe, which is registered (`falling_edge <= ...`), and the shift lands a tick after
+that: 2 ticks (20 ns) after the clock pin's edge, measured in xsim on sig_cell.sv
+(2026-10-26). So they are drawn 2 ticks after the edge. Only the part of the waveform inside [t0, t1] is returned; a lane with more
 than MAX_EDGES edges in the window comes back as `dense` (the page shows a band and asks
 to zoom in) instead of thousands of points.
 """
@@ -27,6 +31,7 @@ from .groups import PIN_GROUPS
 from .units import TICK_NS, UnitsError, quantize_clock, quantize_duration
 
 MAX_EDGES = 1500
+SERIAL_STROBE_LAG_TICKS = 2   # SERIAL data changes this long after its clock pin's edge (sig_cell.sv)
 DEFAULT_SPAN_TICKS = 1000  # 10 us when nothing in the mode bounds the time
 
 
@@ -131,7 +136,7 @@ def mode_waves(config: Config, mode: str, t0_ns: float | None = None,
                 st = _strobes(clocks[s.params["clock"]], s.params.get("data_edge", "falling"),
                               _ticks(s.params.get("delay")), int(s.params.get("bits") or 0))
                 if st:
-                    ends.append(st[-1])
+                    ends.append(st[-1] + SERIAL_STROBE_LAG_TICKS)
             except (UnitsError, TypeError, ValueError):
                 pass
     end = max(ends) if ends else 0
@@ -176,8 +181,10 @@ def _lane(s: PinSetting, key: str, clocks: dict, t0: int, t1: int) -> dict:
     p = s.params
     if s.type == DFT_HELPER_TYPE:
         sel = resolve_dft(p.get("adc"), p.get("signal"))
-        return {"kind": "bus", "label": f"ADC {sel.b_value}, {p.get('signal')} (b={sel.b_value:03b}, s={sel.s_value:03b})",
-                "segments": [[t0, f"b={sel.b_value:03b} s={sel.s_value:03b}"]]}
+        # the configured ADC, not b_value (equal only while the DFT table is the UNCONFIRMED
+        # one); s drives 4 pins (s0..s3_dft), so 4 bits
+        return {"kind": "bus", "label": f"ADC {p.get('adc')}, {p.get('signal')} (b={sel.b_value:03b}, s={sel.s_value:04b})",
+                "segments": [[t0, f"b={sel.b_value:03b} s={sel.s_value:04b}"]]}
     if key in PIN_GROUPS or s.type == "BUS":
         v = p.get("value")
         n = len(PIN_GROUPS.get(key, []))
@@ -232,7 +239,7 @@ def _lane(s: PinSetting, key: str, clocks: dict, t0: int, t1: int) -> dict:
         st = _strobes(clk, p.get("data_edge", "falling"), d, bits)
         edges = [(d, seq[0])]
         for i, t in enumerate(st):
-            edges.append((t, seq[i + 1] if i + 1 < bits else 0))
+            edges.append((t + SERIAL_STROBE_LAG_TICKS, seq[i + 1] if i + 1 < bits else 0))
         if sum(1 for t, _ in edges if t0 <= t <= t1) > MAX_EDGES:
             return {"kind": "dense", "label": f"{bits} bits (too many edges here, zoom in)",
                     "segments": [[max(t0, d), "data"]]}

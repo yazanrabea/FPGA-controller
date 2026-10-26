@@ -11,6 +11,28 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: the two `waves.py` findings fixed
+- Goal: Rahaf asked to fix the review's two open findings in Yazan's `waves.py` (first left
+  for Yazan). His WORKLOG row says "nothing in progress", so no file conflict.
+- Done:
+  - **SERIAL timing** (`tools/nemo_ctl/waves.py`): bit changes now drawn
+    `SERIAL_STROBE_LAG_TICKS = 2` ticks (20 ns) after the clock edge, also in the
+    end-of-mode time. The first bit stays at its delay (not strobe-driven). Docstring
+    corrected.
+  - The lag was **measured, not assumed**: a scratch xsim testbench (not committed) with a
+    `sig_cell` CLOCK + two SERIAL cells. Every strobe-driven change came 2 ticks after the
+    clock pin edge, for `falling` and `rising` (5/5 each) [simulated].
+  - **DFT label**: shows the configured `adc` (not `b_value`) and `s` as 4 bits (it drives
+    `s0..s3_dft`), in `waves.py`, and the same `s` display in `timing.py` and `wizard.py`
+    for consistency.
+  - Tests: `test_waves.py` SERIAL expectations +20 ns (comments say why); new
+    `test_dft_lane_label_uses_the_configured_adc_and_4_s_bits`.
+- Results: **[not hardware]** pytest 236 passed, 1 skipped.
+- Next steps: Yazan, FYI: your `waves.py` / `test_waves.py` changed (this entry). Dima's
+  questions remain the blocker.
+
+---
+
 ## 2026-10-26 (lab PC), Rahaf + Claude, branch main: review part 2 (JTAG RTL + the 2026-10-22 fixes)
 - Goal: handoff next step 3 (Rahaf: "you do c"), done by Claude instead of Rahaf: review what
   had only been checked by tests / board runs, never read as code.
