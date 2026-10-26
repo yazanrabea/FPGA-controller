@@ -1,0 +1,65 @@
+## phase5_link_jtag_slew_top -- EXP-06 follow-up: phase5_link_jtag_top.xdc unchanged, plus
+## DRIVE 4 on the five driven outputs. The baseline build already had SLEW SLOW (Vivado's default,
+## per its I/O report) at DRIVE 12, so DRIVE 12 -> 4 is the only real change; SLEW SLOW is kept explicit.
+## Same pins (verified mapping); only the output buffer settings of fmc_pins[0..4] differ.
+
+
+set_property PACKAGE_PIN Y9 [get_ports {clk}]
+set_property IOSTANDARD LVCMOS33 [get_ports {clk}]
+create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports {clk}]
+set_property PACKAGE_PIN F22 [get_ports {sw[0]}]
+set_property PACKAGE_PIN G22 [get_ports {sw[1]}]
+set_property PACKAGE_PIN H22 [get_ports {sw[2]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {sw[*]}]
+set_property PACKAGE_PIN T22 [get_ports {led[0]}]
+set_property PACKAGE_PIN T21 [get_ports {led[1]}]
+set_property PACKAGE_PIN U22 [get_ports {led[2]}]
+set_property PACKAGE_PIN U21 [get_ports {led[3]}]
+set_property PACKAGE_PIN V22 [get_ports {led[4]}]
+set_property PACKAGE_PIN W22 [get_ports {led[5]}]
+set_property PACKAGE_PIN U19 [get_ports {led[6]}]
+set_property PACKAGE_PIN U14 [get_ports {led[7]}]
+set_property IOSTANDARD LVCMOS33 [get_ports {led[*]}]
+set_property PACKAGE_PIN M19 [get_ports {fmc_pins[0]}]
+set_property PACKAGE_PIN N19 [get_ports {fmc_pins[1]}]
+set_property PACKAGE_PIN P17 [get_ports {fmc_pins[2]}]
+set_property PACKAGE_PIN N22 [get_ports {fmc_pins[3]}]
+set_property PACKAGE_PIN M21 [get_ports {fmc_pins[4]}]
+set_property PACKAGE_PIN J18 [get_ports {fmc_pins[5]}]
+set_property PACKAGE_PIN L21 [get_ports {fmc_pins[6]}]
+set_property PACKAGE_PIN T16 [get_ports {fmc_pins[7]}]
+set_property PACKAGE_PIN J21 [get_ports {fmc_pins[8]}]
+set_property PACKAGE_PIN R20 [get_ports {fmc_pins[9]}]
+set_property PACKAGE_PIN R19 [get_ports {fmc_pins[10]}]
+set_property PACKAGE_PIN N17 [get_ports {fmc_pins[11]}]
+set_property PACKAGE_PIN P20 [get_ports {fmc_pins[12]}]
+set_property PACKAGE_PIN L17 [get_ports {fmc_pins[13]}]
+set_property PACKAGE_PIN K19 [get_ports {fmc_pins[14]}]
+set_property PACKAGE_PIN J16 [get_ports {fmc_pins[15]}]
+set_property PACKAGE_PIN J20 [get_ports {fmc_pins[16]}]
+set_property PACKAGE_PIN B19 [get_ports {fmc_pins[17]}]
+set_property PACKAGE_PIN D20 [get_ports {fmc_pins[18]}]
+set_property PACKAGE_PIN G15 [get_ports {fmc_pins[19]}]
+set_property PACKAGE_PIN G20 [get_ports {fmc_pins[20]}]
+set_property PACKAGE_PIN E19 [get_ports {fmc_pins[21]}]
+set_property PACKAGE_PIN G19 [get_ports {fmc_pins[22]}]
+set_property PACKAGE_PIN E15 [get_ports {fmc_pins[23]}]
+set_property PACKAGE_PIN A18 [get_ports {fmc_pins[24]}]
+set_property PACKAGE_PIN D22 [get_ports {fmc_pins[25]}]
+set_property PACKAGE_PIN F18 [get_ports {fmc_pins[26]}]
+set_property PACKAGE_PIN E21 [get_ports {fmc_pins[27]}]
+set_property PACKAGE_PIN A16 [get_ports {fmc_pins[28]}]
+set_property PACKAGE_PIN C17 [get_ports {fmc_pins[29]}]
+set_property PACKAGE_PIN C15 [get_ports {fmc_pins[30]}]
+set_property PACKAGE_PIN B16 [get_ports {fmc_pins[31]}]
+set_property IOSTANDARD LVCMOS18 [get_ports {fmc_pins[*]}]
+
+## ---- JTAG TCK from the BSCANE2 primitive (as in jtag_echo_top.xdc) ----
+## 30 MHz = the Digilent cable's ceiling; TCK and the system clock are unrelated, the only
+## crossings are jtag_link_bridge.sv's toggle handshakes and its stable h / u buffers.
+create_clock -name jtag_tck -period 33.333 [get_pins -hierarchical *u_bscan/TCK]
+set_clock_groups -asynchronous -group [get_clocks sys_clk_pin] -group [get_clocks jtag_tck]
+
+## ---- gentler output edges on the 5 driven loopback outputs (LA00-04_P, J3-0..J3-4) ----
+set_property SLEW SLOW [get_ports {fmc_pins[0] fmc_pins[1] fmc_pins[2] fmc_pins[3] fmc_pins[4]}]
+set_property DRIVE 4 [get_ports {fmc_pins[0] fmc_pins[1] fmc_pins[2] fmc_pins[3] fmc_pins[4]}]

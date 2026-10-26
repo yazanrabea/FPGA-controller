@@ -177,6 +177,50 @@ analog channel).
 
 STOP from the PC at the end (`link stop --jtag`, STATUS `STOPPED`).
 
+### A1' (repeat, 2026-10-26): test_clock 1 MHz, 50 %, J3-0
+
+Repeated to check whether a shorter ground changes the ringing. Ground and probe for the
+repeat: not reported separately.
+
+| Quantity | Reading (as reported) | A1 | Note |
+|---|---|---|---|
+| Maximum | 2.18 V | 2.2 V | same |
+| Minimum | ~-0.3 V | -0.4 V | about the same |
+
+J3-16 (A2'): not re-measured. Rahaf: "same as before". Conclusion: the ringing is not a
+probe-ground artefact, so the FPGA-side fix (`SLEW SLOW` / lower `DRIVE`) is tried next (§6).
+
+## 6. Follow-up: weaker output driver (DRIVE 12 -> 4)
+
+- Design `phase5_link_jtag_slew_top` (+ XDC): `phase5_link_jtag_top` unchanged, plus
+  `DRIVE 4` and an explicit `SLEW SLOW` on `fmc_pins[0..4]`. The diff against the baseline
+  XDC is only those two lines; no pin moves.
+- Vivado I/O reports: the **baseline already had `SLEW SLOW`** (Vivado's default) at
+  `DRIVE 12`, so the only real change is **DRIVE 12 -> 4**. (I had first assumed the default
+  slew was FAST: wrong.)
+- Build: timing met, sys clk WNS +0.206 ns; the I/O report shows DRIVE 4 / SLOW on
+  M19, N19, P17, N22, M21 (fmc_pins[0..4]).
+- Programmed `phase5_link_jtag_slew_top` (`DONE=1`); test_clock 1 MHz / 50 % over JTAG.
+  Same instrument (CX3324A), probe and ground (shortest clip next to the pin), DC coupling.
+  Readings are the instrument's **mean** statistics (Rahaf); whether the DRIVE 12 readings
+  were means is not known.
+
+**Results [measured on board]:**
+
+| | DRIVE 12 (A1 / A2) | **DRIVE 4** | Change |
+|---|---|---|---|
+| J3-0 max | 2.2 V (+0.40 V over 1.8) | **1.97 V (+0.17)** | overshoot ~-57 % |
+| J3-0 min | -0.4 V | **-0.25 V** | undershoot ~-38 % |
+| J3-0 rise / fall | 17.8 / 17.0 ns | **20.6 / 19.2 ns** | ~2-3 ns slower |
+| J3-16 max | 2.42 V (+0.62) | **2.09 V (+0.29)** | overshoot ~-53 % |
+| J3-16 min | -0.7 V | **-0.41 V** | undershoot ~-41 % |
+| J3-16 rise / fall | ~18 / ~18 ns | **20 / 18.9 ns** | ~1-2 ns slower |
+
+**DRIVE 4 about halves the ringing**, at the cost of 1-3 ns slower edges. The percentages
+are approximate: "mean" now, unknown before. The change is too large to be measurement
+spread. Not fully solved: -0.41 V below ground at the far end. Whether that's acceptable
+depends on the chip's input rating (unknown).
+
 ## 5. Conclusion
 
 **Timing: PASS, 2026-10-26.** Every frequency, duty and width the FPGA was told to make came

@@ -44,6 +44,16 @@ Tag every result **[simulated]** or **[measured on board]**.
   - re-measure A1/A2 with a spring-tip ground and a recorded probe;
   - the chip's input rating below ground (datasheet / Dima);
   - housekeeping (CLAUDE.md §6 stale rows, pytest rerun, record pairs 5-15 as "not verified").
+- Ringing follow-up, same session:
+  - A1 repeated (J3-0 2.18 / ~-0.3 V, "same as before"), so the ringing is not a probe-ground
+    artefact.
+  - New `fpga/src/phase5_link_jtag_slew_top.sv` + XDC: the baseline + `DRIVE 4` (and explicit
+    `SLEW SLOW`) on fmc_pins[0..4]. The XDC diff is only those lines. The I/O reports showed
+    the baseline already had SLEW SLOW (Vivado default) at DRIVE 12, so DRIVE is the one change.
+  - Timing met (+0.206 ns).
+  - **[measured on board]**, mean values: J3-0 1.97 / -0.25 V, 20.6 / 19.2 ns; J3-16
+    2.09 / -0.41 V, 20 / 18.9 ns. About **half** the over/undershoot of DRIVE 12, edges 1-3 ns
+    slower. EXP-06 §6, `docs/issues.md` (partly mitigated).
 - Housekeeping, same session:
   - pytest, 5 runs in a row: 234 passed, 1 skipped each time. Yazan's one unexplained
     failure (2026-10-26 entry below) did not come back.

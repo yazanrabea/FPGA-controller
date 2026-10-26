@@ -157,4 +157,9 @@ Format: symptom, suspected cause, fix, confirmation.
   chip's input rating (unknown: datasheet / Dima).
 - Next: try `SLEW SLOW` / a lower `DRIVE` in the XDC (FPGA side only, no new wiring),
   rebuild and measure again; then a series resistor or shorter wires if needed. Optional:
-  a spring-tip ground for a final check of the measurement. Not fixed.
+  a spring-tip ground for a final check of the measurement.
+- Update 2026-10-26: **DRIVE 4** (baseline DRIVE 12; slew was already SLOW) about halves it
+  [measured on board, EXP-06 §6]: J3-0 1.97 / -0.25 V, J3-16 2.09 / -0.41 V, edges ~20 ns.
+  **Partly mitigated**, not closed: -0.41 V remains at the far end, and the chip's input
+  rating is unknown. Options after that: a series resistor at the driver, or shorter wires.
+  Not decided: whether chip-facing outputs should use DRIVE 4.
