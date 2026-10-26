@@ -142,3 +142,18 @@ Format: symptom, suspected cause, fix, confirmation.
 - Cause: `tools/nemo_ctl/cli.py` always formatted `hz / 1e6` with 4 decimals.
 - Fix: `_fmt_hz()` picks Hz / kHz / MHz. Test `test_fmt_hz_keeps_low_frequencies_readable`.
 - Confirmation: pytest 213 passed, 1 skipped.
+
+## EXP-06: overshoot / undershoot of 0.4-0.7 V on the jumper-wired outputs (open)
+- Symptom (2026-10-26, CX3324A, 1 MΩ, DC coupling):
+  - at 1 MHz, J3-0 (driving end) max 2.2 V / min -0.4 V, J3-16 (far end, an FPGA input)
+    2.42 V / -0.7 V;
+  - at 10 MHz, 2.1 / -0.4 V and ~2.3 / -0.64 V;
+  - edges ~18 ns at 1 MHz.
+- Suspected: reflections on the unterminated jumper wire (the far end rings more), plus
+  possibly the probe's ground lead. The probe/sensor and its ground were **not recorded**, so
+  how much is measurement is unknown.
+- Why it matters: the chip's inputs will see this. -0.7 V below ground may be outside the
+  chip's input rating (unknown: datasheet / Dima).
+- Next: re-measure with a spring-tip ground and a recorded probe. If it is real, try
+  `SLEW SLOW` / a lower `DRIVE` in the XDC, a series resistor or shorter wires, and measure
+  again. Not fixed.

@@ -6,8 +6,44 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## Currently working on
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
-| Rahaf | Review Phases 6-7 on `main` (done by Yazan). EXP-01 was run by Yazan 2026-10-22. | — | — |
+| Rahaf | EXP-06 scope timing done 2026-10-26; next housekeeping. Review of Phases 6-7 / JTAG / GUI postponed. | `main` | `docs/experiments/EXP-06_*`, `docs/{issues,pin_verification,WORKLOG}.md` |
 | Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+
+---
+
+## 2026-10-26 (lab PC, board), Rahaf at the bench + Claude, branch main
+- Goal: first oscilloscope measurements (CLAUDE.md §7 item 2): frequency, duty, pulse
+  width, levels, edges. Rahaf chose this over the Dima questions and the review, and skipped
+  LA pairs 5-15 for now (they stay unverified).
+- Done: new `docs/experiments/EXP-06_scope_timing.md` (plan written before measuring, then
+  results); `phase5_link_jtag_top` programmed, every setting made from the PC over JTAG
+  (`open_jtag()` + `send_cell_config`), no rebuild. Docs: EXP-06, `docs/issues.md`,
+  `docs/pin_verification.md` (Scope column, pairs 0-4).
+- Hardware setup: unchanged from 2026-10-22 (J18 1V8, EXP-01 jumpers, switches down, J17),
+  confirmed by Rahaf. Instruments: started on the Agilent MSO-X 2002A, then the
+  **Keysight CX3324A** for the analog readings (1 MΩ; AC coupling first, then DC), and the
+  **MSO-X 2002A logic cable** for row E. Probe/sensor model and ground connection were not
+  recorded.
+- Results **[measured on board]** (tables in EXP-06 §4):
+  - 1 MHz: frequency and duty exact; J3-0 max 2.2 / min -0.4 V, rise 17.8 / fall 17.0 ns;
+    J3-16 2.42 / -0.7 V, ~18 ns.
+  - 10 MHz: 10 MHz, duty 51 %; J3-0 2.1 / -0.4 V, amplitude 2.45 V, rise ~31 / fall
+    ~28 ns; J3-16 ~2.3 / -0.64 V.
+  - 100 kHz 25 %: exact.
+  - Pulse: 1 µs every 10 µs, exact.
+  - Digital D0-D4: clock and pulse rise together (same APPLY tick), fall at their own times;
+    D2 / D3 = 0, D4 = 1.
+- Problems / fixes:
+  - The pulse was first set to 1,000,000 repeats = only 10 s; changed to 4e9 before
+    measuring.
+  - The first readings were AC-coupled (max/min +-1.3 V); switched to DC.
+  - The 0.4-0.7 V ringing is open (`docs/issues.md`).
+- Decisions: settings come from the PC over JTAG (one bitstream for every row) instead of
+  building test designs.
+- Next steps:
+  - re-measure A1/A2 with a spring-tip ground and a recorded probe;
+  - the chip's input rating below ground (datasheet / Dima);
+  - housekeeping (CLAUDE.md §6 stale rows, pytest rerun, record pairs 5-15 as "not verified").
 
 ---
 
