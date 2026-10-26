@@ -163,3 +163,15 @@ Format: symptom, suspected cause, fix, confirmation.
   **Partly mitigated**, not closed: -0.41 V remains at the far end, and the chip's input
   rating is unknown. Options after that: a series resistor at the driver, or shorter wires.
   Not decided: whether chip-facing outputs should use DRIVE 4.
+
+## XsdbScanPort could freeze the JTAG link if xsdb printed a lot (latent, fixed)
+- Found in review 2026-10-26, not seen on the board: `tools/nemo_ctl/jtag.py` started xsdb
+  with `stdout=PIPE` and stopped reading it after the `READY` line. A burst of xsdb output
+  (warnings, errors) would fill the pipe, freeze xsdb in its next print, and hang the link
+  with no error.
+- Reproduced with `tools/nemo_ctl/tests/_fake_xsdb_server.py`, a stand-in server that floods
+  stdout after READY: without the fix the scan timed out (`TimeoutError`).
+- Fix: a daemon thread keeps draining xsdb's output into `XsdbScanPort.output` (last 50
+  lines). Those lines are included when the server closes the connection unexpectedly.
+- Confirmation: `test_xsdb_port_survives_a_chatty_server` passes; pytest 235 passed,
+  1 skipped; a real-board STATUS through the fixed class worked (2026-10-26).

@@ -228,3 +228,20 @@ def test_seqlink_load_and_run_over_jtag():
     assert dev.n_steps == 6 and dev.applies == 1
     sl.start()
     assert dev.runs == 1
+
+
+# ---------------------------------------------------------------------------
+# XsdbScanPort's process handling (review 2026-10-26), with a fake xsdb
+# ---------------------------------------------------------------------------
+def test_xsdb_port_survives_a_chatty_server():
+    import sys
+    from pathlib import Path
+    fake = Path(__file__).with_name("_fake_xsdb_server.py")
+    port = jtag.XsdbScanPort(server_cmd=[sys.executable, str(fake)], start_timeout=20)
+    try:
+        dr = bytes(range(DR_BYTES))
+        assert port.scan(dr) == bytes(b ^ 0xFF for b in dr)   # answered: the flood didn't block it
+        assert any("noise line" in ln for ln in port.output)   # and its output was kept, bounded
+        assert len(port.output) <= 50
+    finally:
+        port.close()

@@ -11,6 +11,35 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: review of unreviewed code
+- Goal: next step 2 of the handoff (Rahaf: "do b and c" = steps 2 and 3): review what went to
+  `main` without a review.
+- Scope:
+  - **reviewed now**: Yazan's GUI (`tools/nemo_ctl/gui.py`, `waves.py`) and Claude's own
+    JTAG PC side (`tools/nemo_ctl/jtag.py`, `scripts/jtag_server.tcl`);
+  - **not re-reviewed**: the round-2 RTL, reviewed line by line on 2026-10-22 (entry
+    below), and the 2026-10-22 fixes, covered by tests and board runs.
+- Findings:
+  1. `jtag.py` (Claude's): xsdb's stdout was never read after READY, so a burst of output
+     would freeze the link. **Fixed** (drain thread), with a regression test that reproduced
+     the hang first. `docs/issues.md`.
+  2. `waves.py` (**for Yazan**): SERIAL data is drawn changing exactly at its clock edge.
+     In `sig_cell.sv` the data pin changes 2 ticks (20 ns) later: the edge strobe is
+     registered, and the shift lands one tick after it. The docstring's "2-tick latency is
+     the same for every pin" doesn't hold for SERIAL relative to its clock. Display only;
+     visible at 10 MHz (20 of 50 ns).
+  3. `waves.py` (**for Yazan**): the DFT lane label prints `ADC {b_value}` instead of the
+     configured `adc`, and `s` as 3 bits although there are 4 selects (`s0..s3_dft`).
+     Correct today only because b_value == adc in the UNCONFIRMED table.
+  4. `gui.py`: security fine: 127.0.0.1 only, Host-header check, JSON-only POSTs, fixed
+     save path, `.bak`. Info only: two simultaneous saves could race; one `.bak` generation.
+- Decisions (Rahaf): fix 1; leave 2 and 3 for Yazan; bench check (a) = rerun EXP-03 next.
+- Results: **[not hardware]** pytest 235 passed, 1 skipped. **[measured on board]** a STATUS
+  through the fixed `XsdbScanPort` worked.
+- Next steps: EXP-03 rerun on the current `phase7_seq_loopback_top` bitstream. Yazan: items 2-3.
+
+---
+
 ## 2026-10-26 (lab PC, board), Rahaf at the bench + Claude, branch main
 - Goal: first oscilloscope measurements (CLAUDE.md §7 item 2): frequency, duty, pulse
   width, levels, edges. Rahaf chose this over the Dima questions and the review, and skipped

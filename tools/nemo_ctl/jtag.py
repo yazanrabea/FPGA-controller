@@ -26,7 +26,9 @@ import os
 import shutil
 import socket
 import subprocess
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Protocol
@@ -123,11 +125,18 @@ class XsdbScanPort:
     Starts xsdb as a subprocess, waits for its `READY <port>` line, then sends one
     `S <hex>` line per scan over 127.0.0.1. The server holds `jtag lock` for its whole
     life, so nothing else can scan the board while it runs (EXP-05). close() stops it.
+
+    After READY a daemon thread keeps reading xsdb's output (the last lines are kept for
+    error messages). Left unread, the pipe fills and xsdb freezes in its next print, so
+    the link hangs (review 2026-10-26, reproduced by test_jtag.py's fake server).
+    `server_cmd` replaces the xsdb command line (tests only).
     """
 
-    def __init__(self, xsdb: str | None = None, ir: int = USER4_IR, start_timeout: float = 60.0):
+    def __init__(self, xsdb: str | None = None, ir: int = USER4_IR, start_timeout: float = 60.0,
+                 server_cmd: list[str] | None = None):
+        self.output: deque[str] = deque(maxlen=50)   # xsdb's latest output lines
         self._proc = subprocess.Popen(
-            [xsdb or find_xsdb(), str(SERVER_TCL), f"{ir:02X}"],
+            server_cmd or [xsdb or find_xsdb(), str(SERVER_TCL), f"{ir:02X}"],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, bufsize=1)
         port = None
@@ -146,14 +155,21 @@ class XsdbScanPort:
         if port is None:
             self._proc.kill()
             raise JtagLinkError("jtag_server.tcl didn't start:\n  " + "\n  ".join(lines[-15:]))
+        self.output.extend(lines)
+        threading.Thread(target=self._drain, daemon=True).start()
         self._sock = socket.create_connection(("127.0.0.1", port), timeout=10.0)
         self._rfile = self._sock.makefile("r", encoding="ascii", newline="\n")
+
+    def _drain(self) -> None:
+        for line in self._proc.stdout:
+            self.output.append(line.rstrip())
 
     def scan(self, dr: bytes) -> bytes:
         self._sock.sendall(f"S {to_hex(dr)}\n".encode("ascii"))
         line = self._rfile.readline()
         if not line:
-            raise JtagLinkError("jtag_server.tcl closed the connection")
+            raise JtagLinkError("jtag_server.tcl closed the connection; its last output:\n  "
+                                + "\n  ".join(list(self.output)[-10:]))
         if line.startswith("E "):
             raise JtagLinkError(f"xsdb: {line[2:].strip()}")
         return from_hex(line)
