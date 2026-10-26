@@ -136,8 +136,9 @@
    it's missing.
 2. **Yazan: fix `waves.py`** (review 2026-10-26, WORKLOG): SERIAL data drawn 20 ns early
    vs `sig_cell.sv`; the DFT lane label (`b_value` as ADC number, `s` as 3 bits).
-3. A human review by Rahaf is still open if wanted. The 2026-10-26 review was Claude's; it
-   covered the GUI and the JTAG PC side, and the RTL was reviewed by Claude on 2026-10-22.
+3. Review: **all code on `main` has now been reviewed by Claude**: round-2 RTL 2026-10-22;
+   GUI + JTAG PC side, then JTAG RTL + the 2026-10-22 fixes, on 2026-10-26 (WORKLOG). The only
+   open findings are Yazan's `waves.py` items. A human review is still optional.
 4. Optional, at the bench:
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;

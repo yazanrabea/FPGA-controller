@@ -11,6 +11,37 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-10-26 (lab PC), Rahaf + Claude, branch main: review part 2 (JTAG RTL + the 2026-10-22 fixes)
+- Goal: handoff next step 3 (Rahaf: "you do c"), done by Claude instead of Rahaf: review what
+  had only been checked by tests / board runs, never read as code.
+- Scope: `fpga/src/jtag_link_bridge.sv`, `jtag_link_bscan.sv`, `phase5/7_link_jtag_top.sv` + XDCs,
+  `scripts/jtag_server.tcl`, and the three 2026-10-22 fixes (`phase4_loopback_top` SERIAL
+  compare, `link_ctrl` `read_byte`, `seq_engine` `step_cnt1`). Claude wrote most of it,
+  so this is a self-review.
+- Findings: **no bugs.** Checked:
+  - bridge acceptance: `will_accept` latched at Capture, gated with `valid_hdr` at Update;
+    every DR scan re-latches it, so an aborted stray scan leaves nothing behind;
+  - clock crossing: `h_tog` / `p_tog` each have one writer, 3-FF / 2-FF sync; `h` / `u` are
+    read only while the other side can't write them; `h_edge` can't be missed;
+  - credit: an honest PC can't fill the down FIFO before a push (`free` is taken before
+    the previous scan's push), so `dn_overflow` only on a rule breach;
+  - up FIFO: the popped `u_n` is never more than `u_cnt`;
+  - fixes:
+    - `step_cnt1 == step_cnt + 1` invariant holds: all 6 resets are paired, the
+      increments are paired;
+    - `read_byte`'s 5 ranges partition the cap region exactly, the same as the divide;
+    - the SERIAL compare is right for MSB- and LSB-first partial frames.
+- Notes (not bugs):
+  - the reply magic is 0 for the first ~µs after configuration; a PC scanning in that
+    window gets "no bridge reply" and has to retry;
+  - `jtag_server.tcl` uses blocking `gets` in a `fileevent` handler, which is fine for one
+    client sending whole lines;
+  - `link_frame` has no inter-byte timeout (already noted 2026-10-22).
+- Results: no code changed.
+- Next steps: unchanged (Dima's questions; Yazan's `waves.py` items).
+
+---
+
 ## 2026-10-26 (lab PC), Rahaf + Claude, branch main: review of unreviewed code
 - Goal: next step 2 of the handoff (Rahaf: "do b and c" = steps 2 and 3): review what went to
   `main` without a review.
