@@ -118,6 +118,11 @@ to the 32 verified LA_P pins (`docs/pin_verification.md`), of which only pair 0
 (`LA00_P`/`LA16_P`) has a hardware-confirmed loopback so far — the other 31 pins'
 physical-to-package mapping is known (XDC) but functionally untested.
 
+**Output drive (decision 2026-10-26, `docs/decisions.md`):** when the FMC pins are assigned,
+every FPGA output driving a chip input (Dir = `in` below) gets `DRIVE 4` + `SLEW SLOW` in the
+XDC. EXP-06 measured that this halves the ringing on jumper wires. The FPGA inputs reading
+the chip's outputs (Dir = `out`) have no drive setting.
+
 ### Clock Generator block
 
 | Pin | Dir | Pad # | Allowed types | Safe limits | Idle level | Polarity | Notes |

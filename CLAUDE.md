@@ -89,6 +89,7 @@ Learning goals: emerging memory / processing-in-memory for ANN accelerators; han
 - Provide clean, **synthesizable**, modular Verilog/SystemVerilog with inline comments about timing/logic.
 - For complex FSMs and clock dividers, first give the step-by-step plan, then the code.
 - Whenever pins are added or changed, give the matching **XDC lines** (`PACKAGE_PIN`, `IOSTANDARD`) and cross-check against the verified mapping.
+- **Every FPGA output that drives a chip input gets `DRIVE 4` and `SLEW SLOW`** in the XDC (decision 2026-10-26, `docs/decisions.md`: it halved the ringing in EXP-06). Not on the FPGA inputs that read the chip's outputs. The existing bring-up XDCs keep DRIVE 12.
 - Synchronize every asynchronous input (switches, pad inputs) with a 2-FF synchronizer.
 - When debugging signals, always consider: reflections/ringing, 50 ohm vs 1 Mohm scope input, rise time, drive strength, VADJ jumper position.
 - Add a testbench for any new module and say what a pass looks like on hardware (LEDs, multimeter, scope).

@@ -87,3 +87,20 @@ Each entry: date, decision, reason, rejected options.
 - Reason: Yazan found the question-by-question wizard hard to use, and chose a browser form over a friendlier terminal wizard or a better Excel template. A form shows everything at once, shows only the boxes a type needs, and puts errors next to their pin. It needs nothing installed and works offline on the lab PC.
 - Rejected: Flask or another framework (one more dependency); a hosted web page (it can't read or write the local YAML file); tkinter (harder to make clear and to test).
 - Safety: binds 127.0.0.1 only, checks the Host header, POSTs must be JSON; Save refuses a config with errors and keeps a `.bak`.
+
+## FPGA outputs that drive the chip use DRIVE 4 + SLEW SLOW
+- Decision (Rahaf, 2026-10-26): every FPGA pin that drives a **chip input** (the 22 inputs:
+  `clk`, `reset`, `set`, `sipo_in`, `clk_sipo`, `cs`, `rst_sipo`, `clk_piso`, `shift`, ...)
+  gets `DRIVE 4` and `SLEW SLOW` in its XDC.
+- Reason: EXP-06 §6 [measured on board], 1 MHz on jumper wires. DRIVE 12 -> 4 about halved
+  the over/undershoot (far end 2.42 / -0.7 V -> 2.09 / -0.41 V) for edges only 1-3 ns slower
+  (~18 -> ~20 ns), which is negligible at the chip's expected clock rates.
+- Doesn't apply to the FPGA **inputs** that read the chip's 4 outputs (`sipo_out`,
+  `piso_out`, `dft0_buff`, `dft1_buff`): DRIVE exists only on outputs.
+- Doesn't change the existing bring-up designs (EXP-01..06): they keep DRIVE 12, as
+  verified. `phase5_link_jtag_slew_top` is the measured DRIVE 4 example.
+- `SLEW SLOW` is Vivado's default already (I/O reports); it's written out so the intent is
+  explicit.
+- Rejected / later: a series resistor at the driver (~22-33 Ω) or shorter wires. These are
+  wiring changes, kept as the next step if -0.41 V turns out to exceed the chip's input
+  rating (unknown: datasheet / Dima).

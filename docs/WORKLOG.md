@@ -54,6 +54,10 @@ Tag every result **[simulated]** or **[measured on board]**.
   - **[measured on board]**, mean values: J3-0 1.97 / -0.25 V, 20.6 / 19.2 ns; J3-16
     2.09 / -0.41 V, 20 / 18.9 ns. About **half** the over/undershoot of DRIVE 12, edges 1-3 ns
     slower. EXP-06 §6, `docs/issues.md` (partly mitigated).
+- Decision, same session (Rahaf): **DRIVE 4 + SLEW SLOW on every FPGA output that drives a chip
+  input**. Recorded in `docs/decisions.md`, CLAUDE.md §8 (XDC rule) and `docs/controller_spec.md` §3.
+  It applies when the chip XDC is written (no chip-pin map yet, and no tool generates XDCs).
+  The existing bring-up XDCs keep DRIVE 12.
 - Housekeeping, same session:
   - pytest, 5 runs in a row: 234 passed, 1 skipped each time. Yazan's one unexplained
     failure (2026-10-26 entry below) did not come back.
