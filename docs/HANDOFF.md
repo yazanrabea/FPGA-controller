@@ -64,6 +64,11 @@
     label used `b_value` / 3-bit `s`: first left for Yazan, then **fixed** at Rahaf's request
     (lag measured in xsim);
   - `gui.py` security: fine (127.0.0.1, Host check, JSON-only POSTs, fixed save path).
+- **Review part 2** (Rahaf: "you do c"): JTAG RTL, `jtag_server.tcl` and the three 2026-10-22
+  fixes, read as code: **no bugs** (notes only, WORKLOG).
+- **`waves.py` fixes** at Rahaf's request: SERIAL bits drawn 2 ticks (20 ns) after the clock
+  edge, measured in xsim on `sig_cell.sv`; the DFT label shows the configured `adc` and `s` as
+  4 bits (also in `timing.py` / `wizard.py`).
 - **EXP-03 rerun** on the bitstream with the `seq_engine` `step_cnt1` fix [measured on
   board]: pre-START levels, full sequence, FAULT, abort all identical to 2026-10-22. The
   "measured on the old bitstream" caveat is closed.
@@ -134,16 +139,15 @@
    the chip's **input rating below ground** (needed to judge the -0.41 V), the real
    INFERENCE/WRITE sequences and Phase 8 all wait on it. Add the input-rating question if
    it's missing.
-2. ~~Yazan: fix `waves.py`~~ **fixed 2026-10-26 by Claude at Rahaf's request** (SERIAL
-   +20 ns, measured in xsim; DFT label). Yazan: FYI, your `waves.py` / `test_waves.py` changed.
-3. Review: **all code on `main` has now been reviewed by Claude**: round-2 RTL 2026-10-22;
-   GUI + JTAG PC side, then JTAG RTL + the 2026-10-22 fixes, on 2026-10-26 (WORKLOG). **No
-   open findings.** A human review is still optional.
-4. Optional, at the bench:
+2. Optional: a human review. All code on `main` has been reviewed by Claude, with **no open
+   findings** (round-2 RTL 2026-10-22; GUI, JTAG PC side, JTAG RTL and the 2026-10-22 fixes
+   on 2026-10-26, WORKLOG). **Yazan, FYI:** your `waves.py` / `test_waves.py` changed
+   2026-10-26 (two review fixes, see "What happened").
+3. Optional, at the bench:
    - repeat A1/A2 with a ground spring and record the probe model;
    - a series resistor test if the chip's rating requires it;
    - verify pairs 5-15 when the chip needs them.
-5. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
+4. When the chip-pin map exists: write the chip top's XDC with **DRIVE 4 + SLEW SLOW on
    every FPGA output driving the chip** (CLAUDE.md §8), and verify those exact pins.
 
 ## Working rules
