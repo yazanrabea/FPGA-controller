@@ -160,3 +160,9 @@ Each entry: date, decision, reason, rejected options.
 - Decision: `sample_cell.sv` latches its config on `apply` as *pending* and uses it from the next arming (run rising edge); the trigger is evaluated between consecutive samples; run falling stops the record and keeps it until the next arming.
 - Reason: the testbench showed a mid-run `apply` changing `cfg_n` under a running record (inconsistent record). Judging the trigger per sample keeps its resolution equal to the record's, so the trigger sample is always a recorded sample. Keeping the data after run falls lets the PC read it after the sequence ends.
 - Rejected: apply restarting the record (cap_cell's behaviour; would erase a record the PC hasn't read); per-tick trigger detection (a trigger between samples would point at no sample).
+
+## The sampler goes into phase7_link_top as a parameter, not a copied top (2026-11-01, Yazan)
+- Decision: `phase7_link_top` gets `parameter bit SAMPLER = 0`; `sample_loopback_top.sv` is a 1-line wrapper with `LINK("JTAG")`, `SAMPLER(1)`, like `phase7_link_jtag_top`. With SAMPLER = 0 the generate block is empty and `bus_rdata` is the old register read, so `phase7_link_jtag_top` (EXP-04) builds the same logic (its tbs 40/10/27/21 rerun, same results).
+- Reason: one sequencer / link / cell top to maintain; the sampler only adds a register block and a read mux. Loopback pairs 0-4 are verified (EXP-01..06), so a sampler result there can be checked against known pins, without touching `chip_top` (Rahaf's).
+- Sampler registers are fixed addresses in the top (0x0020.., 0x4000..), not in the generated package: they don't depend on the step table layout.
+- Rejected: a copy of `phase7_link_top` (260 lines kept in step by hand); putting the sampler in `chip_top` first (Rahaf's file; a first board test there would mix two unknowns).

@@ -7,9 +7,57 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
-| Yazan | Verification plan Step 3 (sample cell): RTL + tb + PC decode done in simulation; next: link region + test top. Step 1 in PR #2 (review pending, EXP-09 not run). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | new `fpga/src/sample_cell.sv`, `fpga/tb/sample_cell_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/samples.py`, `tools/nemo_ctl/tests/test_samples.py`; docs, `CLAUDE.md` §6 row |
+| Yazan | Verification plan Step 3 (sampler): cell + `sample_loopback_top` + link + `cli seq sample` done in simulation; next: lab (xsim, build, EXP-11). Step 1 in PR #2 (review pending, EXP-09 not run). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | `fpga/src/{sample_cell,sample_loopback_top,phase7_link_top}.sv`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/{samples,link,cli}.py`, `tests/test_samples.py`; docs |
 
 ---
+
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 link region + test top
+- Goal: Yazan: "yes continue with the link region and test top".
+- Done:
+  - **`fpga/src/phase7_link_top.sv`**: new `parameter bit SAMPLER = 0`. With 1: a
+    `sample_cell` (16 bits x 4096): bits 0-4 the outputs through 2 FFs, 5-9 the synchronized
+    inputs; armed by the sequencer's `run`; "ext" trigger = `step_start` of step `S_TRIG_STEP`;
+    config registers 0x0020-0x002A (a write -> the cell's pending config), status / info
+    0x002B-0x0035, samples at 0x4000 + 2i; `bus_rdata` = the registered register read, or the
+    block RAM's byte when the last read was a sample (keeps the 1-tick latency). With 0:
+    nothing extra (decision).
+  - **`fpga/src/sample_loopback_top.sv`** (LINK JTAG, SAMPLER 1) + `fpga/constraints/
+    sample_loopback_top.xdc` (= `phase7_link_jtag_top.xdc` pin lines, diffed identical, no
+    pin moved). `create_project.tcl -tclargs sample_loopback_top` finds it by name.
+  - **`fpga/tb/sample_loopback_top_tb.sv`** (core over UART at 2 Mbaud, the Phase 7 table
+    x1e-4); `scripts/run_sample_sim.sh` runs both sampler tbs.
+  - PC: `link.py` `V2_SAMPLER`, `V2_SAMPLES`, `SeqLink.sampler_info / sampler_setup /
+    sampler_status / read_samples` (100 samples per frame); `samples.py` wiring
+    (`LOOPBACK_PINS`, bit = the top's order, not the list order), ext `step`, `to_csv`,
+    `to_vcd`; `cli seq sample` (setup, `--run`, `--read-only`, edges printed, `--out`
+    .vcd / .csv).
+  - Docs: `docs/link_register_map.md` "v2 sampler", USER_MANUAL §8.10, EXP-11 procedure
+    (planned), plan progress, decisions, `CLAUDE.md` §6 rows, nemo_ctl README.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_loopback_top_tb` **19/19**: info / defaults / config
+    readback; a record triggered at step 1's start with 50 pre-samples (done, 400 samples,
+    trigger index 50); **all 400 words read over the link = the cell's input on tick
+    `(trig_count - trig_idx + i) * div + 1`**, and that input = the pins 2 ticks earlier
+    on every tick (the `samples.py` time formula, confirmed); jumpers in: bits 9:5 = bits
+    4:0; the trigger sample is the first after step 1's apply; `rst` falls at index 51 and
+    stays low 250 samples (= its 5000 ticks); the record is kept after the run; a new run
+    re-arms; a pulled `rst_in` jumper reads 0.
+  - `step_start` comes on a step's APPLY cycle with `step` = the new step (seen in the tb);
+    step 0's comes one tick before `run` rises.
+  - Regression with SAMPLER = 0: `seq_engine_tb` 40, `seq_bank_tb` 10,
+    `phase7_seq_loopback_top_tb` 27, `phase7_link_top_tb` 21, all PASS; generated
+    `phase7_link_pkg.sv` unchanged.
+  - Icarus elaboration of `sample_loopback_top` and `phase7_link_jtag_top` (JTAG,
+    `bscane2_sim_stub.sv` + a dummy `jtag_tap`): 0 errors.
+  - [tested, pytest] `test_samples.py` 32 passed (incl. the setup bytes, 3-frame readout, CLI
+    on a fake board); full suite 361 passed, 1 skipped.
+  - Not yet: xsim, synthesis / timing / BRAM count, the board.
+- Problems / fixes: the tb first looked up step 1 at the wrong index (step 0's `step_start`
+  is before `run` rises); fixed in the tb, the RTL was right.
+- Next steps (lab PC): `SIM=xsim scripts/run_sample_sim.sh`; build `sample_loopback_top`
+  (WNS, BRAM); EXP-11. Laptop: a sampler in `chip_top` (with Rahaf), `sample:` in the mode
+  config, the editor overlay.
 
 ## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 started (sample cell)
 - Goal: Yazan: "push it and we will review later, can u continue without the EXP-09?".

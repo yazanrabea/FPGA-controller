@@ -352,6 +352,11 @@ V2_LAST_STEP = 0x0005   # R: step the last run ended on
 V2_N_STEPS = 0x0006     # R/W: number of steps in the table (1..16); write ignored while busy
 V2_CAP_BASE = 0x0100    # cap cell k's results at V2_CAP_BASE + k * stride (READ_CAPTURE offset)
 V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * target.entry_bytes (write-only)
+# sampler (sample_loopback_top = phase7_link_top SAMPLER=1, docs/link_register_map.md "v2 sampler")
+V2_SAMPLER = 0x0020     # 24 bytes: config +0..10 (R/W), status +11..19, info +20/+21 (R)
+V2_SAMPLES = 0x4000     # sample i at V2_SAMPLES + bytes_per_sample * i (READ_REG)
+SAMPLE_READ_WORDS = 100 # samples per READ_REG frame (2-byte samples: 200 B, under 255)
+
 # byte offsets inside one cap cell's result block
 V2_CAP_FLAGS, V2_CAP_EDGES, V2_CAP_PERIOD, V2_CAP_HIGH, V2_CAP_DATA = 0, 1, 5, 9, 13
 
@@ -467,6 +472,41 @@ class SeqLink(Link):
         k = self.target.cap_index(cap_cell)
         b = self.read_capture_raw(k * v2_cap_stride(self.target) + V2_CAP_PERIOD, 8)
         return {"period": int.from_bytes(b[0:4], "little"), "high": int.from_bytes(b[4:8], "little")}
+
+    # ---- sampler (sample_loopback_top) ----
+    def sampler_info(self) -> tuple[int, int]:
+        """(bits per sample, samples in the buffer). LinkError on a bitstream without one
+        (its sampler registers read 0)."""
+        b = self.read_reg(V2_SAMPLER + 20, 2)
+        if b[0] == 0:
+            raise LinkError("this bitstream has no sampler (build sample_loopback_top)")
+        return b[0], 1 << b[1]
+
+    def sampler_setup(self, setup) -> None:
+        """Write a samples.SampleSetup; the cell takes it at the next sequence start."""
+        c = setup.cfg()
+        self.write_reg(V2_SAMPLER, c["cfg_div"].to_bytes(4, "little") + c["cfg_n"].to_bytes(2, "little")
+                       + c["cfg_pre"].to_bytes(2, "little")
+                       + bytes([c["cfg_trig"], c["cfg_trig_pin"], c["trig_step"]]))
+
+    def sampler_status(self) -> dict:
+        """{'armed', 'triggered', 'done', 'n_valid', 'trig_idx', 'trig_count'}."""
+        b = self.read_reg(V2_SAMPLER + 11, 9)
+        return {"armed": bool(b[0] & 1), "triggered": bool(b[0] & 2), "done": bool(b[0] & 4),
+                "n_valid": int.from_bytes(b[1:3], "little"), "trig_idx": int.from_bytes(b[3:5], "little"),
+                "trig_count": int.from_bytes(b[5:9], "little")}
+
+    def read_samples(self, bits: int = 16):
+        """The current record as a samples.Record (n_valid samples, oldest first)."""
+        from .samples import Record, words_from_bytes
+        st = self.sampler_status()
+        w = (bits + 7) // 8
+        data = bytearray()
+        for i in range(0, st["n_valid"], SAMPLE_READ_WORDS):
+            k = min(SAMPLE_READ_WORDS, st["n_valid"] - i)
+            data += self.read_reg(V2_SAMPLES + w * i, w * k)
+        return Record(tuple(words_from_bytes(bytes(data), bits)), st["trig_idx"], st["trig_count"],
+                      done=st["done"], triggered=st["triggered"])
 
     def read_cap_counts(self, cap_cell: str) -> dict:
         """flags + edge count of a cap cell: {'level', 'done', 'edges'}."""

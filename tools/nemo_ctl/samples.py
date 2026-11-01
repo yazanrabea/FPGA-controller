@@ -12,9 +12,15 @@ fpga/src/sample_cell.sv, the in-FPGA logic analyser.
 
 Time of sample i (sample_cell.sv header): (trig_count - trig_idx + i) * div + 1 ticks after
 the cell's run rose; the pin value it holds is SYNC_TICKS older (2-FF synchronizer).
-`offset_ticks` is where the cell's run rises relative to waves.py's RUN: 0 until a top
-level is built and simulated (then it is measured and fixed there, like waves.py's
-SERIAL_STROBE_LAG_TICKS). Not on hardware yet; no link register map yet.
+Measured in fpga/tb/sample_loopback_top_tb.sv (2026-11-01): every word read over the link
+is the cell's input on exactly that tick, and the input is the pins 2 ticks earlier, so the
+formula holds with "after the cell's run rose" = the tick the sequencer's run goes high
+(step 0's APPLY is one tick before). `offset_ticks` moves the axis (e.g. to a step's start).
+
+Wiring: a top level records a fixed list of pins (LOOPBACK_PINS for sample_loopback_top:
+bit k = LOOPBACK_PINS[k]); a setup picks which of them to decode and show. Link side:
+link.SeqLink.sampler_* (registers 0x0020.., samples 0x4000.., docs/link_register_map.md).
+Not on hardware yet.
 """
 from __future__ import annotations
 
@@ -25,6 +31,8 @@ from .units import TICK_NS, UnitsError, parse_duration_ns, parse_freq_hz
 DEPTH = 4096          # sample_cell DEPTH in the planned test top
 SYNC_TICKS = 2        # 2-FF input synchronizer in front of the cell
 TRIGGERS = {"now": 0, "ext": 1, "rise": 2, "fall": 3, "high": 4, "low": 5}
+# sample_loopback_top (phase7_link_top SAMPLER=1): bits 0-4 the outputs, 5-9 the inputs
+LOOPBACK_PINS = ("clk", "rst", "data", "cs", "en", "clk_in", "rst_in", "data_in", "cs_in", "en_in")
 EDGE_TRIGGERS = ("rise", "fall", "high", "low")
 
 
@@ -34,12 +42,15 @@ class SampleError(ValueError):
 
 @dataclass(frozen=True)
 class SampleSetup:
-    pins: tuple[str, ...]   # bit k of a sample word = pins[k]
+    pins: tuple[str, ...]   # the pins to decode / show
+    bits: tuple[int, ...]   # bit of each of them in a sample word (the top's wiring)
     div: int                # ticks per sample (cfg_div)
     n: int                  # samples (cfg_n)
     pre: int                # pre-trigger samples (cfg_pre)
     trigger: str            # TRIGGERS key
     trig_pin: str | None    # for rise / fall / high / low
+    trig_bit: int = 0       # its bit in the word (cfg_trig_pin)
+    trig_step: int = 0      # for ext: the step whose start triggers
 
     @property
     def period_ns(self) -> float:
@@ -52,11 +63,12 @@ class SampleSetup:
     def cfg(self) -> dict:
         """The cell's config port values."""
         return {"cfg_div": self.div, "cfg_n": self.n, "cfg_pre": self.pre,
-                "cfg_trig": TRIGGERS[self.trigger],
-                "cfg_trig_pin": self.pins.index(self.trig_pin) if self.trig_pin else 0}
+                "cfg_trig": TRIGGERS[self.trigger], "cfg_trig_pin": self.trig_bit,
+                "trig_step": self.trig_step}
 
     def summary(self) -> str:
-        t = self.trigger if self.trigger in ("now", "ext") else f"{self.trigger} on {self.trig_pin}"
+        t = {"now": "now", "ext": f"at the start of step {self.trig_step}"}.get(
+            self.trigger, f"{self.trigger} on {self.trig_pin}")
         return (f"{len(self.pins)} pins, every {_fmt(self.period_ns)} ({1e3 / self.period_ns:g} MHz), "
                 f"{self.n} samples = {_fmt(self.span_ns)}, {self.pre} before the trigger ({t})")
 
@@ -71,8 +83,8 @@ def _fmt(ns: float) -> str:
 def make_setup(params: dict, available: list[str], n_bits: int = 32,
                depth: int = DEPTH) -> SampleSetup:
     """params: {pins: [...], rate: "10MHz" | period: "100ns", samples: 2048, pre: 0,
-    trigger: now|ext|rise|fall|high|low, on: <pin>}. `available`: the pins a top level
-    can route to the cell. Bit k of the record is pins[k], in the order given."""
+    trigger: now|ext|rise|fall|high|low, on: <pin> (edge / level), step: <k> (ext)}.
+    `available`: the pins the top wires to the cell, in bit order (bit k = available[k])."""
     pins = params.get("pins") or []
     if isinstance(pins, str):
         pins = [p.strip() for p in pins.split(",") if p.strip()]
@@ -83,8 +95,8 @@ def make_setup(params: dict, available: list[str], n_bits: int = 32,
         raise SampleError(f"can't sample {unknown}: not wired to the sample cell ({available})")
     if len(set(pins)) != len(pins):
         raise SampleError("a pin is listed twice")
-    if len(pins) > n_bits:
-        raise SampleError(f"{len(pins)} pins, the cell records {n_bits}")
+    if len(available) > n_bits:
+        raise SampleError(f"{len(available)} pins wired, the cell records {n_bits}")
     has_rate, has_period = params.get("rate") not in (None, ""), params.get("period") not in (None, "")
     if has_rate == has_period:
         raise SampleError("give either rate (e.g. 10MHz) or period (e.g. 100ns)")
@@ -111,16 +123,29 @@ def make_setup(params: dict, available: list[str], n_bits: int = 32,
     if trig not in TRIGGERS:
         raise SampleError(f"trigger {trig!r}: one of {', '.join(TRIGGERS)}")
     on = params.get("on")
+    step = params.get("step")
+    if trig == "ext":
+        try:
+            step = int(step)
+        except (TypeError, ValueError):
+            raise SampleError("trigger ext needs `step: <k>` (the step whose start triggers)") from None
+        if not 0 <= step <= 255:
+            raise SampleError(f"step {step} must be 0..255")
+    elif step not in (None, ""):
+        raise SampleError(f"`step` is only for trigger ext, not {trig}")
     if trig in EDGE_TRIGGERS:
         if not on:
             raise SampleError(f"trigger {trig} needs `on: <pin>`")
-        if on not in pins:
-            raise SampleError(f"trigger pin {on!r} must be one of the sampled pins")
+        if on not in available:
+            raise SampleError(f"trigger pin {on!r} is not wired to the sample cell ({list(available)})")
     elif on:
         raise SampleError(f"trigger {trig} has no pin (`on` is only for {', '.join(EDGE_TRIGGERS)})")
     if trig == "now" and pre:
         raise SampleError("trigger now has no samples before it: set pre to 0")
-    return SampleSetup(tuple(pins), div, n, pre, trig, on if trig in EDGE_TRIGGERS else None)
+    edge = trig in EDGE_TRIGGERS
+    return SampleSetup(tuple(pins), tuple(available.index(p) for p in pins), div, n, pre, trig,
+                       on if edge else None, available.index(on) if edge else 0,
+                       step if trig == "ext" else 0)
 
 
 @dataclass(frozen=True)
@@ -145,10 +170,10 @@ def decode(setup: SampleSetup, rec: Record, offset_ticks: int = 0) -> dict[str, 
     the same shape as a waves.py `bit` lane's segments."""
     times = sample_times_ns(setup, rec, offset_ticks)
     out: dict[str, list[list]] = {}
-    for k, pin in enumerate(setup.pins):
+    for pin, bit in zip(setup.pins, setup.bits):
         segs: list[list] = []
         for t, w in zip(times, rec.words):
-            v = (w >> k) & 1
+            v = (w >> bit) & 1
             if not segs or segs[-1][1] != v:
                 segs.append([t, v])
         out[pin] = segs
@@ -221,6 +246,37 @@ def compare(expected: list[list], seen: list[list], tol_ns: float,
         if i not in used and lo + tol_ns < t < hi - tol_ns:
             out.append(f"unexpected {'rising' if v else 'falling'} edge at {_fmt(t)}")
     return out
+
+
+def to_csv(setup: SampleSetup, rec: Record, offset_ticks: int = 0) -> str:
+    """One row per sample: time in ns from RUN, then one 0/1 column per pin."""
+    lines = ["t_ns," + ",".join(setup.pins)]
+    for t, w in zip(sample_times_ns(setup, rec, offset_ticks), rec.words):
+        lines.append(f"{t:g}," + ",".join(str((w >> b) & 1) for b in setup.bits))
+    return "\n".join(lines) + "\n"
+
+
+def to_vcd(setup: SampleSetup, rec: Record, offset_ticks: int = 0, module: str = "fpga") -> str:
+    """The record as a VCD file (GTKWave / PulseView / Vivado's waveform viewer), 1 ns
+    timescale, time 0 = the first sample (its time from RUN is in the header comment)."""
+    if not rec.words:
+        raise SampleError("empty record")
+    times = sample_times_ns(setup, rec, offset_ticks)
+    ids = [chr(33 + k) for k in range(len(setup.pins))]
+    out = [f"$comment sample_cell record: {setup.summary()}; first sample at {times[0]:g} ns "
+           f"from RUN $end", "$timescale 1ns $end", f"$scope module {module} $end"]
+    out += [f"$var wire 1 {i} {p} $end" for i, p in zip(ids, setup.pins)]
+    out += ["$upscope $end", "$enddefinitions $end"]
+    prev: list[int | None] = [None] * len(setup.pins)
+    for t, w in zip(times, rec.words):
+        vals = [(w >> b) & 1 for b in setup.bits]
+        ch = [f"{v}{i}" for v, i, pv in zip(vals, ids, prev) if v != pv]
+        if ch:
+            out.append(f"#{round(t - times[0])}")
+            out += ch
+        prev = vals
+    out.append(f"#{round(times[-1] - times[0] + setup.period_ns)}")
+    return "\n".join(out) + "\n"
 
 
 def default_tol_ns(setup: SampleSetup) -> float:

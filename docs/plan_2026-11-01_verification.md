@@ -94,6 +94,13 @@ the record on the RUN time axis. Open: where `sample:` lives in the config (a mo
 blocks, as for `expect`), the link region (item 2), the test top on the loopback pairs (item 6),
 and the editor overlay.
 
+**Progress 2026-11-01, later (Yazan):** items 2 and 6 (laptop part) done: `phase7_link_top`
+parameter `SAMPLER` + wrapper `fpga/src/sample_loopback_top.sv` / `.xdc` (pins of
+`phase7_link_jtag_top`, none moved), register map "v2 sampler", `SeqLink.sampler_*`,
+`cli seq sample` (VCD / CSV out), `fpga/tb/sample_loopback_top_tb.sv` 19/19. Next on the lab
+PC: xsim, the bitstream, EXP-11 (`docs/experiments/EXP-11_sampler_loopback.md`). Still open: a
+sampler in `chip_top` (with Rahaf), `sample:` in the mode config, the editor overlay.
+
 Goal: record chosen pins at a chosen rate into FPGA memory and show them on the PC.
 
 1. **RTL.** New `fpga/src/sample_cell.sv`: N input bits (outputs' readback from Step 2 +
