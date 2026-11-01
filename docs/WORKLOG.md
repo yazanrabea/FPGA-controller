@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
-| Yazan | Verification plan Step 3 (sampler): cell + `sample_loopback_top` + link + `cli seq sample` done in simulation; next: lab (xsim, build, EXP-11). Step 1 in PR #2 (review pending, EXP-09 not run). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | `fpga/src/{sample_cell,sample_loopback_top,phase7_link_top}.sv`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/{samples,link,cli}.py`, `tests/test_samples.py`; docs |
+| Yazan | Verification plan Step 3 (sampler): cell + `sample_loopback_top` + link + `cli seq sample` done in simulation; next: lab (xsim, build, EXP-11). PRs for review: #2 (Step 1, EXP-09 not run) and #3 (Step 3, stacked on #2). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | `fpga/src/{sample_cell,sample_loopback_top,phase7_link_top}.sv`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/{samples,link,cli}.py`, `tests/test_samples.py`; docs |
 
 ---
 
