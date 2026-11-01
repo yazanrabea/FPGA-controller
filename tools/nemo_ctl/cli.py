@@ -323,13 +323,20 @@ def cmd_seq_sample(args: argparse.Namespace) -> int:
     """Plan 2026-11-01 Step 3: set up sample_loopback_top's sampler, optionally run the
     loaded sequence, read the record and save it (CSV / VCD)."""
     from .link import LinkError, V2_STEP
-    from .samples import LOOPBACK_PINS, SampleError, decode, make_setup, record_window, to_csv, to_vcd
+    from .samples import (LOOPBACK_PINS, STEP_FIELD, SampleError, decode, make_setup, record_window,
+                          to_csv, to_vcd)
     params = {"pins": args.pins or ",".join(LOOPBACK_PINS), "rate": args.rate, "period": args.period,
               "samples": args.samples, "pre": args.pre, "trigger": args.trigger, "on": args.on,
               "step": args.step}
+    steps = None
     try:
         setup = make_setup(params, list(LOOPBACK_PINS), n_bits=16)
-    except SampleError as exc:
+        if args.check:
+            import yaml
+            steps = (yaml.safe_load(Path(args.check).read_text()) or {}).get("steps") or []
+            if not steps:
+                raise SampleError(f"{args.check}: no steps")
+    except (SampleError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"sampler: {setup.summary()}")
@@ -366,11 +373,26 @@ def cmd_seq_sample(args: argparse.Namespace) -> int:
         edges = segs[1:]
         first = ", ".join(f"{'rise' if v else 'fall'} {t:g} ns" for t, v in edges[:3])
         print(f"  {pin:8s} starts {segs[0][1]}, {len(edges)} edges" + (f": {first}" + (" ..." if len(edges) > 3 else "") if edges else ""))
+    passed, expected = True, None
+    if steps is not None:
+        from .seqwaves import SeqWaveError, check_record, expected_for
+        from .verify import VerifyResult, format_text
+        try:
+            rows = check_record(steps, setup, rec)
+            expected = expected_for(steps, setup, rec)
+        except SeqWaveError as exc:
+            print(f"error: can't build the expected waves: {exc}", file=sys.stderr)
+            return 1
+        print(f"check against {args.check} (outputs: their expected wave; inputs: their output's):")
+        for line in format_text(VerifyResult(mode="record", runs=[rows])):
+            print("  " + line)
+        passed = all(r.ok is not False for r in rows)
     if args.out:
         out = Path(args.out)
-        out.write_text(to_vcd(setup, rec) if out.suffix.lower() == ".vcd" else to_csv(setup, rec), encoding="utf-8")
+        out.write_text(to_vcd(setup, rec, expected=expected, step_field=STEP_FIELD)
+                       if out.suffix.lower() == ".vcd" else to_csv(setup, rec), encoding="utf-8")
         print(f"written to {out}")
-    return 0 if st["done"] else 1
+    return 0 if st["done"] and passed else 1
 
 
 def cmd_link_status(args: argparse.Namespace) -> int:
@@ -832,6 +854,10 @@ def build_parser() -> argparse.ArgumentParser:
     sq_sample.add_argument("--read-only", action="store_true",
                            help="only read the last record (no setup, no run); the setup options "
                                 "must match the one it was recorded with")
+    sq_sample.add_argument("--check", default=None, metavar="SEQUENCE.yaml",
+                           help="judge the record against this sequence (the one loaded): each "
+                                "output against its expected wave, each input against its output's "
+                                "(loopback); the VCD then also gets <pin>_exp")
     sq_sample.add_argument("--out", default=None, help="write the record: .vcd or .csv")
     sq_sample.set_defaults(func=cmd_seq_sample)
 

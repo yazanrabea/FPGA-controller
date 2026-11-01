@@ -101,6 +101,16 @@ parameter `SAMPLER` + wrapper `fpga/src/sample_loopback_top.sv` / `.xdc` (pins o
 PC: xsim, the bitstream, EXP-11 (`docs/experiments/EXP-11_sampler_loopback.md`). Still open: a
 sampler in `chip_top` (with Rahaf), `sample:` in the mode config, the editor overlay.
 
+**Progress 2026-11-01, third part (Yazan):** the PC-side comparison (item 4) for sequences: the
+record now carries the step number (bits 13:10), `tools/nemo_ctl/seqwaves.py` builds a
+sequence's expected waves from the step starts the record shows (others derived across
+fixed-length steps), and `cli seq sample --check <sequence>` gives PASS / FAIL per pin and a
+VCD with `<pin>_exp`. Checked on the RTL's own records in simulation
+(`scripts/check_sample_dump.py`: jumpers in -> all pass; `clk_in` pulled -> only `clk_in`
+fails). **What's left of Step 3 needs the lab or Rahaf:** xsim + the build + EXP-11, and a
+sampler in `chip_top`. The `sample:` part of the mode config and the editor overlay are only
+useful once `chip_top` has a sampler (the editor works on chip modes), so they move there.
+
 Goal: record chosen pins at a chosen rate into FPGA memory and show them on the PC.
 
 1. **RTL.** New `fpga/src/sample_cell.sv`: N input bits (outputs' readback from Step 2 +

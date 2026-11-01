@@ -28,7 +28,9 @@
 //
 // SAMPLER = 1 (verification plan 2026-11-01 Step 3, built as
 // sample_loopback_top.sv) adds a sample_cell: the 5 outputs (through 2 FFs,
-// to line up with the inputs) and the 5 synchronized loopback inputs,
+// to line up with the inputs), the 5 synchronized loopback inputs and the
+// current step number (bits 13:10, also through 2 FFs: so the PC knows
+// when each step started, even after a wait step),
 // 16 bits x 4096 samples, armed when a sequence starts. Registers 0x0020-
 // 0x0037 and the samples at 0x4000 + 2*i (READ_REG), docs/link_register_map.md
 // "v2 sampler". SAMPLER = 0 (the default, phase7_link_jtag_top) builds
@@ -287,6 +289,7 @@ module phase7_link_top #(
             logic [31:0] s_trig_count;
             logic [SN-1:0] s_rd_data, s_in;
             logic [NS-1:0] out_s0, out_s1;
+            logic [3:0]    stp_s0, stp_s1;   // the step number, aligned like the outputs
             logic        lane_q;
 
             wire in_sreg = (bus_waddr >= SREG) && (bus_waddr < SREG + 11);   // writable part
@@ -319,10 +322,11 @@ module phase7_link_top #(
 
             // outputs through 2 FFs so they line up with the 2-FF-synchronized inputs
             always_ff @(posedge clk or negedge rst_n) begin
-                if (!rst_n) begin out_s0 <= '0; out_s1 <= '0; end
-                else begin out_s0 <= pin_out; out_s1 <= out_s0; end
+                if (!rst_n) begin out_s0 <= '0; out_s1 <= '0; stp_s0 <= '0; stp_s1 <= '0; end
+                else begin out_s0 <= pin_out; out_s1 <= out_s0; stp_s0 <= 4'(step); stp_s1 <= stp_s0; end
             end
-            assign s_in = {{(SN - 2 * NS){1'b0}}, in_s1, out_s1};   // bits 0-4 out, 5-9 in
+            // bits 0-4 out, 5-9 in, 10-13 step, 14-15 zero
+            assign s_in = {{(SN - 2 * NS - 4){1'b0}}, stp_s1, in_s1, out_s1};
 
             sample_cell #(.N(SN), .DEPTH(SD), .TICK_W(32)) u_sample (
                 .clk(clk), .rst_n(rst_n), .run(run), .apply(s_apply), .sync_in(s_in),

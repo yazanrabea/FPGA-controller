@@ -166,3 +166,9 @@ Each entry: date, decision, reason, rejected options.
 - Reason: one sequencer / link / cell top to maintain; the sampler only adds a register block and a read mux. Loopback pairs 0-4 are verified (EXP-01..06), so a sampler result there can be checked against known pins, without touching `chip_top` (Rahaf's).
 - Sampler registers are fixed addresses in the top (0x0020.., 0x4000..), not in the generated package: they don't depend on the step table layout.
 - Rejected: a copy of `phase7_link_top` (260 lines kept in step by hand); putting the sampler in `chip_top` first (Rahaf's file; a first board test there would mix two unknowns).
+
+## The sampler records the step number; expected waves of a sequence come from the record (2026-11-01, Yazan)
+- Decision: sample bits 13:10 = the sequencer's step (2 FFs, like the outputs). `seqwaves.py` takes each step's start from the record where it shows the change into that step, and derives the others across fixed-length (`after`) steps from known neighbours; a record is checked against the waves built from those starts (tolerance 2 samples + 20 ns).
+- Reason: after a wait step (`until: captured / edges / level / done`) the timing isn't known in advance, so expected waves computed from the table alone would be wrong after the first wait. The 6 spare bits of the 16-bit sample cost nothing. A step that began before the record isn't "seen" (its first sample is just the record's start): taking that as its start put an expected `rst` pulse 95 us late in the first try (found by the RTL-record check).
+- The editor overlay and a `sample:` part of the mode config wait for a sampler in `chip_top`: the editor works on chip modes, and today only the loopback bench has a sampler.
+- Rejected: predicting wait-step ends by simulating the conditions on the PC (needs a model of the chip's outputs); recording step starts in separate registers (only 16 steps, and the record already has room).

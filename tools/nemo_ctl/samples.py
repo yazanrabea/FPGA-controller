@@ -33,6 +33,8 @@ SYNC_TICKS = 2        # 2-FF input synchronizer in front of the cell
 TRIGGERS = {"now": 0, "ext": 1, "rise": 2, "fall": 3, "high": 4, "low": 5}
 # sample_loopback_top (phase7_link_top SAMPLER=1): bits 0-4 the outputs, 5-9 the inputs
 LOOPBACK_PINS = ("clk", "rst", "data", "cs", "en", "clk_in", "rst_in", "data_in", "cs_in", "en_in")
+LOOPBACK_PAIRS = {"clk_in": "clk", "rst_in": "rst", "data_in": "data", "cs_in": "cs", "en_in": "en"}
+STEP_FIELD = (10, 4)   # sample_loopback_top: bits 13:10 = the sequencer's step (lowest bit, width)
 EDGE_TRIGGERS = ("rise", "fall", "high", "low")
 
 
@@ -256,26 +258,50 @@ def to_csv(setup: SampleSetup, rec: Record, offset_ticks: int = 0) -> str:
     return "\n".join(lines) + "\n"
 
 
-def to_vcd(setup: SampleSetup, rec: Record, offset_ticks: int = 0, module: str = "fpga") -> str:
+def to_vcd(setup: SampleSetup, rec: Record, offset_ticks: int = 0, module: str = "fpga",
+           expected: dict[str, list[list]] | None = None, step_field=None) -> str:
     """The record as a VCD file (GTKWave / PulseView / Vivado's waveform viewer), 1 ns
-    timescale, time 0 = the first sample (its time from RUN is in the header comment)."""
+    timescale, time 0 = the first sample (its time from RUN is in the header comment).
+    `expected`: pin -> segments (ns from RUN) added as `<pin>_exp`; `step_field` (lowest
+    bit, width), e.g. STEP_FIELD: the step number as a bus `step`."""
     if not rec.words:
         raise SampleError("empty record")
     times = sample_times_ns(setup, rec, offset_ticks)
-    ids = [chr(33 + k) for k in range(len(setup.pins))]
-    out = [f"$comment sample_cell record: {setup.summary()}; first sample at {times[0]:g} ns "
+    t0, t_end = times[0], times[-1] + setup.period_ns
+    sigs = [(p, 1) for p in setup.pins] + [(f"{p}_exp", 1) for p in (expected or {})]
+    if step_field:
+        sigs.append(("step", step_field[1]))
+    ids = {name: (chr(33 + k % 94) * (1 + k // 94)) for k, (name, _w) in enumerate(sigs)}
+    out = [f"$comment sample_cell record: {setup.summary()}; first sample at {t0:g} ns "
            f"from RUN $end", "$timescale 1ns $end", f"$scope module {module} $end"]
-    out += [f"$var wire 1 {i} {p} $end" for i, p in zip(ids, setup.pins)]
+    out += [f"$var wire {w} {ids[n]} {n} $end" for n, w in sigs]
     out += ["$upscope $end", "$enddefinitions $end"]
-    prev: list[int | None] = [None] * len(setup.pins)
+
+    def val(name, v, width):
+        return f"{v}{ids[name]}" if width == 1 else f"b{v:0{width}b} {ids[name]}"
+    events: dict[int, list[tuple[str, int, int]]] = {}
+    prev: dict[str, int] = {}
     for t, w in zip(times, rec.words):
-        vals = [(w >> b) & 1 for b in setup.bits]
-        ch = [f"{v}{i}" for v, i, pv in zip(vals, ids, prev) if v != pv]
-        if ch:
-            out.append(f"#{round(t - times[0])}")
-            out += ch
-        prev = vals
-    out.append(f"#{round(times[-1] - times[0] + setup.period_ns)}")
+        cur = {p: (w >> b) & 1 for p, b in zip(setup.pins, setup.bits)}
+        if step_field:
+            cur["step"] = (w >> step_field[0]) & ((1 << step_field[1]) - 1)
+        for name, v in cur.items():
+            if prev.get(name) != v:
+                events.setdefault(round(t - t0), []).append((name, v, step_field[1] if name == "step" else 1))
+                prev[name] = v
+    for p, segs in (expected or {}).items():
+        last = None
+        for t, v in segs:
+            if t > t_end:
+                break
+            tt = max(round(t - t0), 0)
+            if int(v) != last:
+                events.setdefault(tt, []).append((f"{p}_exp", int(v), 1))
+                last = int(v)
+    for tt in sorted(events):
+        out.append(f"#{tt}")
+        out += [val(n, v, w) for n, v, w in events[tt]]
+    out.append(f"#{round(t_end - t0)}")
     return "\n".join(out) + "\n"
 
 

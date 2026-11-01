@@ -23,7 +23,8 @@ at a chosen rate around a trigger, and the PC reads the record back and shows it
 
 1. `python -m nemo_ctl.cli seq load ../config/phase7_seq_loopback.yaml --jtag`.
 2. `python -m nemo_ctl.cli seq sample --jtag --rate 1kHz --samples 4000 --trigger ext --step 1
-   --pre 100 --run --wait 15 --out exp11_a.vcd`
+   --pre 100 --run --wait 15 --check ../config/phase7_seq_loopback.yaml --out exp11_a.vcd`
+   - expected: the check table `PASS: 10 pass, 0 fail` (exit 0);
    - expected: `record: 4000 samples, trigger at index 100`, done;
    - `rst` falls at the trigger (index 100 or 101 = the start of step 1, 1 s after RUN) and
      rises 500 ms (500 samples) later; `clk` 8 rising edges at 4 Hz in step 2; `data` = 0xA5 bit by bit;
@@ -34,8 +35,10 @@ at a chosen rate around a trigger, and the PC reads the record back and shows it
 5. Trigger on a pin, faster: `--rate 10MHz --samples 4096 --trigger rise --on clk --pre 50`
    -> `clk` low up to index 49 and high from index 50 (the first rising edge, in step 2); the
    record is 410 us long and `clk` stays high for 125 ms, so that is its only edge.
-6. Negative check: pull jumper J2-17 (`rst_in`) and repeat 2: `rst_in` flat at 0, the rest
-   unchanged (no FAULT: nothing waits on `rst_in`).
+6. Negative check: pull jumper J2-17 (`rst_in`) and repeat 2: `rst_in` flat at 0 and the
+   check FAILs on `rst_in` only (no FAULT: nothing waits on `rst_in`). (The same check on the
+   RTL's own records passes in simulation: `scripts/run_sample_sim.sh`, record A all pass,
+   record B fails on the pulled `clk_in` only.)
 7. `--read-only` after a second `seq run` without a new setup: a new record (re-armed).
 
 ## 3. Results

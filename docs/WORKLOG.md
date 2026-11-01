@@ -11,6 +11,47 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 record check (`seq sample --check`)
+- Goal: Yazan: "yes continue with step 3" (the remaining laptop parts).
+- Done:
+  - `fpga/src/phase7_link_top.sv` (SAMPLER = 1 only): sample bits 13:10 = the step number
+    through 2 FFs (`stp_s0` / `stp_s1`), bits 14-15 = 0.
+  - **`tools/nemo_ctl/seqwaves.py`** (new): `sequence_waves` (a sequence's expected pin
+    waves: waves.py's `_lane` per setting, + sig_cell's 2-tick latency, a cell keeps running
+    across steps it isn't in), `step_starts` (seen in the record / derived across `after`
+    steps), `check_record` (verify.Row per pin; inputs vs their loopback output's wave),
+    `expected_for`, `scale_steps` (= `compile_steps(scale=)`).
+  - `samples.py`: `LOOPBACK_PAIRS`, `STEP_FIELD`; `to_vcd(expected=, step_field=)` adds
+    `<pin>_exp` and a `step` bus. `cli seq sample --check <sequence.yaml>`.
+  - `fpga/tb/sample_loopback_top_tb.sv`: checks of the step bits; section 7 (a record of step 2
+    with the `clk_in` jumper pulled); writes records A / B with `+dump_a` / `+dump_b`.
+    `scripts/sim_lib.sh`: optional `SIM_PLUSARGS` (Icarus: after the .vvp; xsim:
+    `-testplusarg`). `scripts/check_sample_dump.py` + `run_sample_sim.sh`: the RTL's records
+    through `seqwaves.check_record`.
+  - `tests/test_seqwaves.py` (new). Docs: register map, USER_MANUAL §8.10, EXP-11, plan,
+    decisions, README, `CLAUDE.md` §6.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_loopback_top_tb` **24/24** (+ bits 13:10 = the step
+    register 2 ticks earlier on every tick; the record shows step 1 from index 50; record of
+    step 2: 8 `clk` rising edges, `clk_in` flat with its jumper pulled).
+  - **The RTL's records through the PC check** (`check_sample_dump.py`): record A (step 1,
+    jumpers in) 10/10 PASS; record B (step 2, `clk_in` pulled) fails on `clk_in` only (16
+    expected edges not seen), the other 9 PASS -> PASS.
+  - [tested, pytest] `test_seqwaves.py` 10 passed (incl. `scale_steps` == the compiler's
+    scaling, derived starts, pulled jumper, clock 1 vs 5 samples late, CLI `--check` on a fake
+    board, VCD `_exp` / `step`); full suite 371 passed, 1 skipped. Phase 7 regression
+    40/10/27/21 PASS.
+- Problems / fixes: the first check of record B also failed `rst` / `rst_in`: a step already
+  running when the record starts was taken to start at the record's first sample, so the
+  expected `rst` pulse was 95 us late. Now only a change in the record counts as a seen
+  start; the rest are derived (decision). Two test mistakes fixed (0xA5's merged 0s; a
+  record relabelled to another start time).
+- Decisions: `docs/decisions.md` 2026-11-01 (step number in the record; overlay and
+  `sample:` config wait for a sampler in `chip_top`).
+- Next steps: lab: `SIM=xsim scripts/run_sample_sim.sh`, build `sample_loopback_top`, EXP-11
+  (now with `--check`). With Rahaf: Step 2 and a sampler in `chip_top`.
+
 ## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 link region + test top
 - Goal: Yazan: "yes continue with the link region and test top".
 - Done:

@@ -174,7 +174,9 @@ PC side: `link.SeqLink.sampler_info / sampler_setup / sampler_status / read_samp
 
 Each sample is 16 bits: bits 0-4 = the 5 outputs `clk rst data cs en` (LA00-04_P, delayed
 by 2 FFs so they line up with the inputs), bits 5-9 = the 5 inputs `clk_in .. en_in`
-(LA16-20_P after their 2-FF synchronizer), bits 10-15 = 0. 4096 samples.
+(LA16-20_P after their 2-FF synchronizer), bits 10-13 = the sequencer's current step
+(also through 2 FFs, so the PC sees when each step started, even after a wait step),
+bits 14-15 = 0. 4096 samples.
 
 | Addr | Name | Access | Meaning |
 |---|---|---|---|

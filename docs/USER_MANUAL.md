@@ -827,6 +827,12 @@ python -m nemo_ctl.cli seq sample --jtag --rate 1kHz --samples 4000 \
   `seq run`. `--read-only` reads the last record again.
 - It prints each pin's level and first edges (ns from RUN) and writes `--out x.vcd`
   (open in GTKWave, PulseView or Vivado) or `x.csv`.
+- `--check ../config/phase7_seq_loopback.yaml` (the sequence you loaded): PASS / FAIL per
+  pin. Each output is held to its expected wave (built from the sequence and the step
+  starts the record shows in its step bits, `tools/nemo_ctl/seqwaves.py`), each input to its
+  output's expected wave (the loopback). Tolerance: 2 samples + 20 ns. The VCD then also
+  has `<pin>_exp` and a `step` bus, so measured and expected sit side by side. Exit 0 only
+  if every pin passes.
 - Resolution = one sample period. The span is `samples x period` (4096 at 1 kHz = 4 s).
 
 What a pass looks like on the board: with the jumpers in, every input follows its output

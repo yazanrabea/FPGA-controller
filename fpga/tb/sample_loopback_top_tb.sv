@@ -21,6 +21,11 @@
 //      (bit 1) falls right after it and rises 5000 ticks later
 //   6. the record is kept after the run (read twice, same); a new run with
 //      trigger "now" re-arms it; a pulled jumper shows as bit 9 stuck at 0
+//   7. a record of step 2 (clk / data) with jumper J2-16 (clk_in) pulled
+// With +dump_a=<file> / +dump_b=<file> the records of 2 and 7 are written out
+// ("div n trig_idx trig_count", then one hex word per line), and
+// scripts/check_sample_dump.py checks them against the sequence with
+// tools/nemo_ctl/seqwaves.py (run_sample_sim.sh does both).
 // Pass = "ALL TESTS PASSED".
 //==========================================================================
 module sample_loopback_top_tb;
@@ -155,6 +160,7 @@ module sample_loopback_top_tb;
     localparam int HMAX = 200_000;
     logic [15:0] h_sin  [0:HMAX-1];   // the cell's input, per tick from run rising
     logic [9:0]  h_pins [0:HMAX-1];   // {inputs 20:16, outputs 4:0}
+    logic [3:0]  h_step [0:HMAX-1];   // the sequencer's step register
     int unsigned arm_n, step_start_n [0:15], step_at_start [0:15];
     int n_starts;
     logic run_q = 0;
@@ -166,13 +172,24 @@ module sample_loopback_top_tb;
         if (dut.run && rel < HMAX) begin
             h_sin[rel]  = dut.g_sampler.s_in;
             h_pins[rel] = {fmc_pins[20:16], fmc_pins[4:0]};
+            h_step[rel] = dut.step;
         end
         if (dut.step_start) begin step_start_n[n_starts] = cyc - arm_n; step_at_start[n_starts] = dut.step; n_starts++; end
     end
 
     initial begin #(300ms); $display("FAIL: watchdog"); $finish; end
 
-    int bad, fall_i, rise_i, first_bad, tsample, div, s1;
+    int bad, fall_i, rise_i, first_bad, tsample, div, s1, fd;
+    string dump;
+    task automatic dump_record(input string plusarg, input int n);
+        if ($value$plusargs({plusarg, "=%s"}, dump)) begin
+            fd = $fopen(dump, "w");
+            $fwrite(fd, "%0d %0d %0d %0d\n", div, s_nvalid, s_tidx, s_tcount);
+            for (int i = 0; i < n; i++) $fwrite(fd, "%04h\n", words[i]);
+            $fclose(fd);
+            $display("  (record written to %s)", dump);
+        end
+    endtask
     logic [7:0] s;
     logic [15:0] keep [0:MAXW-1];
 
@@ -222,6 +239,7 @@ module sample_loopback_top_tb;
                 bad++; if (first_bad < 0) first_bad = i;
             end
         check(bad == 0, $sformatf("all 400 words = s_in at (trig_count - trig_idx + i)*div + 1 (%0d wrong, first %0d)", bad, first_bad));
+        dump_record("dump_a", 400);
 
         $display("\n== 4. alignment of outputs and inputs ==");
         bad = 0;
@@ -229,8 +247,16 @@ module sample_loopback_top_tb;
             if (h_sin[t][9:0] !== h_pins[t - 2]) bad++;
         check(bad == 0, $sformatf("s_in = the pins 2 ticks earlier, every tick of the record (%0d off)", bad));
         bad = 0;
-        for (int i = 0; i < 400; i++) if (words[i][9:5] !== words[i][4:0] || words[i][15:10] != 0) bad++;
-        check(bad == 0, "jumpers in: inputs (bits 9:5) = outputs (bits 4:0) in every sample, bits 15:10 = 0");
+        for (int i = 0; i < 400; i++) if (words[i][9:5] !== words[i][4:0] || words[i][15:14] != 0) bad++;
+        check(bad == 0, "jumpers in: inputs (bits 9:5) = outputs (bits 4:0) in every sample, bits 15:14 = 0");
+        bad = 0;
+        for (int t = 3; t < (s_tcount + 360) * div; t++) if (h_sin[t][13:10] !== h_step[t - 2]) bad++;
+        check(bad == 0, $sformatf("bits 13:10 = the step register 2 ticks earlier, like the pins (%0d off)", bad));
+        // first sample showing step 1 = the first sample at or after step 1's apply
+        fall_i = -1;
+        for (int i = 0; i < 400; i++) if (words[i][13:10] == 1 && fall_i < 0) fall_i = i;
+        check(fall_i == 50 && words[49][13:10] == 0,
+              $sformatf("the record shows step 0 until index 49 and step 1 from index 50 (%0d)", fall_i));
 
         $display("\n== 5. the trigger and the rst pulse in the record ==");
         tsample = 1 + s_tcount * div;                  // tick of the trigger sample after arming
@@ -264,6 +290,25 @@ module sample_loopback_top_tb;
         check(bad == 0, "re-armed record: rst_in (bit 6) stuck at 0 with the jumper pulled, words = s_in");
         check(words[0][1] == 1'b1, "rst output itself still high in step 0 (bit 1)");
         jumper[1] = 1'b1;
+
+        $display("\n== 7. step 2 (clk, data) with the clk_in jumper pulled ==");
+        jumper[0] = 1'b0;                              // clk_in: the capture strobe is the output's, no FAULT
+        div = 50;
+        sampler_setup(div, 500, 10, 1, 0, 2);          // ext at step 2, 500 x 50 ticks
+        pc_send_frame(8'h05, 16'h0000, 0);
+        wait_not_busy(s);
+        sampler_status();
+        check(s[2] && s_status == 3'b110 && s_nvalid == 500 && s_tidx == 10,
+              $sformatf("done; record of 500 from step 2 (%b %0d %0d)", s_status, s_nvalid, s_tidx));
+        read_record(500);
+        bad = 0;
+        for (int i = 0; i < 500; i++) if (words[i][5] !== 1'b0) bad++;
+        check(bad == 0, "clk_in (bit 5) flat at 0 in every sample");
+        bad = 0;
+        for (int i = 1; i < 500; i++) if (words[i][0] && !words[i - 1][0]) bad++;
+        check(bad == 8, $sformatf("clk (bit 0) itself: 8 rising edges in the record (%0d)", bad));
+        dump_record("dump_b", 500);
+        jumper[0] = 1'b1;
         check(!led[7], "no link error (LD7 off)");
 
         $display("\n================================================");
