@@ -43,11 +43,14 @@ Goal: one command that runs a mode on the board and says PASS/FAIL per captured 
    runs the mode through `mode_seq.run_table` (no change to Rahaf's `mode_seq.py` beyond
    reading what `run_table` already returns; if it needs a change, agree it with her first),
    prints the table, exits non-zero on any FAIL. With `--repeat`: pass count per pin.
+   **Added while building it:** `--seq <file>` runs a step sequence (expect on a step's
+   `capture:` entry) instead of a mode, because EXP-08's PISO readback needs `shift` raised
+   between the load and the read, which a single editor mode can't express.
 4. **Editor.** See "Interface changes" below. A **Verify** button next to Run on board in `gui.py` / `config_gui.html`
    (`POST /api/verify`), the table shown under the Signals panel; `expect:` editable per pin.
 5. **Tests (laptop).** pytest with a fake link returning chosen captures: all-pass, each
    kind failing, tolerance edges, missing capture, repeat counts; config round trip; GUI endpoint.
-6. **Lab.** EXP-09: `cli verify --jtag` on `vchip_top` (the virtual chip returns a known
+6. **Lab.** EXP-09 (`docs/experiments/EXP-09_cli_verify.md`, `config/exp09_verify_vchip.yaml`): `cli verify --seq ... --jtag` on `vchip_top` (the virtual chip returns a known
    PISO frame, so `expect:` is known exactly) and on `chip_top`. Pass = the table matches
    what EXP-07/08 measured, and a deliberately wrong `expect:` gives FAIL on that pin only.
 

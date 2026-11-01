@@ -99,6 +99,19 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
   padding: 8px 10px; border-radius: 5px; background: var(--surface-2); max-height: 320px; overflow: auto; }
 .run .runout:empty { display: none; }
 .run .runout.err { background: var(--error-soft); color: var(--error); }
+.vbox { padding: 0 14px 12px; overflow-x: auto; }
+.vbox:empty { display: none; }
+.vsum { font-size: 13px; font-weight: 600; margin: 4px 0 8px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.vsum.pass { color: var(--ok); } .vsum.fail { color: var(--error); }
+.vsum button { font-weight: 400; padding: 3px 9px; font-size: 12px; }
+table.vt { border-collapse: collapse; font-size: 12px; width: 100%; }
+table.vt th, table.vt td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.vt th { color: var(--muted); font-weight: 500; }
+table.vt td.m { font-family: var(--mono); overflow-wrap: anywhere; max-width: 360px; }
+table.vt td.res { font-weight: 700; } td.res.pass { color: var(--ok); } td.res.fail { color: var(--error); } td.res.nj { color: var(--muted); }
+table.vt tr.fail { background: var(--error-soft); }
+table.vt tr.jump { cursor: pointer; }
+.row.flash { outline: 2px solid var(--error); outline-offset: -2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
@@ -137,10 +150,14 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
         <label for="rdur">duration</label><input id="rdur" type="text" placeholder="auto" title="e.g. 350us or 2ms; empty = the mode's last event + 10 %">
         <button type="button" id="rdry" title="Show the sequence this mode becomes, without the board">Check</button>
         <button type="button" id="rrun" class="primary" title="Run this mode, as edited, on chip_top over the JTAG cable (J17)">Run on board</button>
+        <label for="vrep">runs</label><input id="vrep" type="text" inputmode="numeric" value="1" style="width:60px" title="How many times to run the mode for Verify">
+        <button type="button" id="vrun" class="primary" title="Run the mode on chip_top and check every capture that has an expect">Verify</button>
       </span>
     </div>
     <div class="wmsg">Runs the mode shown, as edited on this page, on <b>chip_top</b> over the JTAG cable (J17): 10 µs at the idle levels, then the mode, then back to idle. chip_top must be programmed on the board.</div>
+    <div class="wmsg">Verify runs it the same way, then checks every capture pin that has an <b>expect</b> (set it on the pin's row below) and the run's own status: PASS / FAIL per pin.</div>
     <pre class="runout" id="runout"></pre>
+    <div class="vbox" id="vout"></div>
   </section>
   <div id="blocks"></div>
 </main>
@@ -167,9 +184,15 @@ const FIELDS = {
            ["data_edge", "data changes on", "select", ["falling", "rising"]]],
   CAPTURE:[["mode", "capture", "select", ["level", "edge_count", "period", "serial"]],
            ["clock", "sampled on clock pin", "clock", ""], ["bits", "bits", "int", ""],
-           ["edge", "on edge", "select", ["falling", "rising"]]],
+           ["edge", "on edge", "select", ["falling", "rising"]],
+           ["expect", "expect (blank = not checked)", "expect", ""], ["tolerance", "tolerance", "text", ""],
+           ["mask", "mask (1 = checked)", "wide", "all bits"]],
 };
-const CAPTURE_SERIAL_ONLY = new Set(["clock", "bits", "edge"]);
+const CAPTURE_SERIAL_ONLY = new Set(["clock", "bits", "edge", "mask"]);
+// what `expect` means per capture mode (tools/nemo_ctl/verify.py)
+const EXPECT_HINT = {level: ["0 or 1", "level when read, after the run"], edge_count: ["e.g. 136", "rising edges"],
+                     period: ["e.g. 1us or 1MHz", ""], serial: ["e.g. 0xA5", ""]};
+const TOL_HINT = {edge_count: "± edges (0)", period: "1%, 20ns or ticks (1 tick)"};
 
 const $ = (id) => document.getElementById(id);
 function el(tag, attrs, ...kids) {
@@ -367,6 +390,59 @@ async function runMode(dry) {
   out.className = "runout" + (!r.ok || r.fault || r.done === false ? " err" : "");
 }
 $("rdry").addEventListener("click", () => runMode(true));
+
+// ---- verify (verify.py): run, then PASS / FAIL per capture with an expect --------------
+function jumpTo(pin) {
+  const row = Array.from(document.querySelectorAll(".row[data-key]")).find((r) => r.dataset.key.split("\u0000")[1] === pin);
+  if (!row) return;
+  row.scrollIntoView({behavior: "smooth", block: "center"});
+  row.classList.add("flash"); setTimeout(() => row.classList.remove("flash"), 1800);
+}
+
+async function verifyMode() {
+  const out = $("runout"), box = $("vout");
+  const repeat = parseInt($("vrep").value, 10);
+  if (!(repeat >= 1)) { out.className = "runout err"; out.textContent = "error: runs must be a whole number >= 1"; return; }
+  const body = Object.assign(doc(), {mode: cur, duration: $("rdur").value.trim(), repeat});
+  let r;
+  try { r = await api("/api/verify", Object.assign({}, body, {dry: true})); }
+  catch (e) { r = {ok: false, error: e.message}; }
+  if (!r.ok) { box.replaceChildren(); out.className = "runout err"; out.textContent = "error: " + r.error; return; }
+  const what = r.expect.length ? r.expect.map((e) => `  ${e.pin}: ${e.kind} ${e.expected}`).join("\n")
+                               : "  (no capture has an expect: only the run status is judged)";
+  if (!confirm(`Verify mode ${cur} on the board, ${repeat} run${repeat > 1 ? "s" : ""}?\n\nChecks:\n${what}\n\nchip_top must be programmed, J18 on 1V8.`)) return;
+  box.replaceChildren();
+  out.className = "runout"; out.textContent = `Verifying ${cur} on the board, ${repeat} run${repeat > 1 ? "s" : ""} (opening the JTAG link takes a few seconds)…`;
+  $("rrun").disabled = $("rdry").disabled = $("vrun").disabled = true;
+  try { r = await api("/api/verify", body); }
+  catch (e) { r = {ok: false, error: e.message}; }
+  finally { $("rrun").disabled = $("rdry").disabled = $("vrun").disabled = false; }
+  const notes = (r.notes || []).map((n) => "note: " + n);
+  if (r.error) notes.push("error: " + r.error);
+  out.textContent = notes.join("\n");
+  out.className = "runout" + (r.ok ? "" : " err");
+  if (!r.ok) return;
+  const c = r.counts;
+  const copy = el("button", {type: "button", title: "Copy the table as Markdown (for the experiment report)", onclick: async () => {
+    try { await navigator.clipboard.writeText(r.markdown); copy.textContent = "Copied"; }
+    catch (e) { copy.textContent = "Copy failed"; }
+  }}, "Copy as Markdown");
+  const sum = el("div", {class: "vsum " + (r.passed ? "pass" : "fail")},
+    `${r.passed ? "PASS" : "FAIL"}: ${c.pass} pass, ${c.fail} fail, ${c.not_judged} not judged, ${r.runs} run${r.runs > 1 ? "s" : ""}`, copy);
+  const tb = el("tbody");
+  for (const x of r.rows) {
+    const pinRow = x.pin !== "(run)";
+    const res = x.ok === true ? "PASS" : x.ok === false ? "FAIL" : "–";
+    tb.append(el("tr", {class: (x.ok === false ? "fail" : "") + (pinRow ? " jump" : ""),
+                        title: pinRow ? "Show this pin's row" : null, onclick: pinRow ? () => jumpTo(x.pin) : null},
+      el("td", {class: "m"}, x.pin), el("td", {}, x.kind), el("td", {class: "m"}, x.expected),
+      el("td", {class: "m"}, x.measured), el("td", {class: "res " + (x.ok === true ? "pass" : x.ok === false ? "fail" : "nj")}, res),
+      el("td", {}, x.note)));
+  }
+  box.replaceChildren(sum, el("table", {class: "vt"},
+    el("thead", {}, el("tr", {}, ...["pin", "check", "expected", "measured", "result", "note"].map((h) => el("th", {}, h)))), tb));
+}
+$("vrun").addEventListener("click", verifyMode);
 $("rrun").addEventListener("click", () => runMode(false));
 
 function setStatus(text, err) { const s = $("status"); s.textContent = text; s.className = "status" + (err ? " err" : ""); }
@@ -465,8 +541,10 @@ function defaults(p, type) {
 function renderFields(p, s) {
   const defs = FIELDS[s.type] || [];
   const out = [];
-  for (const [key, label, kind, extra] of defs) {
+  for (let [key, label, kind, extra] of defs) {
     if (s.type === "CAPTURE" && CAPTURE_SERIAL_ONLY.has(key) && s.mode !== "serial") continue;
+    if (s.type === "CAPTURE" && key === "tolerance" && !TOL_HINT[s.mode || "level"]) continue;
+    if (s.type === "CAPTURE" && (key === "tolerance" || key === "mask") && (s.expect === undefined || s.expect === "")) continue;
     const id = `f_${cur}_${p.name}_${key}`;
     let input;
     if (kind === "select") {
@@ -484,8 +562,24 @@ function renderFields(p, s) {
       input.addEventListener("change", () => { s[key] = input.checked; changed(); });
       out.push(el("div", {class: "f"}, el("label", {class: "chk", for: id}, input, label)));
       continue;
+    } else if (kind === "expect") {
+      const m = s.mode || "level", hint = EXPECT_HINT[m] || ["", ""];
+      input = el("input", {type: "text", id, placeholder: hint[0], class: m === "serial" ? "wide" : null,
+                           title: "What this pin should read back; Verify checks it. " + hint[1]});
+      input.value = s[key] ?? "";
+      input.addEventListener("input", () => {
+        const v = input.value.trim(), had = s.expect !== undefined && s.expect !== "";
+        // plain numbers stay numbers in the YAML (level / edge count); the rest stays text
+        setField(s, key, /^\d+$/.test(v) && (m === "level" || m === "edge_count") ? parseInt(v, 10) : v);
+        if (had !== (v !== "")) {   // tolerance / mask appear or go away: redraw, keep typing here
+          if (v === "") { delete s.tolerance; delete s.mask; }
+          changed(); render(); const again = $(id); if (again) { again.focus(); again.setSelectionRange(v.length, v.length); }
+        } else changed();
+      });
+      if (hint[1]) label = `expect: ${hint[1]} (blank = not checked)`;
     } else {
-      input = el("input", {type: kind === "int" ? "number" : "text", id, placeholder: extra || "",
+      const ph = s.type === "CAPTURE" && key === "tolerance" ? TOL_HINT[s.mode || "level"] : (extra || "");
+      input = el("input", {type: kind === "int" ? "number" : "text", id, placeholder: ph,
                            class: kind === "wide" ? "wide" : null, min: kind === "int" ? "0" : null});
       input.value = s[key] ?? "";
       input.addEventListener("input", () => {

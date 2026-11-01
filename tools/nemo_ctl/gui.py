@@ -7,7 +7,9 @@ are validate.validate_config, the achieved values are timing.py's, the waveform 
 waves.py's (real edge times of the unsaved edits), and Save writes the
 file with config.save_config (a .bak copy of the old file is kept first; like the wizard,
 saving drops the YAML comments). "Run on board" (chip pipeline C5) runs the shown mode, as
-edited, on chip_top over the JTAG cable (mode_seq.py, same as `cli run-mode --jtag`).
+edited, on chip_top over the JTAG cable (mode_seq.py, same as `cli run-mode --jtag`);
+"Verify" (plan 2026-11-01 Step 1) runs it and judges every capture that has an `expect`
+(verify.py, same as `cli verify --jtag`).
 
     cd tools && python -m nemo_ctl.cli gui [--config ../config/nemo_config.yaml]
 
@@ -35,6 +37,7 @@ from .waves import WaveError, mode_waves
 from .mode_seq import mode_table, run_table
 from .sequence import SequenceError
 from .units import UnitsError, parse_duration_ns
+from .verify import VerifyError, parse_expect
 
 PAGE_PATH = Path(__file__).resolve().parent / "data" / "config_gui.html"
 
@@ -80,6 +83,11 @@ def check_payload(doc: dict, pin_db: dict[str, Pin]) -> dict:
             try:
                 text = _summarize_setting(block, key, setting).summary
                 ok = True
+                if setting.type == "CAPTURE":
+                    e = parse_expect(key, block, setting.params)
+                    text += f"; Verify expects {e.kind} {e.expected_text()}" if e else "; not checked by Verify"
+            except VerifyError:
+                pass                      # already an error on the row (validate.py)
             except Exception as exc:
                 text, ok = str(exc), False
             summaries.setdefault(mode, {}).setdefault(block, {})[key] = {"text": text, "ok": ok}
@@ -159,6 +167,43 @@ def run_payload(doc: dict, open_link=_open_board) -> dict:
     return out
 
 
+def verify_payload(doc: dict, open_link=_open_board) -> dict:
+    """Run doc["mode"] doc["repeat"] times on chip_top and judge every capture that has an
+    expect (verify.py, same as `cli verify --jtag`). doc["dry"]: only list the expectations."""
+    from .verify import VerifyError, format_markdown, mode_expectations, rows_json, verify_table
+    try:
+        config = config_from_dict(doc)
+        mode = doc.get("mode") or ""
+        expect = mode_expectations(config, mode)
+        dur = doc.get("duration")
+        dur_s = parse_duration_ns(dur) * 1e-9 if dur else None
+        table, notes = mode_table(config, mode, dur_s)
+        repeat = int(doc["repeat"]) if doc.get("repeat") not in (None, "") else 1
+        if not 1 <= repeat <= 10_000:
+            raise ValueError("repeat must be 1 .. 10000")
+    except (ConfigError, SequenceError, UnitsError, VerifyError, TypeError, AttributeError, ValueError) as exc:
+        return {"ok": False, "error": str(exc)}
+    out = {"ok": True, "notes": notes,
+           "expect": [{"pin": e.pin, "kind": e.kind, "expected": e.expected_text()} for e in expect.values()]}
+    if doc.get("dry"):
+        return out
+    if not _RUN_LOCK.acquire(blocking=False):
+        return {"ok": False, "error": "a board run is already going"}
+    try:
+        link = open_link()
+        try:
+            res = verify_table(link, table, expect, mode=mode, repeat=repeat)
+        finally:
+            link.close()
+    except Exception as exc:          # the cable, xsdb, the link: report, don't crash the server
+        return {**out, "ok": False, "error": f"board run failed: {exc}"}
+    finally:
+        _RUN_LOCK.release()
+    p, f, n = res.counts()
+    return {**out, "passed": res.ok, "runs": len(res.runs), "rows": rows_json(res.table()),
+            "counts": {"pass": p, "fail": f, "not_judged": n}, "markdown": format_markdown(res)}
+
+
 class _Handler(BaseHTTPRequestHandler):
     config_path: Path
     pin_db: dict[str, Pin]
@@ -208,6 +253,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, waves_payload(doc))
         if self.path == "/api/run":
             return self._json(200, run_payload(doc, self.open_link))
+        if self.path == "/api/verify":
+            return self._json(200, verify_payload(doc, self.open_link))
         if self.path == "/api/save":
             return self._json(200, save_payload(doc, self.config_path, self.pin_db))
         return self._json(404, {"error": "not found"})

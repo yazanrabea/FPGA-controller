@@ -150,3 +150,8 @@ Each entry: date, decision, reason, rejected options.
 - Reason: `pin_map` uses 26 of the 34 LA_P pins (22 outputs, 4 inputs); only LA26-LA33 are free, so the outputs can't all be looped back at once, and loopback jumpers can't stay once the chip is connected. Pad readback needs no pins and runs on every chip run.
 - Limit: it does not detect an open after the pad (FMC connector, HTG board, wire); that stays with the logic analyser / scope.
 - Rejected: loopback in 2 rounds with moved jumpers (12 inputs = LA26-33 + LA16-19 before the chip is connected): one-time only and manual.
+
+## `expect` lives in the CAPTURE setting; `cli verify` also takes a step sequence (2026-11-01, Yazan)
+- Decision: the expected value of a capture is an `expect` field (+ `tolerance`, `mask`) in that pin's own CAPTURE setting (`config/nemo_config.yaml`), or on a step's `capture:` entry in a sequence YAML. `cli verify --mode` runs an editor mode, `cli verify --seq` a sequence (on the last step that captures the pin).
+- Reason: a mode only holds blocks, so a separate `expect:` section would be parsed as a block (the plan's first draft); in the pin's setting the editor shows it on the pin's row and the Excel round trip keeps it (3 new columns). `mode_seq.py` and `sequence.py` ignore the extra keys, so the compiled table is unchanged (tested). The sequence path exists because EXP-08's PISO readback raises `shift` between the load and the read, which one mode can't express.
+- Rejected: a separate `expect:` section per mode; changing `mode_seq.py` / `sequence.py` (Rahaf's files) to carry expectations; the terminal wizard asking for `expect` (Yazan: the browser editor is enough).

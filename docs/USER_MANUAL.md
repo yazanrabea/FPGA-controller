@@ -760,7 +760,49 @@ piso_out` should give `0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6`. Pins: edit
 `scripts/run_vchip_sim.sh` (or `scripts/run_vchip_sim.sh <sequence.yaml> <0x expected 168-bit
 piso_out>`, e.g. `config/exp08_phirst.yaml 0x5AA55A0FF0123456789ABCDEF0C3C3E7E7F0C3E7C6`; the
 commands for each sequence are in its header). To repeat a loaded sequence and
-compare: `PYTHONPATH=. python ../scripts/repeat_seq.py 100 piso_out 0x…`.
+compare: `PYTHONPATH=. python ../scripts/repeat_seq.py 100 piso_out 0x…`, or
+`cli verify --seq` (§8.9), which checks every capture at once.
+
+### 8.9 Check the results automatically (`cli verify`, plan 2026-11-01 Step 1)
+
+`run-mode` prints what each chip output captured; `verify` also says whether that is what
+you expected. Write the expected value into the capture's own setting:
+
+```yaml
+sipo_out:  {type: CAPTURE, mode: level, expect: 1}                    # level when read, after the run
+dft0_buff: {type: CAPTURE, mode: edge_count, expect: 136, tolerance: 0}   # rising edges, +- N
+dft1_buff: {type: CAPTURE, mode: period, expect: 1us, tolerance: 1%}  # or 1MHz; 1%, 20ns or ticks (default 1 tick)
+piso_out:  {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling,
+            expect: "0x…", mask: "0x…"}                              # mask: 1 = bit checked (default all)
+```
+
+In the browser editor: the **expect** box on the pin's row (tolerance / mask appear once it
+is set). `validate` and the editor check the value (wrong kind, doesn't fit `bits`, an
+`expect` on an input pin). A capture without `expect` is read and shown but not judged.
+`expect` doesn't change what runs: the compiled table is the same.
+
+```
+python -m nemo_ctl.cli verify --mode INFERENCE --dry-run          # list the checks, no board
+python -m nemo_ctl.cli verify --mode INFERENCE --jtag             # run once, PASS/FAIL table
+python -m nemo_ctl.cli verify --mode INFERENCE --jtag --repeat 100 --out verify.md   # or .csv
+python -m nemo_ctl.cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --repeat 100
+```
+
+- One row per pin: expected, measured, PASS / FAIL / `-` (not judged), and a note. A wrong
+  168-bit `piso_out` names the PISO stage, field and bits (e.g. `2 bits wrong: PISO2 out0 bits
+  3,5`). The first row is the run itself: it must end **done** with no FAULT.
+- `--repeat N`: N runs; each pin shows `k/N pass` and the first failing value.
+- `--out x.md`: the table for an experiment report; `--out x.csv`: every row of every run.
+- Exit code 0 only if everything passed (usable from scripts).
+- `--seq <file>`: a step sequence for `chip_top` instead of a mode, with `expect` on a step's
+  `capture:` entry (the **last** step that captures that pin; an earlier one is an error,
+  because the later step re-arms the cell). Needed when a pin must change between steps,
+  e.g. `shift` for a PISO read: a mode holds `shift` at one setting.
+- Editor: **Verify** (with *runs*) in the Run on board card: the same table; click a row to
+  jump to that pin; **Copy as Markdown** for the report.
+
+What a pass shows on hardware: `PASS: k pass, 0 fail, …` in the terminal / editor. A check
+that should fail must fail: change one `expect` bit on purpose and see FAIL on that pin only.
 
 ## 9. Troubleshooting
 

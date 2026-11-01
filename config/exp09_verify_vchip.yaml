@@ -1,0 +1,62 @@
+# EXP-09 (verification plan 2026-11-01 Step 1): `cli verify --seq` on vchip_top.
+# A copy of config/chip_sim_test.yaml (the sequence EXP-08 ran) with `expect` on the captures.
+# The expected values are what EXP-08 MEASURED on the board through Dima's unmodified
+# SIPO / PISO RTL (docs/experiments/EXP-08_*.md), not chip behaviour:
+#   piso_out = frame 5AA5...E7E7 + sel 0000E7 + C6 (309/310 runs; sel[23:8] = 0000 on the FPGA,
+#              the simulation gives the previous frame's slice 0 instead, docs/issues.md Q1)
+#   sipo_out = 1 after the run (shift_reg[0] = frame bit 0)
+# Run (lab PC, vchip_top programmed, EXP-08 wiring):
+#   cd tools && python -m nemo_ctl.cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --repeat 100 --out exp09.md
+
+target: chip_top
+
+steps:
+  - name: idle                 # step 0 = the idle state: every cell
+    set:
+      clk:       {type: LOW}
+      reset:     {type: HIGH}  # active-low assumed, held inactive (UNCONFIRMED)
+      set:       {type: LOW}
+      rst_dsa:   {type: LOW}
+      pulse:     {type: LOW}
+      s0_p:      {type: LOW}
+      s1_p:      {type: LOW}
+      s2_p:      {type: LOW}
+      b0_dft:    {type: LOW}
+      b1_dft:    {type: LOW}
+      b2_dft:    {type: LOW}
+      s0_dft:    {type: LOW}
+      s1_dft:    {type: LOW}
+      s2_dft:    {type: LOW}
+      s3_dft:    {type: LOW}
+      sipo_in:   {type: LOW}
+      clk_sipo:  {type: LOW}
+      cs:        {type: LOW}
+      rst_sipo:  {type: HIGH}  # active-low (sipo.sv rst_n), held inactive
+      clk_piso:  {type: LOW}
+      shift:     {type: LOW}
+      rst_piso:  {type: HIGH}  # active-low (piso.sv rst_n), held inactive
+    capture:
+      sipo_out:  {mode: LEVEL, expect: 1}        # EXP-08: level 1 after the run
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true}
+      dft0_buff: {mode: PERIOD}
+      dft1_buff: {mode: PERIOD}
+    until: {after: 5us}
+
+  - name: sipo_load            # 136 bits, MSB first, sipo_in changes on clk_sipo's falling edge
+    set:
+      # clk_sipo starts 2 us in, so sipo_in's first bit (from 1 us) is stable at rising edge 1
+      clk_sipo:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 136, delay: 2us}
+      sipo_in:   {type: SERIAL, data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7", bits: 136, msb_first: true,
+                  clock: clk_sipo, data_edge: falling, delay: 1us}
+      cs:        {type: PULSE, width: 1us, delay: 140us}   # after the 136th edge (at 137.5 us)
+    until: {after: 145us}
+
+  - name: piso_read            # 168 bits: rising edge 1 loads (shift=0), 167 shifts after
+    set:
+      clk_piso:  {type: CLOCK, freq: 1MHz, duty: 50%, cycles: 168, delay: 2us}
+      # shift rises inside clk_piso's first low phase (2.5 .. 3.0 us), after the load edge
+      shift:     {type: PULSE, width: 170us, delay: 2700ns}
+    capture:
+      piso_out:  {mode: SERIAL, bits: 168, msb_first: true,  # sampled on clk_piso's falling edge
+                  expect: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E70000E7C6"}   # EXP-08 readback
+    until: {captured: piso_out, timeout: 300us}

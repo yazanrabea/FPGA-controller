@@ -11,6 +11,54 @@ Tag every result **[simulated]** or **[measured on board]**.
 
 ---
 
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-verify: verification plan + Step 1 (`cli verify`)
+- Goal: the mentors' three requirements (read a file -> waveform; sample per a setting;
+  check the output against what was expected). Yazan: "write a plan without B", then
+  "browser is enough, commit the plan and start step 1".
+- Done:
+  - **Plan** `docs/plan_2026-11-01_verification.md`: Step 1 `expect` + `cli verify`, Step 2 pad
+    readback of the 22 outputs (`IOBUF`), Step 3 sample cell, Step 4 Dima's questions;
+    interface changes per step; estimate given in chat: 4-6 laptop sessions + 2-3 lab visits.
+    Option B (loopback in jumper rounds) dropped: 26 of 34 LA_P pins are used, only LA26-33
+    are free (`docs/decisions.md`).
+  - **`tools/nemo_ctl/verify.py`** (new): `parse_expect` (level / edges / period / serial with
+    tolerance and mask), `mode_expectations`, `sequence_expectations` (expect on the last step
+    that captures a pin), `load_verify_sequence`, `check_capture` (a 168-bit `piso_out`
+    mismatch is named per PISO stage / field / bit via `sipo_piso.decode_piso_frame`),
+    `verify_table` (runs `mode_seq.run_table` N times), text / Markdown / CSV output.
+  - `validate.py`: `expect` errors on the pin; `expect` on a non-CAPTURE pin is an error.
+    `excel_io.py`: columns `expect`, `tolerance`, `mask` (round trip kept).
+  - `cli.py`: `verify --mode M | --seq FILE [--repeat N] [--out x.md|x.csv] [--dry-run] --jtag`,
+    exit 0 only on all PASS.
+  - Editor (`gui.py`, `data/config_gui.html`): expect / tolerance / mask boxes on capture rows
+    (label per capture mode; tolerance and mask only once expect is set), the summary line
+    says what Verify expects, **Verify** + runs in the Run on board card (`POST /api/verify`):
+    PASS/FAIL table, a row click jumps to the pin, Copy as Markdown.
+  - `config/exp09_verify_vchip.yaml`: EXP-08's sequence with EXP-08's **measured** readback as
+    the expects. `docs/experiments/EXP-09_cli_verify.md`: procedure (planned, not run).
+  - Docs: USER_MANUAL §8.9, `tools/nemo_ctl/README.md`, `docs/decisions.md` (2 entries).
+  - `mode_seq.py` / `sequence.py` (Rahaf's) unchanged: they ignore the new keys. `validate.py`
+    is on Rahaf's C1-C6 list (finished); the change is one check in the CAPTURE branch.
+- Hardware setup: none.
+- Results:
+  - [tested, pytest] `tests/test_verify.py` 41 passed (parsing each kind + errors, validator,
+    YAML + Excel round trip, compiled table unchanged by expect, each kind pass/fail at the
+    tolerance edges, masks, lsb_first partial capture, PISO field names, run FAULT = FAIL,
+    repeat counts, CLI dry run / board (fake) / reports, editor endpoint + server, the EXP-09
+    sequence compiles exactly like `chip_sim_test.yaml`). Full suite 329 passed, 1 skipped.
+  - Editor rendered in headless Edge with a fake board returning 2 wrong `piso_out` bits:
+    `FAIL: 2 pass, 1 fail, 2 not judged, 1 run`, note `2 bits wrong: PISO2 out0 bits 3,5`.
+- Problems / fixes:
+  - `repeat: 0` from the page was silently turned into 1 (`or 1`); now an error (test).
+  - First test of the error path fell through to the real JTAG opener (xsdb not found): every
+    editor test now passes a fake board.
+  - Found while building: a single mode can't repeat EXP-08's PISO read (`shift` must rise
+    between the load and the read), so `--seq` was added (decision above).
+- Decisions: see `docs/decisions.md` 2026-11-01 (pad readback instead of loopback rounds;
+  expect in the CAPTURE setting + `--seq`); no terminal-wizard changes.
+- Next steps: EXP-09 on the lab PC (Part A vchip_top, Part B chip_top); then Step 2 (pad
+  readback), agreed with Rahaf first since it changes `chip_top` and `gen_svh.py --chip`.
+
 ## 2026-10-26 (lab PC), Rahaf + Claude, branch main: chip pipeline step C4 (chip_top)
 - Goal: C4 (Rahaf: "go on with C4"): the chip controller design, its testbench and a Vivado build.
 - Done:
