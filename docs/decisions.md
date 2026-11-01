@@ -144,3 +144,9 @@ Each entry: date, decision, reason, rejected options.
 - **Dima's RTL unmodified**: it synthesizes (scratch OOC run: `sipo_wrapper`'s async load
   becomes 16 latches), so no rewritten copy. A second standalone `sipo` provides the frame
   because `sipo_wrapper` has no port for it.
+
+## Output verification: pad readback, not loopback rounds (2026-11-01, Yazan)
+- Decision: check the 22 chip-facing outputs by reading each one back at its own FPGA pad (`IOBUF`, `T` = 0, readback into a `cap_cell`), plan `docs/plan_2026-11-01_verification.md` Step 2.
+- Reason: `pin_map` uses 26 of the 34 LA_P pins (22 outputs, 4 inputs); only LA26-LA33 are free, so the outputs can't all be looped back at once, and loopback jumpers can't stay once the chip is connected. Pad readback needs no pins and runs on every chip run.
+- Limit: it does not detect an open after the pad (FMC connector, HTG board, wire); that stays with the logic analyser / scope.
+- Rejected: loopback in 2 rounds with moved jumpers (12 inputs = LA26-33 + LA16-19 before the chip is connected): one-time only and manual.

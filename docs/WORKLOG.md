@@ -7,7 +7,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
-| Yazan | Nothing in progress. Signals (waveform) panel merged to `main` 2026-10-26. | `main` | `tools/nemo_ctl/{waves.py,gui.py,data/config_gui.html}`, `tools/nemo_ctl/tests/test_waves.py`, `docs/{USER_MANUAL,WORKLOG}.md`, `tools/nemo_ctl/README.md` |
+| Yazan | Verification plan Step 1: `expect` on capture settings + `cli verify` + editor Verify button (`docs/plan_2026-11-01_verification.md`). | `feature/yazan-verify` | new `tools/nemo_ctl/verify.py`, `tools/nemo_ctl/{validate,cli,gui}.py`, `tools/nemo_ctl/data/config_gui.html`, new `tools/nemo_ctl/tests/test_verify.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md`. Reads `mode_seq.run_table`, doesn't change it |
 
 ---
 
