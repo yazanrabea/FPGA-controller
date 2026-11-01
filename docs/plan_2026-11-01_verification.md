@@ -85,6 +85,15 @@ Goal: check all 22 outputs on every run, with the chip connected, without extra 
 
 ## Step 3: sample cell (logic-analyser capture, R2)
 
+**Progress 2026-11-01 (Yazan):** item 1 (RTL) and the decode/compare half of item 4 are done
+and [simulated] / [tested]: `fpga/src/sample_cell.sv` + `fpga/tb/sample_cell_tb.sv` 39/39
+(Icarus 12; xsim still to run on the lab PC), `tools/nemo_ctl/samples.py` + pytest 24.
+Changes from the text below: the config is taken when a record is **armed** (run rising), not
+on apply (a mid-run apply would have changed a running record); a `trig_count` output places
+the record on the RUN time axis. Open: where `sample:` lives in the config (a mode only holds
+blocks, as for `expect`), the link region (item 2), the test top on the loopback pairs (item 6),
+and the editor overlay.
+
 Goal: record chosen pins at a chosen rate into FPGA memory and show them on the PC.
 
 1. **RTL.** New `fpga/src/sample_cell.sv`: N input bits (outputs' readback from Step 2 +

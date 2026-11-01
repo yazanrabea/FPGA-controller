@@ -7,9 +7,51 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
-| Yazan | Verification plan Step 1: `expect` on capture settings + `cli verify` + editor Verify button (`docs/plan_2026-11-01_verification.md`). | `feature/yazan-verify` | new `tools/nemo_ctl/verify.py`, `tools/nemo_ctl/{validate,cli,gui}.py`, `tools/nemo_ctl/data/config_gui.html`, new `tools/nemo_ctl/tests/test_verify.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md`. Reads `mode_seq.run_table`, doesn't change it |
+| Yazan | Verification plan Step 3 (sample cell): RTL + tb + PC decode done in simulation; next: link region + test top. Step 1 in PR #2 (review pending, EXP-09 not run). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | new `fpga/src/sample_cell.sv`, `fpga/tb/sample_cell_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/samples.py`, `tools/nemo_ctl/tests/test_samples.py`; docs, `CLAUDE.md` §6 row |
 
 ---
+
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 started (sample cell)
+- Goal: Yazan: "push it and we will review later, can u continue without the EXP-09?".
+  Step 1 pushed as PR #2 (https://github.com/yazanrabea/FPGA-controller/pull/2), not merged.
+  Step 2 (pad readback) waits for Rahaf (changes `chip_top` / `gen_svh.py --chip`), so
+  Step 3's stand-alone parts first.
+- Done:
+  - **`fpga/src/sample_cell.sv`** (new): N pins (already 2-FF synchronized) into a block-RAM
+    ring (`ram_style = "block"`), one sample every `cfg_div` ticks; triggers now / ext strobe
+    (remembered until the next sample) / rise / fall / high / low on `cfg_trig_pin`, judged
+    between samples; `cfg_pre` samples kept before the trigger, `cfg_n` in all, then done;
+    arming = run rising (clears the record, takes the pending config); run falling stops
+    and keeps the data; logical read index (0 = oldest), `rd_data` 1 clock later; status
+    armed / triggered / done / `n_valid` / `trig_idx` / `trig_count`.
+  - **`fpga/tb/sample_cell_tb.sv`** (new, self-checking; pins = a tick counter + a trigger
+    line, so each sample tells when it was taken), `scripts/run_sample_sim.sh`.
+  - **`tools/nemo_ctl/samples.py`** (new): `make_setup` (checks against 4096 samples and the
+    10 ns tick), `sample_times_ns` / `record_window`, `decode` (waves.py lane shape),
+    `compare` (expected edges vs recorded, one sample + sync tolerance), `words_from_bytes`.
+    `tests/test_samples.py`.
+  - Docs: plan Step 3 progress, `docs/decisions.md`, `CLAUDE.md` §6 row, nemo_ctl README.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_cell_tb` **39/39**: immediate trigger, rate divider
+    (incl. div 0 = 1), rising edge with pre-trigger after the 16-deep ring wrapped twice,
+    already-high line is not a rising edge, early trigger (short front), falling edge (and
+    already-low is not one), HIGH / LOW, EXT strobe between samples, run falling mid-record,
+    re-arm clears, mid-run apply doesn't change the record, n clamps, `trig_count` timing.
+  - Mutation check of the testbench: 6 deliberate RTL bugs, each now fails the tb (the first
+    run missed "RISE = HIGH", "FALL = LOW" and "EXT strobe not remembered": 3 tests added);
+    1 more was an equivalent mutant (can't change behaviour).
+  - [tested, pytest] `test_samples.py` 24 passed; full suite 353 passed, 1 skipped.
+  - Not run in xsim (lab PC), not synthesized, not in any top, not on hardware.
+- Problems / fixes:
+  - tb: a mid-run `apply` changed a running record's length -> config is now pending until
+    the next arming (decision).
+  - `compare` took its window from the last *change*, so a pin that never moved hid a
+    missing pulse (a false PASS); now the window is the record's first..last *sample*
+    (`record_window`). Also the start-level check skipped records starting before t=0.
+- Next steps: the link region for the samples (register map v3 section) and a test top
+  `sample_loopback_top` on loopback pairs 0-4 (Phase 4 pins, no `chip_top` change), with a
+  testbench; then xsim + a board run on the lab PC; where `sample:` lives in the config.
 
 ## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-verify: verification plan + Step 1 (`cli verify`)
 - Goal: the mentors' three requirements (read a file -> waveform; sample per a setting;
