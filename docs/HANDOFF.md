@@ -1,10 +1,66 @@
-# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done; verification plan Steps 1 + 3 merged to `main`, passed in xsim, not on the board yet)
+# Handoff — NEMO generic controller (FPGA side ready for the real chip: pad readback EXP-10, in-FPGA sampler EXP-11 / EXP-12, cli verify EXP-09 all PASS on the board, 2026-11-02)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
-> and `docs/WORKLOG.md` (newest entry first). Updated 2026-11-01, Yazan's laptop session
+> and `docs/WORKLOG.md` (newest entry first). **Newest: 2026-11-02 evening (Rahaf, lab PC),
+> the first "Short version" below.** Updated 2026-11-01, Yazan's laptop session
 > (no board, no Vivado): the verification plan for the mentors' three requirements, its
 > Step 1 and Step 3. Updated again 2026-11-02, Rahaf's lab session: PRs #2 / #3 reviewed, run
 > in xsim, merged. Everything below "2026-10-26" is unchanged from Rahaf's lab session.
+
+## Short version (2026-11-02 evening, Rahaf, lab PC): the controller checks itself; next is the real chip
+
+**Everything below is on `main` (last commit `a5850eb`, pushed).**
+
+- **Verification plan done on the board** (all [measured on board] 2026-11-02):
+  - **EXP-09 Part A PASS** (`cli verify` on `vchip_top`): the EXP-08 frame comes back bit-exact
+    **300/300**; a one-bit wrong expectation fails exactly that bit; a pulled wire fails exactly
+    that pin. Part B covered by EXP-10.
+  - **EXP-10 PASS** (pad readback, Step 2): all 22 outputs read back at their pins, 100/100.
+  - **EXP-11 PASS** (the sampler on the loopback bench, `sample_loopback_top`): 1 kHz / 10 MHz,
+    trigger at the programmed index, re-arms; fails on exactly a disconnected pin (it found a
+    loose jumper by itself). Step 4 (logic-analyser cross-check) not done, optional.
+  - **EXP-12 PASS** (the sampler **inside `chip_top` / `vchip_top`**, new today): a whole run
+    recorded at 10 MHz; on `chip_top` the 22 outputs are recorded **at the pads** and match the
+    steps, `sipo_in` = the 136-bit frame from the pins; on `vchip_top` the recorded `piso_out` =
+    the frame bit for bit (167 of 168 in the record: the last edge ends the run).
+- **New design today:** `chip_top` `parameter SAMPLER = 1` (also in `vchip_top`): `sample_cell`
+  4096 x 32 bits = 22 outputs read back + 4 chip outputs + step; registers 0x0020, **samples at
+  0x8000** (the step table takes 0x1000-0x4FFF). Timing: `chip_top` +0.095 ns, `vchip_top`
+  +0.161 ns, 8 BRAM. `chip_top_tb` 21/21 (check 8: every sample = the pins at the PC's tick,
+  exact; a 1-FF mutant is caught). PC: `samples.chip_layout()`, `cli seq sample --target
+  chip_top` (or a `--check` file with `target: chip_top`). pytest **391 passed**.
+  Decision + rejected options: `docs/decisions.md` 2026-11-02.
+- **How to use it** (from `tools/`, `chip_top` on the board):
+  ```
+  python -m nemo_ctl.cli seq load ../config/chip_sim_test.yaml --jtag
+  python -m nemo_ctl.cli seq sample --jtag --rate 10MHz --samples 3300 --run --wait 5       --check ../config/chip_sim_test.yaml --out run.vcd
+  python -m nemo_ctl.cli verify --seq ../config/chip_sim_test.yaml --jtag     # readback + captures
+  ```
+- **Config:** `config/nemo_config.yaml` now carries the EXP-08 frame in INFERENCE `sipo_in`
+  (Rahaf's value; comments kept). The editor's Save still drops comments (not to be fixed).
+- **Dropped by Rahaf** (`docs/decisions.md` "open items dropped"): ringing re-measure, pairs
+  5-15 / analog levels, sending Dima's questions, the EXP-08 transient, the data_in-FAULT note,
+  editor Save comments, editor records, PISO hold step, small review notes. Don't list them.
+- **Jumper rule (important):** **no jumpers -> program the design -> then the jumpers.**
+  `chip_top` drives J2-20..25 as outputs, so EXP-09/11/12 jumpers on a `chip_top` board would
+  join two outputs. Today the bench caught a loose jumper, two swapped return wires and an open
+  `piso_out` wire: check each wire's header position (P column) when a run fails.
+- **Board now:** `chip_top` (with the sampler), **no jumpers**, J18 on 1V8, J17.
+
+**Still open**
+1. Optional: EXP-11 step 4, the sampler against the logic analyser (`clk` / `rst`).
+2. Yazan: review today's work (pad readback, sampler in `chip_top`, C5 / C6); delete his two
+   old branches on GitHub.
+3. Local cleanup on the lab PC: `config/nemo_config.yaml.bak`, `tools/exp11_*.vcd`,
+   `tools/exp12_*.vcd` (uncommitted copies; the records are in `docs/measurements/`).
+4. **The real chip (goal 3).** The FPGA side is ready. Missing, and not to be guessed:
+   - the chip's digital pad voltage (our pins are fixed at **1.8 V**, LVCMOS18);
+   - the analog supplies / biases (`v_read`, `v_write`, `v_erase`, `vth`, ...) and power-up order;
+   - polarity and idle level of `reset`, `set`, `s0_p..s2_p`, `pulse` (TBD in the config);
+   - hardware: chip socket / board, 26 wires + GND per `pin_map`, lab supplies;
+   - READ / WRITE modes (empty in the config).
+   Proposed EXP-13 order: wire with everything off -> chip supplies -> program `chip_top` ->
+   idle readback (nothing shorted) -> `dft0/1_buff` first light with the sampler -> INFERENCE.
 
 ## Short version (2026-11-02 afternoon, Rahaf, lab PC): Step 2 done
 
