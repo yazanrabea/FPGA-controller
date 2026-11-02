@@ -2045,3 +2045,10 @@ Tag every result **[simulated]** or **[measured on board]**.
   - Records + SVG drawings in `docs/measurements/EXP-11_*` (no VCD viewer on the lab PC).
 - Problems / fixes: loose jumper (above). Found: a sequence that waits for `data_in` "captured" doesn't FAULT when data_in is disconnected (`docs/issues.md`).
 - Next steps: Rahaf's decision on a sampler inside `chip_top`; EXP-09 Part A; step 4 (logic analyser) optional.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — EXP-09 Part A
+- Rahaf (after EXP-11): sampler inside `chip_top` -> **decide later, after EXP-09**.
+- Hardware setup: EXP-11 jumpers off -> 14:20:48 `vchip_top` programmed (rebuilt 12:51) -> Rahaf put on the 10 EXP-08 jumpers. J18 1V8, J17.
+- Results [measured on board] (`docs/experiments/EXP-09_cli_verify.md`): runs 1-2 FAIL with the two return wires swapped (J2-28 <-> J2-29 ends); moved -> PASS 26/0; **300/300 every row** (`docs/measurements/EXP-09_a_verify_300.md`); wrong expectation (C7) -> FAIL "1 bit wrong: PISO3 tdc_out0 bit 0" only; J2-29 pulled -> FAIL on piso_out only (82 bits = the frame's ones).
+- Problems / fixes: swapped jumpers (bench), found by the check itself.
+- Next steps: Rahaf: sampler in `chip_top`; push (her OK); config commit with the tests; step 4 of EXP-11 (logic analyser) optional.
