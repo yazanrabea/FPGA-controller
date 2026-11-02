@@ -279,6 +279,42 @@ with the wizard.
 The page only works on this PC: the server listens on `127.0.0.1`, so nothing on the
 network can reach it.
 
+#### Giving someone else the editor
+
+What they can do depends on where they run it.
+
+**On their own computer: edit, preview, check (no board).** The repository is public. They
+need Git and Python 3 (the lab PC has 3.12):
+
+```
+git clone https://github.com/yazanrabea/FPGA-controller.git
+cd FPGA-controller/tools
+pip install -r requirements.txt
+python -m nemo_ctl.cli gui
+```
+
+The page opens at `http://127.0.0.1:8765/` on their computer. Everything in this section
+works there: editing modes and pins, the Signals view, the achieved values and messages, the
+Excel round trip (§2), and Save. They can send you the saved config, or push it on a branch
+(CLAUDE.md §10). **Run on board** and **Verify** don't work there: they need the ZedBoard on
+JTAG (J17) and Vivado's `xsdb`, which only the lab PC has.
+
+**On the board: at the lab PC.** Either they sit at the lab PC and start the editor there
+(`python -m nemo_ctl.cli gui` from `tools/`), or they use the lab PC through remote desktop
+(Windows Remote Desktop, AnyDesk, if the lab allows it). The editor still runs on the lab
+PC; they only see its screen.
+
+**Not by sending a link to your editor.** It listens only on `127.0.0.1` on purpose: it can
+start runs on the board, so opening it to the network would let anyone there drive the
+hardware. Keep it that way.
+
+Tell them:
+- §3.5 (this section) for the editor; §8 for Run on board and Verify.
+- Typing the `sipo_in` frame is enough for a run; **Save** rewrites
+  `config/nemo_config.yaml` and drops its comments, so save only to change the shared config.
+- At the board, the jumper order: **no jumpers -> program the design -> then the jumpers**
+  (`chip_top` drives J2-20..25; a loopback jumper there joins two outputs).
+
 ## 4. Phase 3 — running the RTL simulations
 
 Nothing here touches hardware. This is Icarus Verilog checking that `sig_cell.sv`,
