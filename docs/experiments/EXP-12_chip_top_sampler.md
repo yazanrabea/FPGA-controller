@@ -76,6 +76,26 @@ Problems / fixes:
 - The 4 chip inputs stay 0 (nothing connected, PULLDOWN).
 - Files: `docs/measurements/EXP-12_chip_top_pads_record.vcd` / `.svg`.
 
+### Part C: `chip_top`'s 4 inputs capture known signals (loopback jumpers, 16:16)
+Rahaf asked to check that the input captures work without a chip. With `chip_top` loaded (no
+jumpers when programmed), 4 jumpers from `chip_top` outputs to its inputs (output -> input,
+safe; nothing on J2-20..25): J3-1 (`reset`, held HIGH) -> J3-16 (`sipo_out`, LEVEL); J3-8
+(`shift`, rises 2.7 us into the PISO read, after clk_piso's first falling edge) -> J2-17
+(`piso_out`, SERIAL 168 on clk_piso falling); J3-4 (`clk_sipo`) -> J2-18 (`dft0_buff`, PERIOD);
+J3-7 (`clk_piso`) -> J2-19 (`dft1_buff`, PERIOD). `verify --seq ../config/chip_sim_test.yaml --jtag`:
+
+| Input | Measured | Predicted |
+|---|---|---|
+| `sipo_out` (J3-16) | level 1 | 1 |
+| `piso_out` (J2-17) | capture `0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF` | first bit 0, then 167 ones (MSB first) |
+| `dft0_buff` (J2-18) | period 100 ticks | 100 (1 MHz) |
+| `dft1_buff` (J2-19) | period 100 ticks | 100 |
+
+Run PASS, exit 0; readback unchanged (sipo_in frame bit-exact). Edges read 0 (cleared when the
+run ends, as `cap_cell` does) and `piso_out`'s level 0 is `shift` back at idle after the run.
+All four chip-output inputs of `chip_top` (LA16-19) capture correctly on the board: LEVEL,
+SERIAL (168 bits, bit order right) and PERIOD.
+
 ## 4. Conclusion
 
 **Part A PASS.** The sampler inside the chip controller works on the board: it records a whole
