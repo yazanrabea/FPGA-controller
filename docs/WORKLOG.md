@@ -1781,3 +1781,19 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## 2026-10-26, Rahaf (with Claude), branch main — handoff after the EXP-08 follow-ups
 - Done: `docs/HANDOFF.md`: short version with the phirst result (F0C3, 101/101) and the simulation-vs-FPGA difference after `rst_sipo` (C3E7 vs 0000, 100/100); next steps (send Dima's questions first); the sim command for all three virtual-chip sequences. Board unchanged: `vchip_top`, 10 jumpers on.
 - Next steps: send Dima's questions; review of the C5 / C6 code.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, review of PR #2 / PR #3 + step 3 simulations
+- Goal: Rahaf's review of Yazan's PRs (#2 `feature/yazan-verify`, #3 `feature/yazan-sample-cell`, stacked on #2) and their first xsim run on the lab PC. Nothing on the board.
+- Setup: `git fetch`; `main` = origin/main (2d3fb7d), clean; `user.name` = Rahaf Aburaya. `gh` is not installed on the lab PC, so the PR diffs were read as branch diffs (`main...origin/feature/yazan-verify`, `origin/feature/yazan-verify...origin/feature/yazan-sample-cell`). Each PR checked out in its own worktree (`../wt_pr2` at dd1956d, `../wt_pr3` at 0b65a98) because the config editor was running from this folder.
+- Results [simulated, xsim 2022.1, lab PC], PR #3 code (`phase7_link_top` default SAMPLER = 0 for the Phase 7 tbs):
+  - `SIM=xsim scripts/run_phase7_sim.sh`: seq_engine_tb 40, seq_bank_tb 10, phase7_seq_loopback_top_tb 27, phase7_link_top_tb 21: all PASS (same as main / Icarus).
+  - `SIM=xsim scripts/run_sample_sim.sh` **as committed: fails to start** `sample_loopback_top_tb`: xsim `Expected a switch but found C`. PR #3's `sim_lib.sh` passes `-testplusarg dump_a=C:\...` on the command line, and Windows `xsim.bat` splits it at `=`. `sample_cell_tb` before it: 39/39 PASS.
+  - With a local, uncommitted fix in `../wt_pr3/scripts/sim_lib.sh` (plusargs written to an xsim `-f` options file, backslashes turned into `/` because the options-file parser drops them): `sample_cell_tb` **39/39**, `sample_loopback_top_tb` **24/24**, `check_sample_dump` **PASS** (record A: 10/10 pins pass; record B: only `clk_in` fails, as intended). xsim agrees with Yazan's Icarus results.
+  - pytest: PR #2 329 passed, 1 skipped; PR #3 371 passed, 1 skipped (incl. the page-script syntax check, node present).
+- Problems / findings (reported to Rahaf, for Yazan):
+  - PR #3 `scripts/sim_lib.sh`: plusargs on the xsim command line break on Windows (above); fix proposed.
+  - PR #2 `verify.py`: an `edge_count` expect can never pass on the board: `cap_cell.sv` clears `edge_count` while `run` is low, and `cli verify` reads after the run (EXP-07/08 always read `edges 0`). The USER_MANUAL example `dft0_buff ... edge_count, expect: 136` would always FAIL. The pytest fake link returns any count, so the tests don't see it.
+  - Smaller ones in the review message (unused variable, `expect` on a BUS / DFT-helper setting not flagged, EXP-09 Part B should say "remove the 10 vchip jumpers first", "34 LA_P pins" vs the verified 32).
+- Decisions: none (merge / Step 2 / sampler in chip_top are Rahaf's questions, asked).
+- Next steps: Rahaf's answers; Yazan fixes; then the board steps (EXP-09, build sample_loopback_top, EXP-11), each after Rahaf's OK.
+
