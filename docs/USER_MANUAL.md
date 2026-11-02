@@ -770,11 +770,14 @@ you expected. Write the expected value into the capture's own setting:
 
 ```yaml
 sipo_out:  {type: CAPTURE, mode: level, expect: 1}                    # level when read, after the run
-dft0_buff: {type: CAPTURE, mode: edge_count, expect: 136, tolerance: 0}   # rising edges, +- N
 dft1_buff: {type: CAPTURE, mode: period, expect: 1us, tolerance: 1%}  # or 1MHz; 1%, 20ns or ticks (default 1 tick)
 piso_out:  {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling,
             expect: "0x…", mask: "0x…"}                              # mask: 1 = bit checked (default all)
 ```
+
+An `edge_count` capture **can't** have an `expect`: the cell clears its count when the run
+ends, and verify reads after the run, so it would always read 0. `validate`, the editor and
+`verify` refuse it (`docs/issues.md`, 2026-11-02). Check a clock with `mode: period` instead.
 
 In the browser editor: the **expect** box on the pin's row (tolerance / mask appear once it
 is set). `validate` and the editor check the value (wrong kind, doesn't fit `bits`, an

@@ -26,7 +26,8 @@ Goal: one command that runs a mode on the board and says PASS/FAIL per captured 
    CAPTURE setting in `config/nemo_config.yaml`; what it means follows the pin's capture mode:
    ```yaml
    sipo_out:  {type: CAPTURE, mode: level, expect: 0}           # level when read, after the run
-   dft0_buff: {type: CAPTURE, mode: edge_count, expect: 136}    # rising edges; tolerance: N edges
+   # (dft0_buff: {type: CAPTURE, mode: edge_count, expect: 136}: dropped 2026-11-02, an edge
+   #  count is cleared when the run ends and can't be checked after it, docs/issues.md)
    dft1_buff: {type: CAPTURE, mode: period, expect: 1us, tolerance: 1%}   # or 1MHz; tolerance in % or a time
    piso_out:  {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling,
                expect: "0x...", mask: "0x..."}                  # mask: 1 = bit is checked

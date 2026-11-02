@@ -71,8 +71,6 @@ class _Board:
 @pytest.mark.parametrize("params, kind, value, tol", [
     ({"mode": "level", "expect": 1}, "level", 1, 0),
     ({"mode": "level", "expect": "HIGH"}, "level", 1, 0),
-    ({"mode": "edge_count", "expect": 136}, "edges", 136, 0),
-    ({"mode": "edges", "expect": "136", "tolerance": 2}, "edges", 136, 2),
     ({"mode": "period", "expect": "1us"}, "period", 100, 1),
     ({"mode": "period", "expect": "1MHz", "tolerance": "1%"}, "period", 100, 1),
     ({"mode": "period", "expect": "2us", "tolerance": "50ns"}, "period", 200, 5),
@@ -99,8 +97,8 @@ def test_no_expect_is_none_but_a_stray_tolerance_is_an_error():
 @pytest.mark.parametrize("params, msg", [
     ({"mode": "level", "expect": 2}, "0 / 1"),
     ({"mode": "level", "expect": 1, "tolerance": 1}, "no tolerance"),
-    ({"mode": "edges", "expect": "many"}, "not a number"),
-    ({"mode": "edges", "expect": -1}, ">= 0"),
+    ({"mode": "edge_count", "expect": 136}, "can't be checked"),
+    ({"mode": "edges", "expect": "136", "tolerance": 2}, "can't be checked"),
     ({"mode": "period", "expect": "fast"}, "not a time or a frequency"),
     ({"mode": "period", "expect": "1us", "tolerance": "lots"}, "percentage"),
     ({"mode": "serial", "expect": "0xA5"}, "bits"),
@@ -147,9 +145,6 @@ def test_expect_does_not_change_the_compiled_table():
 def test_each_kind_passes_and_fails():
     lv = parse_expect("p", "B", {"mode": "level", "expect": 1})
     assert check_capture(lv, {"level": 1}, 1).ok and not check_capture(lv, {"level": 0}, 1).ok
-    ed = parse_expect("p", "B", {"mode": "edges", "expect": 136, "tolerance": 1})
-    assert [check_capture(ed, {"edges": n}, 1).ok for n in (134, 135, 136, 137, 138)] == [
-        False, True, True, True, False]
     pe = parse_expect("p", "B", {"mode": "period", "expect": "1us"})
     assert [check_capture(pe, {"period": n}, 1).ok for n in (98, 99, 100, 101, 102)] == [
         False, True, True, True, False]
@@ -328,3 +323,33 @@ def test_cli_seq_on_a_fake_vchip(monkeypatch, capsys, tmp_path):
     wrong.write_text("target: phase7_seq_loopback_top\nsteps: []\n")
     assert cli.main(["verify", "--seq", str(wrong), "--dry-run"]) == 1
     assert "verify runs on chip_top" in capsys.readouterr().err
+
+
+# ---- edge_count expects are refused (docs/issues.md 2026-11-02) ----
+# cap_cell.sv clears edge_count while run is low and the captures are read after the run, so
+# an edge-count expect could only ever read 0 on the board (EXP-07 / EXP-08: always "edges 0").
+
+def test_edge_count_expect_is_refused_everywhere():
+    import yaml
+    from nemo_ctl import gui
+    from nemo_ctl.config import config_from_dict
+    from nemo_ctl.pins import load_pin_db
+    from nemo_ctl.validate import validate_config
+    text = _text().replace("sipo_out: {type: CAPTURE, mode: level}",
+                           "sipo_out: {type: CAPTURE, mode: edge_count, expect: 136}")
+    assert text != _text()
+    doc = yaml.safe_load(text)
+    # validate (and so the editor's live check and Save) reports it on the pin
+    issues = [i for i in validate_config(config_from_dict(doc), load_pin_db())
+              if i.key == "sipo_out" and i.level == "error"]
+    assert issues and "can't be checked" in issues[0].message
+    # cli verify / the editor's Verify refuse it before touching the board
+    with pytest.raises(VerifyError, match="can't be checked"):
+        mode_expectations(config_from_dict(doc), "INFERENCE")
+    r = gui.verify_payload({**doc, "mode": "INFERENCE", "dry": True}, open_link=lambda: pytest.fail("no board"))
+    assert not r["ok"] and "can't be checked" in r["error"]
+
+
+def test_edge_count_capture_without_expect_is_still_shown():
+    assert parse_expect("p", "B", {"mode": "edge_count"}) is None
+

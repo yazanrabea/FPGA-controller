@@ -190,9 +190,10 @@ const FIELDS = {
 };
 const CAPTURE_SERIAL_ONLY = new Set(["clock", "bits", "edge", "mask"]);
 // what `expect` means per capture mode (tools/nemo_ctl/verify.py)
-const EXPECT_HINT = {level: ["0 or 1", "level when read, after the run"], edge_count: ["e.g. 136", "rising edges"],
+const EXPECT_HINT = {level: ["0 or 1", "level when read, after the run"],
+                     edge_count: ["not checkable", "the count is cleared when the run ends; leave blank (use period or serial)"],
                      period: ["e.g. 1us or 1MHz", ""], serial: ["e.g. 0xA5", ""]};
-const TOL_HINT = {edge_count: "± edges (0)", period: "1%, 20ns or ticks (1 tick)"};
+const TOL_HINT = {period: "1%, 20ns or ticks (1 tick)"};
 
 const $ = (id) => document.getElementById(id);
 function el(tag, attrs, ...kids) {

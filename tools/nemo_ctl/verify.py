@@ -4,18 +4,19 @@ and check every capture against what the config says it should be.
 The expected value is part of the CAPTURE setting itself, next to its mode:
 
     sipo_out:  {type: CAPTURE, mode: level, expect: 0}
-    dft0_buff: {type: CAPTURE, mode: edge_count, expect: 136, tolerance: 0}
     dft1_buff: {type: CAPTURE, mode: period, expect: 1us, tolerance: 1%}
     piso_out:  {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, edge: falling,
                 expect: "0x...", mask: "0x..."}
 
 What each kind compares (cap_cell.sv, read back by mode_seq.run_table after the run):
   level   the pin's level when read, i.e. after the run (0/1, LOW/HIGH)
-  edges   rising edges counted while the mode ran; tolerance = +- edges (default 0)
   period  the last measured rising-to-rising period; expect a time or a frequency;
           tolerance "1%" (relative), a time ("20ns") or a number of ticks (default 1 tick)
   serial  the captured bits; mask (1 = checked, default all `bits`); a 168-bit piso_out
           mismatch is named per PISO stage and field (sipo_piso.decode_piso_frame)
+  edge_count  NOT checkable: cap_cell.sv clears its edge count when RUN drops, and the
+          captures are read after the run, so it always reads 0. An expect there is
+          refused (docs/issues.md 2026-11-02); use period (a clock) or serial instead.
 
 A capture without `expect` is still read and shown, but not judged. mode_seq.py ignores
 these fields, so a mode with expectations runs exactly like one without.
@@ -37,6 +38,9 @@ EXPECT_KEYS = ("expect", "tolerance", "mask")
 _KINDS = {"level": "level", "edge_count": "edges", "edges": "edges",
           "period": "period", "frequency": "period", "serial": "serial"}
 PISO_PIN, PISO_BITS = "piso_out", 168
+EDGES_NOT_CHECKABLE = ("an edge_count capture can't be checked: the cell clears its count when "
+                       "the run ends, and verify reads after the run, so it always reads 0 "
+                       "(use mode period for a clock, or serial)")
 
 
 class VerifyError(ValueError):
@@ -47,9 +51,9 @@ class VerifyError(ValueError):
 class Expectation:
     pin: str
     block: str
-    kind: str            # level / edges / period / serial
-    value: int | float   # level 0/1, edge count, period in ticks, serial bits as int
-    tol: float = 0.0     # absolute, in the value's unit (edges, ticks); serial: unused
+    kind: str            # level / period / serial (edge_count is refused, see EDGES_NOT_CHECKABLE)
+    value: int | float   # level 0/1, period in ticks, serial bits as int
+    tol: float = 0.0     # period: absolute, in ticks; level / serial: unused
     bits: int = 0        # serial width
     mask: int = 0        # serial: 1 = checked
     msb_first: bool = True
@@ -61,8 +65,6 @@ class Expectation:
             return t if self.mask == (1 << self.bits) - 1 else f"{t} mask {_hex(self.mask, self.bits)}"
         if self.kind == "period":
             return f"{self.text} ({self.value:g} +- {self.tol:g} ticks)"
-        if self.kind == "edges" and self.tol:
-            return f"{self.value} +- {self.tol:g}"
         return str(self.value)
 
 
@@ -137,11 +139,7 @@ def parse_expect(pin: str, block: str, params: dict) -> Expectation | None:
             raise VerifyError("a level has no tolerance")
         return Expectation(pin, block, kind, lvl, text=str(raw))
     if kind == "edges":
-        n = _int(raw, "expect")
-        tol = 0 if tol_raw is None else _int(tol_raw, "tolerance")
-        if n < 0 or tol < 0:
-            raise VerifyError("edge count and tolerance must be >= 0")
-        return Expectation(pin, block, kind, n, tol=tol, text=str(raw))
+        raise VerifyError(EDGES_NOT_CHECKABLE)
     if kind == "period":
         ticks = _period_ticks(raw)
         tol = _period_tol(tol_raw, ticks)
@@ -229,7 +227,7 @@ def load_verify_sequence(path):
 @dataclass
 class Row:
     pin: str
-    kind: str                # level / edges / period / serial / status / "-" (not judged)
+    kind: str                # level / period / serial / status / "-" (not judged)
     expected: str
     measured: str
     ok: bool | None          # None = shown, not judged
@@ -262,9 +260,6 @@ def check_capture(e: Expectation, cap: dict, cap_w: int) -> Row:
     if e.kind == "level":
         got = int(cap["level"])
         return Row(e.pin, e.kind, e.expected_text(), str(got), got == e.value)
-    if e.kind == "edges":
-        got = int(cap["edges"])
-        return Row(e.pin, e.kind, e.expected_text(), str(got), abs(got - e.value) <= e.tol)
     if e.kind == "period":
         got = int(cap["period"])
         ok = got > 0 and abs(got - e.value) <= e.tol + 1e-9

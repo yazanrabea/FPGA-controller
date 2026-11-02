@@ -17,10 +17,10 @@
   `scripts/sim_lib.sh` passed `+dump_a=C:\...` on the command line and Windows `xsim.bat`
   split it at `=`, so `sample_loopback_top_tb` never started. Plusargs now go in an xsim
   options file (`-f`), with forward slashes.
-- **Open finding, merged anyway (Rahaf's decision): an `edge_count` expect can never pass**
-  (`docs/issues.md`). `cap_cell` clears its edge count when RUN drops, and `cli verify` reads
-  after the run, so it always reads 0. **Don't put an `expect` on an `edge_count` capture**
-  until it's fixed (refuse it in `validate.py` / `verify.py`, or keep the count in `cap_cell`).
+- **Finding: an `edge_count` expect could never pass** (`cap_cell` clears its edge count when
+  RUN drops; `cli verify` reads after the run). **Fixed 2026-11-02:** `verify.py` /
+  `validate.py` / the editor refuse an `expect` on `edge_count` and say to use period or
+  serial (`docs/issues.md`).
 - **GitHub:** PR #2 shows merged. **PR #3 shows "closed", not merged**, although all its
   commits are in `main`: deleting `feature/yazan-verify` from the command line closed the
   stacked PR instead of retargeting it (the website's Delete branch button retargets).
@@ -28,8 +28,7 @@
 - **Board:** unchanged, `vchip_top` with its 10 jumpers on (the wiring EXP-09 Part A needs).
 - **Next:** the lab steps, later (Rahaf): **EXP-09** (`cli verify`, Part A on `vchip_top`,
   then remove the 10 jumpers, Part B on `chip_top`); **build `sample_loopback_top`** (record
-  WNS / BRAM), then **EXP-11** with the bring-up jumpers. Each board step after Rahaf's OK.
-  Fix the `edge_count` expect. Rahaf's decisions still open: **Step 2** (pad readback) and
+  WNS / BRAM), then **EXP-11** with the bring-up jumpers. Each board step after Rahaf's OK. Rahaf's decisions still open: **Step 2** (pad readback) and
   a **sampler in `chip_top`**. Dima's questions: still not sent.
 - **Editor:** if it's running from before the merge, restart it (`cd tools`, `python -m
   nemo_ctl.cli gui`) before using the new **Verify** button.
@@ -341,8 +340,8 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 **From 2026-11-01 (verification plan), first:**
 
 A. ~~Rahaf: review PR #2, then PR #3~~: **done and merged 2026-11-02** (see the short version).
-   Left from the review: the `edge_count` expect (open issue) and the smaller notes in
-   `docs/issues.md`.
+   Left from the review: the smaller notes in `docs/issues.md` (the `edge_count` expect is
+   fixed).
 B. **Lab, EXP-09** (`docs/experiments/EXP-09_cli_verify.md`): `vchip_top` with its 10 jumpers,
    `cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --repeat 300`, plus the two
    negative checks; then **remove the 10 jumpers** and program `chip_top`,
@@ -424,7 +423,8 @@ E. **Dima's questions**: add the below-ground input rating (EXP-06's -0.41 V), f
   stay the verified design; the sampler is only in `sample_loopback_top`.
 - Don't trust an Icarus pass alone: run new testbenches in xsim on the lab PC before calling
   them done (2026-11-02 the sampler tb only ran in xsim after a `sim_lib.sh` fix).
-- Don't put an `expect` on an `edge_count` capture until the open issue is fixed.
+- Don't expect an edge count after a run: `cap_cell` clears it when RUN drops (the tools now
+  refuse an `expect` on `edge_count`).
 
 ## Key files
 

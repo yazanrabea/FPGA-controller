@@ -1998,3 +1998,10 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Done: `docs/HANDOFF.md`: a 2026-11-02 short version (PRs #2 / #3 merged, the xsim results, the sim_lib fix, the open `edge_count` finding, PR #3 shown as closed on GitHub, board unchanged, next steps); last verified results; next steps A and C updated; working rules (don't `pull --rebase` over a merge; ask before pushing to main or merging; stacked PRs); don'ts; key files.
 - Next steps: EXP-09, build `sample_loopback_top` + EXP-11 (each after Rahaf's OK); fix the `edge_count` expect; Rahaf's decisions on Step 2 and a sampler in `chip_top`; Dima's questions.
 
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — the edge_count expect fixed
+- Goal: Rahaf: "fix the edge_count expect" (review finding 1, `docs/issues.md`).
+- Decision: refuse it (no RTL change). Rejected for now: keeping the count in `cap_cell` after the run: it changes a cell every top uses, and the current bitstreams (`chip_top`, `vchip_top`) would still read 0 until rebuilt.
+- Done: `tools/nemo_ctl/verify.py`: `parse_expect` raises `EDGES_NOT_CHECKABLE` for an `expect` on `edge_count` (says why and to use period / serial); the dead edge-compare code removed; docstring. `validate.py`, the editor's live check / Save and `cli verify` / Verify all report it through `parse_expect`. Editor (`data/config_gui.html`): the expect hint for edge_count says "not checkable". USER_MANUAL §8.9 example dropped + a note; plan example marked dropped; `docs/issues.md` entry marked FIXED.
+- Results [tested, pytest]: `test_verify.py` 41 passed (new: refused in parse, validate, `mode_expectations`, the editor's verify endpoint; an edge_count capture without expect still shown); full suite 371 passed, 1 skipped. No RTL changed, nothing to simulate or rebuild.
+- Next steps: the smaller review notes (`docs/issues.md`); EXP-09 later.
+

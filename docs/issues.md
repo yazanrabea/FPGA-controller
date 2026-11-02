@@ -222,7 +222,7 @@ Format: symptom, suspected cause, fix, confirmation.
 - Status: reported for Dima (questions file, Q1). Controller rule until answered: don't use
   `sel[23:8]` between a reset and the first phirst.
 
-## 2026-11-02: `cli verify` — an `edge_count` expect can never pass on the board (OPEN)
+## 2026-11-02: `cli verify` — an `edge_count` expect can never pass on the board (FIXED 2026-11-02)
 - Found in the review of PR #2 (merged 2026-11-02 with this open, Rahaf's decision).
 - `cap_cell.sv` clears `edge_count` whenever `run` is low (the `else if (!run)` branch), and
   `cli verify` / the editor's Verify read the captures after the run, so the edge count read is
@@ -232,6 +232,14 @@ Format: symptom, suspected cause, fix, confirmation.
 - Fix options (to decide): refuse `expect` on `edge_count` in `validate.py` / `verify.py` and
   drop the example; or keep the count in `cap_cell` after the run (RTL change to a cell every
   top uses: re-run all sims). Until then, don't put an `expect` on an `edge_count` capture.
+- **Fix (2026-11-02, Rahaf: "fix the edge_count expect"):** the first option, no RTL change and
+  no rebuild (the current bitstreams would still read 0 with the second). `verify.parse_expect`
+  refuses an `expect` on `edge_count` with a message that says why and what to use instead;
+  `validate.py`, the editor's live check / Save and `cli verify` / Verify all go through it.
+  The dead edge-compare code is removed; the editor's hint says "not checkable"; the USER_MANUAL
+  and plan examples are dropped. An `edge_count` capture without `expect` is still read and
+  shown. Tests: `test_verify.py` (refused in parse, validate, `mode_expectations`, the editor's
+  verify endpoint). The smaller review notes below are still open.
 - Other review notes, smaller: `expect` on a BUS group / the DFT helper isn't flagged by
   `validate.py`; unused variable `last` in `verify.sequence_expectations`; EXP-09 Part B should
   say to remove the 10 vchip jumpers before programming `chip_top`; the plan's "26 of the 34
