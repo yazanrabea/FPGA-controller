@@ -89,6 +89,22 @@ def test_cli_chip_top_record_passes_and_a_stuck_pin_fails(tmp_path, monkeypatch,
     assert [l.split()[0] for l in text.splitlines() if l.rstrip().endswith("FAIL") or " FAIL " in l] == ["clk_sipo"]
 
 
+def test_a_record_the_run_ended_early_still_passes(monkeypatch, capsys):
+    """EXP-12 (2026-11-02): 3300 samples at 10 MHz, the run ended at 320 us -> 3196 samples,
+    triggered, not done; the check passed but the exit code was 1."""
+    rec = _good_record(_setup())
+    short = rec.words[:3196]
+    args = ["seq", "sample", "--jtag", "--rate", "10MHz", "--samples", "3300", "--read-only",
+            "--check", str(SEQ)]
+    monkeypatch.setattr(cli, "_open_seqlink", lambda a: _BoardLink(words=short, status=(0b010, 0, 0),
+                                                                     bits=32, base=0x8000))
+    assert cli.main(args) == 0
+    assert "triggered" in capsys.readouterr().out
+    monkeypatch.setattr(cli, "_open_seqlink", lambda a: _BoardLink(words=short, status=(0b001, 0, 0),
+                                                                     bits=32, base=0x8000))
+    assert cli.main(args) == 1                       # armed, never triggered: not a record
+
+
 def test_cli_refuses_a_target_whose_layout_doesnt_match(monkeypatch, capsys):
     monkeypatch.setattr(cli, "_open_seqlink", lambda args: _BoardLink(bits=16))      # a loopback bitstream
     assert cli.main(["seq", "sample", "--jtag", "--target", "chip_top", "--rate", "1MHz", "--read-only"]) == 1

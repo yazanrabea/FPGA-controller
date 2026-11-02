@@ -406,7 +406,8 @@ def cmd_seq_sample(args: argparse.Namespace) -> int:
         out.write_text(to_vcd(setup, rec, expected=expected, step_field=layout.step_field)
                        if out.suffix.lower() == ".vcd" else to_csv(setup, rec), encoding="utf-8")
         print(f"written to {out}")
-    return 0 if st["done"] and passed else 1
+    # a record the run's end stopped before it filled is complete too (triggered, not done)
+    return 0 if (st["done"] or st["triggered"]) and passed else 1
 
 
 def cmd_link_status(args: argparse.Namespace) -> int:
