@@ -820,11 +820,26 @@ reads its outputs back inside the FPGA (its DFT outputs have no pin): the sectio
 
 ### 8.10 Record the pins inside the FPGA (`seq sample`, plan 2026-11-01 Step 3)
 
+**On the chip controller (from the `chip_top` / `vchip_top` built after 2026-11-02):** the
+same recorder is inside `chip_top`. It records the **22 outputs as read back at their pins**,
+the **4 chip outputs** and the step number, 4096 samples. Give `--target chip_top` (or a
+`--check` file with `target: chip_top`, e.g. `config/chip_sim_test.yaml`):
+
+```
+python -m nemo_ctl.cli seq load ../config/chip_sim_test.yaml --jtag
+python -m nemo_ctl.cli seq sample --jtag --rate 10MHz --samples 3300 --run --wait 5 \
+    --check ../config/chip_sim_test.yaml --out chip.vcd
+```
+10 MHz x 3300 samples = 330 us covers the whole test sequence (320 us). `--check` judges the
+22 outputs against the waves the steps predict; the 4 chip outputs are shown, not judged.
+A record that the run ends before it fills says "triggered", not "done" (the cell stops
+with the run and keeps what it has). **[simulated] only so far** (`chip_top_tb` check 8).
+
 `sample_loopback_top` is the Phase 7 link bench (`phase7_link_jtag_top`: same pins, same 5
 jumpers J3-0..4 -> J3-16, J2-17..20) plus a small logic analyser in the FPGA: it records
 all 10 pins (the 5 outputs and the 5 inputs) into block RAM, up to 4096 samples, at up to
-100 MHz, around a trigger, and the PC reads it back over JTAG. **[simulated] only so far;
-not built or run on the board.**
+100 MHz, around a trigger, and the PC reads it back over JTAG. **[measured on board]
+EXP-11 PASS (2026-11-02).**
 
 ```
 create_project.tcl -tclargs sample_loopback_top build        # lab PC, once

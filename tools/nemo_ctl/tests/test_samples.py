@@ -180,18 +180,21 @@ def test_csv_and_vcd():
 # ---- the link (SeqLink sampler_*, against a register image) ----
 
 class _RegLink(SeqLink):
-    """SeqLink whose read_reg / write_reg hit a dict (sample_loopback_top's map)."""
-    def __init__(self, has_sampler=True, words=(), status=(0b110, 0, 0)):
+    """SeqLink whose read_reg / write_reg hit a dict (sample_loopback_top's map; with
+    bits=32, base=0x8000 chip_top's)."""
+    def __init__(self, has_sampler=True, words=(), status=(0b110, 0, 0), bits=16, base=V2_SAMPLES):
         self.regs = {}
         self.target = None
         if has_sampler:
-            self.regs[V2_SAMPLER + 20], self.regs[V2_SAMPLER + 21] = 16, 12
+            self.regs[V2_SAMPLER + 20], self.regs[V2_SAMPLER + 21] = bits, 12
         st, idx, cnt = status
         self.regs[V2_SAMPLER + 11] = st
         for i, b in enumerate(len(words).to_bytes(2, "little") + idx.to_bytes(2, "little") + cnt.to_bytes(4, "little")):
             self.regs[V2_SAMPLER + 12 + i] = b
+        nb = (bits + 7) // 8
         for i, w in enumerate(words):
-            self.regs[V2_SAMPLES + 2 * i], self.regs[V2_SAMPLES + 2 * i + 1] = w & 0xFF, w >> 8
+            for j in range(nb):
+                self.regs[base + nb * i + j] = (w >> (8 * j)) & 0xFF
         self.reads = []
 
     def read_reg(self, addr, length):

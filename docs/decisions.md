@@ -183,3 +183,19 @@ Each entry: date, decision, reason, rejected options.
   "tie a pin to GND" as EXP-10's negative check (shorts a driving output); loopback jumpers
   (no free pins, `decisions.md` 2026-11-01).
 
+## 2026-11-02: the sampler goes into `chip_top` and `vchip_top` (Rahaf)
+- **Decision** (after EXP-11 PASS and EXP-09): `chip_top` gets `parameter bit SAMPLER = 1`,
+  the EXP-11 `sample_cell` (unchanged), **4096 x 32 bits**; on in `vchip_top` too (it
+  instantiates `chip_top`). Work on `main`; stop after simulation + PC side, before the builds.
+- **What a sample holds:** the 22 outputs **as read back** (`rb_s1`, the EXP-10 pad readback),
+  not the output registers, so the record shows the pins themselves; the 4 chip outputs; the
+  step number. All three through 2 FFs, so the PC's time formula (samples.py) is unchanged.
+- **Samples at 0x8000**, not 0x4000 as on the loopback bench: `chip_top`'s step table is
+  write-only at 0x1000-0x4FFF (16 x 1024 bytes). Not a real clash (reads vs writes), but
+  confusing; 0x8000 is free. The PC takes the address from the layout.
+- **Read path:** both new regions decoded from address bits only (the readback fix,
+  `docs/issues.md`), and the sample byte muxed in after the register read
+  (`phase7_link_top`'s pattern), to protect the +0.176 ns slack. Build still to confirm.
+- **Rejected:** 8192 deep (8 RAMB36; 4096 at 10 MHz already covers a whole 320 us run);
+  only `chip_top` (`vchip_top` gives a sampler test with known answers before the real chip);
+  the output registers instead of the pads (that would hide what EXP-10 can see).

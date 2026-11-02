@@ -17,10 +17,12 @@ is the cell's input on exactly that tick, and the input is the pins 2 ticks earl
 formula holds with "after the cell's run rose" = the tick the sequencer's run goes high
 (step 0's APPLY is one tick before). `offset_ticks` moves the axis (e.g. to a step's start).
 
-Wiring: a top level records a fixed list of pins (LOOPBACK_PINS for sample_loopback_top:
-bit k = LOOPBACK_PINS[k]); a setup picks which of them to decode and show. Link side:
-link.SeqLink.sampler_* (registers 0x0020.., samples 0x4000.., docs/link_register_map.md).
-Not on hardware yet.
+Wiring: a top level records a fixed list of pins (a SamplerLayout: LOOPBACK_LAYOUT for
+sample_loopback_top, chip_layout() for chip_top / vchip_top; bit k = layout.pins[k]); a setup
+picks which of them to decode and show. Link side: link.SeqLink.sampler_* (registers
+0x0020.., samples at layout.samples_base, docs/link_register_map.md).
+On hardware: sample_loopback_top, EXP-11 (2026-11-02). chip_top's sampler: [simulated]
+fpga/tb/chip_top_tb.sv check 8 (every sample = the pins at the tick sample_times_ns gives).
 """
 from __future__ import annotations
 
@@ -36,6 +38,31 @@ LOOPBACK_PINS = ("clk", "rst", "data", "cs", "en", "clk_in", "rst_in", "data_in"
 LOOPBACK_PAIRS = {"clk_in": "clk", "rst_in": "rst", "data_in": "data", "cs_in": "cs", "en_in": "en"}
 STEP_FIELD = (10, 4)   # sample_loopback_top: bits 13:10 = the sequencer's step (lowest bit, width)
 EDGE_TRIGGERS = ("rise", "fall", "high", "low")
+CHIP_SAMPLES_BASE = 0x8000   # chip_top: the step table (write-only) takes 0x1000-0x4FFF
+
+
+@dataclass(frozen=True)
+class SamplerLayout:
+    """What a top level wires to its sample cell."""
+    name: str
+    pins: tuple[str, ...]          # bit k of a sample = pins[k]
+    pairs: dict                    # input -> the output it loops back from (loopback bench), else {}
+    step_field: tuple[int, int]    # (lowest bit, width) of the sequencer's step number
+    bits: int                      # bits per sample (the bitstream's S_INFO_BITS)
+    samples_base: int              # READ_REG address of sample 0
+
+
+LOOPBACK_LAYOUT = SamplerLayout("sample_loopback_top", LOOPBACK_PINS, LOOPBACK_PAIRS, STEP_FIELD,
+                                16, 0x4000)
+
+
+def chip_layout() -> SamplerLayout:
+    """chip_top / vchip_top (SAMPLER = 1, 2026-11-02): bits 0-21 the 22 outputs as read back
+    (at the pads; vchip_top: the output registers), 22-25 the 4 chip outputs, 26-29 the step."""
+    from .sequence import chip_target
+    t = chip_target()
+    pins = tuple(c.name for c in t.sig_cells) + tuple(c.name for c in t.cap_cells)
+    return SamplerLayout("chip_top", pins, {}, (len(pins), 4), 32, CHIP_SAMPLES_BASE)
 
 
 class SampleError(ValueError):

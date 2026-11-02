@@ -216,6 +216,28 @@ when the next run starts. A bitstream without readback reads 0 at RB_INFO.
 | 0x0360 | 16 | info: +0 cells (22; 0 = no readback), +1 PAD_READBACK (1 = read at the pads, 0 = from the output registers, `vchip_top`), +2..3 SIPO bits sampled, +4 SIPO width (136), +5..8 window length (ticks), rest 0 |
 | 0x0380 | 17 | the sipo_in readback frame, little-endian (bit 0 = the last bit sampled); sampled on the readback of clk_sipo's sampling edge |
 
+## Sampler in `chip_top.sv` / `vchip_top.sv` (SAMPLER = 1, 2026-11-02)
+
+The same `sample_cell` and the same registers 0x0020-0x0035 as the loopback bench above
+(`S_TRIG_PIN` is 0..31 here), with 32-bit samples and the samples at **0x8000** (the step
+table, write-only, takes 0x1000-0x4FFF in `chip_top`). `S_INFO_BITS` = 32 tells the PC which
+layout it is talking to (`samples.chip_layout()`, `cli seq sample --target chip_top`).
+
+| Bits of a sample | What |
+|---|---|
+| 0-21 | the 22 outputs in `chip_target()` order, **as read back** (at the pads through the IOBUF and 2 FFs; `vchip_top`: the output registers, 2 FFs) |
+| 22-25 | the 4 chip outputs (`sipo_out`, `piso_out`, `dft0_buff`, `dft1_buff`), after their 2-FF synchronizer |
+| 26-29 | the sequencer's step number (2 FFs) |
+| 30-31 | 0 |
+
+| Addr | What |
+|---|---|
+| 0x0020-0x003F | sampler registers (decoded from `a[15:5]`; 0x0036-0x003F read 0) |
+| 0x8000 + 4·i | sample i, 4 bytes LE (decoded from `a[15:14]` = 10: sample `a[13:2]`, byte `a[1:0]`); read in frames of <= 63 samples |
+
+Times as in the loopback map (sample i = the pins `(S_TRIG_COUNT - S_TRIG_IDX + i) * S_DIV + 1 - 2`
+ticks after RUN): [simulated] exact to the tick in `fpga/tb/chip_top_tb.sv` check 8.
+
 ## Transport: JTAG over J17 (instead of the UART), from 2026-10-22
 
 The frames above are a byte stream; it doesn't matter how the bytes travel. With the JTAG

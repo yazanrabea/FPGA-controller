@@ -118,10 +118,11 @@ def sequence_waves(steps: list[dict], starts_ns: dict[int, float], t_end_ns: flo
 
 
 def expected_for(steps: list[dict], setup: SampleSetup, rec: Record,
-                 pairs: dict[str, str] | None = None) -> dict[str, list[list]]:
-    """pin -> expected segments for every shown pin that has one (an input: its pair's)."""
+                 pairs: dict[str, str] | None = None, field=STEP_FIELD) -> dict[str, list[list]]:
+    """pin -> expected segments for every shown pin that has one (an input: its pair's).
+    `pairs` / `field`: the top's layout (samples.SamplerLayout), default the loopback bench."""
     pairs = LOOPBACK_PAIRS if pairs is None else pairs
-    starts = step_starts(setup, rec, steps)
+    starts = step_starts(setup, rec, steps, field)
     window = record_window(setup, rec)
     names = [n for n in sorted({pairs.get(p, p) for p in setup.pins}) if n in (steps[0].get("set") or {})]
     exp = sequence_waves(steps, starts, window[1] + setup.period_ns, names)
@@ -130,13 +131,14 @@ def expected_for(steps: list[dict], setup: SampleSetup, rec: Record,
 
 
 def check_record(steps: list[dict], setup: SampleSetup, rec: Record,
-                 pairs: dict[str, str] | None = None) -> list[Row]:
+                 pairs: dict[str, str] | None = None, field=STEP_FIELD) -> list[Row]:
     """Rows (verify.Row): the steps seen, then each shown pin against its expected wave; an
-    input is held to its paired output's expected wave (loopback, `pairs`)."""
+    input is held to its paired output's expected wave (loopback, `pairs`); an input with no
+    pair (a chip output on chip_top) is shown, not judged."""
     pairs = LOOPBACK_PAIRS if pairs is None else pairs
     if not rec.words:
         return [Row("(record)", "status", "samples", "none", False, "nothing recorded")]
-    starts = step_starts(setup, rec, steps)
+    starts = step_starts(setup, rec, steps, field)
     window = record_window(setup, rec)
     seen = sorted(k for k in starts if k)
     rows = [Row("(steps)", "-", f"{len(steps)} steps", "starts: " +

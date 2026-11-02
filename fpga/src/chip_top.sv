@@ -44,9 +44,22 @@
 // of the pads; RB_INFO +1 tells the PC which.
 // What it can't see: an open after the pad (connector, board, wire, chip) and
 // analog level / ringing (0/1 at the input buffer's threshold).
+//
+// Sampler (SAMPLER = 1, decided 2026-11-02 after EXP-11): the sample_cell proven
+// in EXP-11 (sample_loopback_top), 32 bits x 4096 samples, armed when a sequence
+// starts. A sample = bits 0-21 the 22 outputs as read back (rb_s1: at the pads, or
+// the output registers with PAD_READBACK = 0), 22-25 the 4 chip outputs (in_s1),
+// 26-29 the step number, 30-31 zero. All three go through 2 FFs, so they line up
+// (same SYNC_TICKS = 2 as samples.py). Registers 0x0020-0x0037 as on the loopback
+// bench (docs/link_register_map.md "v2 sampler"); samples at 0x8000 + 4 i (the
+// step table, write-only, takes 0x1000-0x4FFF here). Both read regions are
+// decoded from address bits (the read path has little timing margin, see the
+// readback decode); the sample byte is muxed in after the register read, like
+// phase7_link_top. SAMPLER = 0 builds nothing extra.
 //==========================================================================
 module chip_top #(
-    parameter bit PAD_READBACK = 1'b1   // 1: IOBUF readback from the pads; 0: from the output registers
+    parameter bit PAD_READBACK = 1'b1,  // 1: IOBUF readback from the pads; 0: from the output registers
+    parameter bit SAMPLER      = 1'b1   // 1: add the 32 x 4096 sample_cell (see header)
 ) (
     input  logic                     clk,        // 100 MHz ZedBoard system clock
     output logic [7:0]               led,
@@ -85,7 +98,9 @@ module chip_top #(
     logic        bus_we, bus_re, cmd_apply, cmd_run, cmd_stop, rx_overflow;
     logic [15:0] bus_waddr, bus_raddr;
     logic [7:0]  bus_wdata, bus_rdata;
+    logic [7:0]  reg_rdata;          // the register read; bus_rdata = it or a sample byte (sampler)
     logic [7:0]  rb_byte;            // the readback region's byte at bus_raddr (below)
+    logic [7:0]  sreg_byte;          // the sampler register region's byte at bus_raddr (below)
     link_frame #(.MAX_PAYLOAD(255), .CAP_BASE(CBASE), .STATUS_ADDR(chip_pkg::REG_STATUS)) u_frame (
         .clk(clk), .rst_n(rst_n),
         .rx_byte(rx_byte), .rx_byte_valid(rx_byte_valid),
@@ -176,10 +191,11 @@ module chip_top #(
             n_steps        <= 1;
             table_rejected <= 1'b0;
             link_error     <= 1'b0;
-            bus_rdata      <= '0;
+            reg_rdata      <= '0;
         end else begin
             if (rx_overflow_jtag || rx_overflow) link_error <= 1'b1;
-            if (bus_re) bus_rdata <= in_rb_region(bus_raddr) ? rb_byte : read_byte(bus_raddr);
+            if (bus_re) reg_rdata <= in_rb_region(bus_raddr)   ? rb_byte
+                                   : in_sreg_region(bus_raddr) ? sreg_byte : read_byte(bus_raddr);
             if (bus_we) begin
                 if (bus_waddr == 16'h0000) scratch <= bus_wdata;
                 if (bus_waddr == chip_pkg::REG_STATUS) table_rejected <= 1'b0;
@@ -300,6 +316,14 @@ module chip_top #(
     function automatic logic in_rb_region(input logic [15:0] a);
         return a[15:9] == 7'b0000001;
     endfunction
+    // sampler: registers 0x0020-0x003F (a[15:5] = 0x001, byte a[4:0]); samples
+    // 0x8000-0xBFFF (a[15:14] = 10, sample a[13:2], byte a[1:0])
+    function automatic logic in_sreg_region(input logic [15:0] a);
+        return SAMPLER && a[15:5] == 11'b0000_0000_001;
+    endfunction
+    function automatic logic in_samp_region(input logic [15:0] a);
+        return a[15:14] == 2'b10;
+    endfunction
 
     wire [32*128-1:0] rb_recs;            // record k at [k*128 +: 128], byte j at [+ 8 j]
     wire [SPB*8-1:0]  rb_sipo_bytes = {{(SPB * 8 - SPW){1'b0}}, rb_sipo};
@@ -363,6 +387,103 @@ module chip_top #(
             end else begin : g_ext
                 assign cap_reg[g] = {{(CB * 8 - CW){1'b0}}, creg};
             end
+        end
+    endgenerate
+
+    // ---- sampler (SAMPLER = 1, see header) ----
+    localparam int SN = 32, SD = 4096, SAW = 12;          // bits per sample, depth, log2(depth)
+    localparam int STEP_BIT = NS + NC;                     // 26: the step number's lowest bit
+    if (SAMPLER && STEP_BIT + SW > SN)
+        $error("chip_top sampler: outputs + inputs + step bits don't fit 32 bits");
+
+    logic       samp_mem_q;      // the byte read last tick was a sample byte
+    logic [7:0] samp_mem_byte;   // that byte (block RAM output, already 1 tick late)
+    assign bus_rdata = samp_mem_q ? samp_mem_byte : reg_rdata;
+
+    generate
+        if (SAMPLER) begin : g_sampler
+            // config (R/W), defaults: every tick, the whole buffer, trigger at once
+            logic [31:0] s_div;
+            logic [15:0] s_n, s_pre;
+            logic [2:0]  s_trig;
+            logic [4:0]  s_tpin;
+            logic [7:0]  s_tstep;
+            logic        s_apply;    // one tick after a config write: the cell takes it (pending)
+            // status
+            logic        s_armed, s_triggered, s_done;
+            logic [SAW:0] s_n_valid, s_trig_idx;
+            logic [31:0] s_trig_count;
+            logic [SN-1:0] s_rd_data, s_in;
+            logic [SW-1:0] stp_s0, stp_s1;   // the step number, through 2 FFs like the pins
+            logic [1:0]    lane_q;
+
+            wire in_swr = (bus_waddr[15:4] == 12'h002) && (bus_waddr[3:0] < 4'd11);   // 0x0020-0x002A
+            always_ff @(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin
+                    s_div <= 32'd1; s_n <= 16'(SD); s_pre <= '0; s_trig <= '0; s_tpin <= '0;
+                    s_tstep <= '0; s_apply <= 1'b0;
+                end else begin
+                    s_apply <= bus_we && in_swr;
+                    if (bus_we && in_swr) begin
+                        case (bus_waddr[3:0])
+                            4'd0:  s_div[7:0]   <= bus_wdata;
+                            4'd1:  s_div[15:8]  <= bus_wdata;
+                            4'd2:  s_div[23:16] <= bus_wdata;
+                            4'd3:  s_div[31:24] <= bus_wdata;
+                            4'd4:  s_n[7:0]     <= bus_wdata;
+                            4'd5:  s_n[15:8]    <= bus_wdata;
+                            4'd6:  s_pre[7:0]   <= bus_wdata;
+                            4'd7:  s_pre[15:8]  <= bus_wdata;
+                            4'd8:  s_trig       <= bus_wdata[2:0];
+                            4'd9:  s_tpin       <= bus_wdata[4:0];
+                            4'd10: s_tstep      <= bus_wdata;
+                            default: ;
+                        endcase
+                    end
+                end
+            end
+
+            always_ff @(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin stp_s0 <= '0; stp_s1 <= '0; end
+                else begin stp_s0 <= step; stp_s1 <= stp_s0; end
+            end
+            // bits 0-21 outputs (read back, 2 FFs), 22-25 chip outputs (2-FF sync), 26-29 step
+            assign s_in = SN'({stp_s1, in_s1, rb_s1});
+
+            sample_cell #(.N(SN), .DEPTH(SD), .TICK_W(32)) u_sample (
+                .clk(clk), .rst_n(rst_n), .run(run), .apply(s_apply), .sync_in(s_in),
+                .cfg_div(s_div), .cfg_n(s_n[SAW:0]), .cfg_pre(s_pre[SAW:0]),
+                .cfg_trig(s_trig), .cfg_trig_pin(s_tpin),
+                // "ext" = the start of step s_tstep (step_start is the step's apply cycle)
+                .trig_ext(step_start && (8'(step) == s_tstep)),
+                .rd_idx(bus_raddr[13:2]), .rd_data(s_rd_data),
+                .armed(s_armed), .triggered(s_triggered), .done(s_done),
+                .n_valid(s_n_valid), .trig_idx(s_trig_idx), .trig_count(s_trig_count));
+
+            // a sample byte: rd_data arrives 1 tick after bus_re, like the bus wants
+            always_ff @(posedge clk or negedge rst_n) begin
+                if (!rst_n) begin samp_mem_q <= 1'b0; lane_q <= '0; end
+                else begin
+                    samp_mem_q <= bus_re && in_samp_region(bus_raddr);
+                    lane_q     <= bus_raddr[1:0];
+                end
+            end
+            assign samp_mem_byte = 8'(s_rd_data >> {lane_q, 3'b0});
+
+            // register image, byte k at bits [8k +: 8] (docs/link_register_map.md "v2 sampler")
+            wire [32*8-1:0] samp_regs = {
+                80'h0,                                      // +22..31 reserved
+                8'(SAW), 8'(SN),                            // +21 log2(depth), +20 bits per sample
+                s_trig_count,                               // +16..19
+                16'(s_trig_idx), 16'(s_n_valid),            // +14..15, +12..13
+                {5'b0, s_done, s_triggered, s_armed},       // +11 status
+                s_tstep, {3'b0, s_tpin}, {5'b0, s_trig},    // +10, +9, +8
+                s_pre, s_n, s_div};                         // +6..7, +4..5, +0..3
+            assign sreg_byte = 8'(samp_regs >> {bus_raddr[4:0], 3'b0});
+        end else begin : g_no_sampler
+            assign samp_mem_q    = 1'b0;
+            assign samp_mem_byte = 8'h00;
+            assign sreg_byte     = 8'h00;
         end
     endgenerate
 

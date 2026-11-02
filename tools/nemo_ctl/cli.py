@@ -323,32 +323,42 @@ def cmd_seq_read(args: argparse.Namespace) -> int:
 
 
 def cmd_seq_sample(args: argparse.Namespace) -> int:
-    """Plan 2026-11-01 Step 3: set up sample_loopback_top's sampler, optionally run the
-    loaded sequence, read the record and save it (CSV / VCD)."""
+    """Plan 2026-11-01 Step 3: set up the sampler of sample_loopback_top (default) or of
+    chip_top / vchip_top (--target chip_top, or the --check file's `target:`), optionally
+    run the loaded sequence, read the record and save it (CSV / VCD)."""
     from .link import LinkError, V2_STEP
-    from .samples import (LOOPBACK_PINS, STEP_FIELD, SampleError, decode, make_setup, record_window,
-                          to_csv, to_vcd)
-    params = {"pins": args.pins or ",".join(LOOPBACK_PINS), "rate": args.rate, "period": args.period,
-              "samples": args.samples, "pre": args.pre, "trigger": args.trigger, "on": args.on,
-              "step": args.step}
-    steps = None
+    from .samples import (LOOPBACK_LAYOUT, SampleError, chip_layout, decode, make_setup,
+                          record_window, to_csv, to_vcd)
+    steps, doc = None, {}
     try:
-        setup = make_setup(params, list(LOOPBACK_PINS), n_bits=16)
         if args.check:
             import yaml
-            steps = (yaml.safe_load(Path(args.check).read_text()) or {}).get("steps") or []
+            doc = yaml.safe_load(Path(args.check).read_text()) or {}
+            steps = doc.get("steps") or []
             if not steps:
                 raise SampleError(f"{args.check}: no steps")
+        target = args.target or doc.get("target")
+        if target and not args.target:
+            args.target = target                  # the link speaks to the same target
+        layout = chip_layout() if target == "chip_top" else LOOPBACK_LAYOUT
+        params = {"pins": args.pins or ",".join(layout.pins), "rate": args.rate, "period": args.period,
+                  "samples": args.samples, "pre": args.pre, "trigger": args.trigger, "on": args.on,
+                  "step": args.step}
+        setup = make_setup(params, list(layout.pins), n_bits=layout.bits)
     except (SampleError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    print(f"sampler: {setup.summary()}")
+    print(f"sampler ({layout.name}): {setup.summary()}")
     sl = _open_seqlink(args)
     try:
         try:
             bits, depth = sl.sampler_info()
         except LinkError as exc:
             print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if bits != layout.bits:
+            print(f"error: this bitstream records {bits}-bit samples, {layout.name}'s layout is "
+                  f"{layout.bits} bits: wrong --target?", file=sys.stderr)
             return 1
         if setup.n > depth:
             print(f"error: {setup.n} samples, this bitstream holds {depth}", file=sys.stderr)
@@ -362,7 +372,7 @@ def cmd_seq_sample(args: argparse.Namespace) -> int:
             r = sl.wait(args.wait)
             _print_seq_status(sl.seq_status(), sl.read_reg(V2_STEP, 1)[0], r.step)
         st = sl.sampler_status()
-        rec = sl.read_samples(bits)
+        rec = sl.read_samples(bits, layout.samples_base)
     finally:
         sl.close()
     flags = [k for k in ("armed", "triggered", "done") if st[k]]
@@ -381,18 +391,19 @@ def cmd_seq_sample(args: argparse.Namespace) -> int:
         from .seqwaves import SeqWaveError, check_record, expected_for
         from .verify import VerifyResult, format_text
         try:
-            rows = check_record(steps, setup, rec)
-            expected = expected_for(steps, setup, rec)
+            rows = check_record(steps, setup, rec, layout.pairs, layout.step_field)
+            expected = expected_for(steps, setup, rec, layout.pairs, layout.step_field)
         except SeqWaveError as exc:
             print(f"error: can't build the expected waves: {exc}", file=sys.stderr)
             return 1
-        print(f"check against {args.check} (outputs: their expected wave; inputs: their output's):")
+        print(f"check against {args.check} (outputs: their expected wave; inputs: "
+              + ("their output's" if layout.pairs else "shown, not judged") + "):")
         for line in format_text(VerifyResult(mode="record", runs=[rows])):
             print("  " + line)
         passed = all(r.ok is not False for r in rows)
     if args.out:
         out = Path(args.out)
-        out.write_text(to_vcd(setup, rec, expected=expected, step_field=STEP_FIELD)
+        out.write_text(to_vcd(setup, rec, expected=expected, step_field=layout.step_field)
                        if out.suffix.lower() == ".vcd" else to_csv(setup, rec), encoding="utf-8")
         print(f"written to {out}")
     return 0 if st["done"] and passed else 1
@@ -831,19 +842,22 @@ def build_parser() -> argparse.ArgumentParser:
     sq_read.set_defaults(func=cmd_seq_read)
     sq_sample = sq_sub.add_parser(
         "sample", parents=[seq_common], formatter_class=_RDF,
-        help="record the 10 loopback pins with the in-FPGA sampler (sample_loopback_top)",
+        help="record the pins with the in-FPGA sampler (sample_loopback_top, or chip_top / vchip_top)",
         description=_wrap(
-            "Verification plan Step 3. Needs sample_loopback_top on the board (phase7_link_top "
-            "with the sampler; same pins and jumpers as EXP-03/04). Sets up the sampler (rate, "
-            "length, trigger), and with --run starts the loaded sequence and waits; then reads "
-            "the record and prints each pin's edges. --out x.vcd (GTKWave / PulseView / Vivado) "
-            "or x.csv. Pins: clk rst data cs en (outputs LA00-04) and clk_in .. en_in (inputs "
-            "LA16-20). Times are ns from RUN, resolution one sample. See docs/USER_MANUAL.md 8.10."),
+            "Verification plan Step 3. Needs a bitstream with a sampler: sample_loopback_top "
+            "(phase7_link_top with the sampler; same pins and jumpers as EXP-03/04; pins clk rst "
+            "data cs en = outputs LA00-04, clk_in .. en_in = inputs LA16-20), or chip_top / "
+            "vchip_top built from 2026-11-02 on (--target chip_top, or a --check file with "
+            "`target: chip_top`; pins = the 22 outputs as read back at the pads and the 4 chip "
+            "outputs, 4096 samples of 32 bits). Sets up the sampler (rate, length, trigger), and "
+            "with --run starts the loaded sequence and waits; then reads the record and prints "
+            "each pin's edges. --out x.vcd (GTKWave / PulseView / Vivado) or x.csv. Times are ns "
+            "from RUN, resolution one sample. See docs/USER_MANUAL.md 8.10."),
         epilog=_wrap("Example (from tools/, after `seq load ../config/phase7_seq_loopback.yaml --jtag`):\n"
                      "  python -m nemo_ctl.cli seq sample --jtag --rate 1kHz --samples 4000 "
                      "--trigger ext --step 1 --pre 100 --run --wait 15 --out record.vcd"),
     )
-    sq_sample.add_argument("--pins", default=None, help="comma list to show (default: all 10)")
+    sq_sample.add_argument("--pins", default=None, help="comma list to show (default: all the top records)")
     sq_sample.add_argument("--rate", default=None, help="samples per second, e.g. 10MHz or 1kHz")
     sq_sample.add_argument("--period", default=None, help="or the time per sample, e.g. 100ns")
     sq_sample.add_argument("--samples", type=int, default=4096, help="record length (1..4096)")

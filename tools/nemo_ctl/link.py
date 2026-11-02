@@ -356,6 +356,7 @@ V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * target.entry_byt
 V2_SAMPLER = 0x0020     # 24 bytes: config +0..10 (R/W), status +11..19, info +20/+21 (R)
 V2_SAMPLES = 0x4000     # sample i at V2_SAMPLES + bytes_per_sample * i (READ_REG)
 SAMPLE_READ_WORDS = 100 # samples per READ_REG frame (2-byte samples: 200 B, under 255)
+SAMPLE_READ_BYTES = 252 # and at most this many bytes (4-byte samples, chip_top: 63 per frame)
 # pad readback (chip_top, verification plan Step 2): = gen_svh.RB_* (= chip_pkg RB_*)
 V2_RB_BASE, V2_RB_STRIDE, V2_RB_INFO, V2_RB_SIPO = 0x0200, 16, 0x0360, 0x0380
 
@@ -513,7 +514,8 @@ class SeqLink(Link):
         (its sampler registers read 0)."""
         b = self.read_reg(V2_SAMPLER + 20, 2)
         if b[0] == 0:
-            raise LinkError("this bitstream has no sampler (build sample_loopback_top)")
+            raise LinkError("this bitstream has no sampler (build sample_loopback_top, or a "
+                            "chip_top / vchip_top from 2026-11-02 on)")
         return b[0], 1 << b[1]
 
     def sampler_setup(self, setup) -> None:
@@ -530,15 +532,17 @@ class SeqLink(Link):
                 "n_valid": int.from_bytes(b[1:3], "little"), "trig_idx": int.from_bytes(b[3:5], "little"),
                 "trig_count": int.from_bytes(b[5:9], "little")}
 
-    def read_samples(self, bits: int = 16):
-        """The current record as a samples.Record (n_valid samples, oldest first)."""
+    def read_samples(self, bits: int = 16, base: int = V2_SAMPLES):
+        """The current record as a samples.Record (n_valid samples, oldest first); `base`:
+        the top's sample address (samples.SamplerLayout.samples_base)."""
         from .samples import Record, words_from_bytes
         st = self.sampler_status()
         w = (bits + 7) // 8
+        per = min(SAMPLE_READ_WORDS, SAMPLE_READ_BYTES // w)
         data = bytearray()
-        for i in range(0, st["n_valid"], SAMPLE_READ_WORDS):
-            k = min(SAMPLE_READ_WORDS, st["n_valid"] - i)
-            data += self.read_reg(V2_SAMPLES + w * i, w * k)
+        for i in range(0, st["n_valid"], per):
+            k = min(per, st["n_valid"] - i)
+            data += self.read_reg(base + w * i, w * k)
         return Record(tuple(words_from_bytes(bytes(data), bits)), st["trig_idx"], st["trig_count"],
                       done=st["done"], triggered=st["triggered"])
 

@@ -29,6 +29,15 @@
 //      The sipo_in readback frame (sampled on clk_sipo's readback) = the 136-bit frame.
 //      Fault: the testbench forces the s0_p pad HIGH through the run while the FPGA drives
 //      it LOW: its readback shows HIGH (saw1, not saw0), every other pin as expected.
+//   8. Sampler (SAMPLER = 1, 2026-11-02): INFO = 32 bits / 4096 deep; set up before RUN
+//      (every 3 ticks, 4096 samples, 20 before the start of step 1); after the run done +
+//      triggered, 4096 valid, trigger at index 20 with the step bits going 0 -> 1 there.
+//      Samples 0..1599 (48 us of the SIPO load) read over JTAG are each equal to what this
+//      testbench saw on the pins {step, chip_in, chip_out} at the tick samples.py computes
+//      ((trig_count - trig_idx + i) * div + 1 - 2 after RUN), and NOT to the tick before or
+//      after: the record and the PC's time axis are exact to the tick (3 ticks per sample
+//      puts the 50-tick clock edges at every phase; with 10 a 1-tick shift went unseen).
+//      The forced s0_p pad is in the record as HIGH (read at the pad). 46 clk_sipo rises.
 // On the board: EXP-07 (pins on the logic analyser), EXP-08 (Dima's models as the chip),
 // EXP-10 (pad readback).
 //==========================================================================
@@ -196,6 +205,22 @@ module chip_top_tb;
     byte unsigned rd[$], one[$], none[$];
     bit ok;
 
+    // check 8: what the pins were on every tick from RUN on (k = 0 at the first clock edge
+    // that sees the sequencer's run high, as sample_cell counts), {step, chip_in, chip_out}
+    localparam int REF_N = 50000;
+    localparam int SDIV = 3, SPRE = 20, SREAD = 1600;   // 3: not a divisor of the 50-tick clock halves,
+                                                        // so edges fall at every phase (10 couldn't tell t from t+1)
+    logic [31:0] ref_pins [REF_N];
+    int ref_k = -1, run_ticks = 0;
+    always @(posedge clk) begin
+        if (ref_k < 0 && w.dut.run) ref_k = 0;
+        if (ref_k >= 0 && w.dut.run) run_ticks++;     // the run's length, as the cell sees it
+        if (ref_k >= 0 && ref_k < REF_N) begin
+            ref_pins[ref_k] = 32'({w.dut.step, chip_in, chip_out});
+            ref_k++;
+        end
+    end
+
     initial begin
         $display("== chip_top_tb: %0d chip_out + %0d chip_in, table from config/chip_sim_test.yaml ==", NS, NC);
         repeat (100) @(posedge clk);
@@ -231,6 +256,16 @@ module chip_top_tb;
             want[chip_pkg::SIG_RST_SIPO] = 1'b1;
             want[chip_pkg::SIG_RST_PISO] = 1'b1;
             check(chip_out === want, $sformatf("3. before RUN every chip_out at step 0's level (got %b)", chip_out));
+        end
+
+        // 8. the sampler: INFO, then set up before RUN (it takes the setup when RUN starts)
+        request(8'h02, 16'h0034, 2, rc, rd, ok);
+        check(ok && rd.size() == 2 && rd[0] == 8'd32 && rd[1] == 8'd12,
+              $sformatf("8. sampler INFO: 32 bits per sample, 2^12 deep (got %p)", rd));
+        begin
+            automatic byte unsigned d[$] = '{8'(SDIV), 0, 0, 0, 8'h00, 8'h10, 8'(SPRE), 0, 8'd1, 0, 8'd1};
+            send_frame(8'h01, 16'h0020, d);      // div, n = 4096, pre, trig ext, pin 0, step 1
+            flush();
         end
 
         // 4./5. RUN; the sequence takes ~330 us
@@ -334,6 +369,50 @@ module chip_top_tb;
             for (int i = 0; i < rd.size() && i < 17; i++) got[i*8 +: 8] = rd[i];
             check(ok && rd.size() == 17 && got == chip_tb_pkg::SIPO_FRAME,
                   $sformatf("7. sipo_in readback frame = the config's frame (%h)", got));
+        end
+
+        // 8. the sampler's record
+        begin
+            automatic int n_valid, tidx, tcount, bad = 0, bad_m = 0, bad_p = 0, sipo_rises = 0;
+            automatic int step_before = -1, first1 = -1;
+            automatic logic prev_clk = 1'b0;
+            request(8'h02, 16'h002B, 9, rc, rd, ok);
+            n_valid = {rd[2], rd[1]}; tidx = {rd[4], rd[3]}; tcount = {rd[8], rd[7], rd[6], rd[5]};
+            // 4096 x 3 ticks = 123 us fit in the run (~320 us): the record fills -> done
+            check(ok && rd.size() == 9 && rd[0][2:0] == 3'b110 && n_valid == 4096 && tidx == SPRE,
+                  $sformatf("8. sampler status: done + triggered, not armed, 4096 valid, trigger at index %0d (%b, %0d, %0d)",
+                            SPRE, rd[0][2:0], n_valid, tidx));
+            for (int i0 = 0; i0 < SREAD; i0 += 63) begin
+                automatic int n = (SREAD - i0 < 63) ? SREAD - i0 : 63;
+                request(8'h02, 16'(16'h8000 + 4 * i0), 4 * n, rc, rd, ok);
+                if (!ok || rd.size() != 4 * n) begin bad++; continue; end
+                for (int j = 0; j < n; j++) begin
+                    automatic int i = i0 + j;
+                    automatic logic [31:0] s = {rd[4*j+3], rd[4*j+2], rd[4*j+1], rd[4*j]};
+                    automatic int t = (tcount - tidx + i) * SDIV + 1 - 2;   // samples.py's time
+                    if (t < 1 || t + 1 >= REF_N) begin bad++; continue; end
+                    if (s != ref_pins[t]) begin
+                        if (bad < 5) $display("    sample %0d (tick %0d): %h, pins were %h", i, t, s, ref_pins[t]);
+                        bad++;
+                    end
+                    if (s != ref_pins[t - 1]) bad_m++;   // one tick off either way: must not also fit
+                    if (s != ref_pins[t + 1]) bad_p++;
+                    if (s[chip_pkg::SIG_CLK_SIPO] && !prev_clk && i > 0) sipo_rises++;
+                    prev_clk = s[chip_pkg::SIG_CLK_SIPO];
+                    if (i == tidx - 1) step_before = s[NS + NC +: 4];
+                    if (first1 < 0 && s[NS + NC +: 4] == 1) first1 = i;
+                end
+            end
+            check(bad == 0, $sformatf("8. samples 0..%0d = the pins at samples.py's tick (%0d mismatches)", SREAD - 1, bad));
+            check(bad_m > 0 && bad_p > 0,
+                  $sformatf("8. ... and not at the tick before / after (%0d / %0d mismatches): the time axis is exact", bad_m, bad_p));
+            // the step number goes through 2 FFs like the pins: it changes in the trigger
+            // sample or the next one (the trigger itself is judged on the undelayed step start)
+            check(step_before == 0 && (first1 == tidx || first1 == tidx + 1),
+                  $sformatf("8. step bits 0 -> 1 at the trigger sample or the next (step %0d before, first 1 at %0d, trigger %0d)",
+                            step_before, first1, tidx));
+            // 1600 x 30 ns = 48 us of step 1 from 60 ns before it: clk_sipo starts 2 us in -> 46 rises
+            check(sipo_rises == 46, $sformatf("8. 46 clk_sipo rises in the samples read (%0d)", sipo_rises));
         end
 
         if (fails == 0) $display("ALL TESTS PASSED (%0d checks)", checks);

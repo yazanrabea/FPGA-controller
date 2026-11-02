@@ -24,5 +24,5 @@ sim_run chip_top_tb \
     "$SRC/gen/chip_pkg.sv" "$TBL" \
     "$SRC/link_frame.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$SRC/seq_engine.sv" "$SRC/seq_bank.sv" \
-    "$SRC/jtag_link_bridge.sv" "$SRC/jtag_link_bscan.sv" "$SRC/readback_cell.sv" "$SRC/chip_top.sv" \
+    "$SRC/jtag_link_bridge.sv" "$SRC/jtag_link_bscan.sv" "$SRC/readback_cell.sv" "$SRC/sample_cell.sv" "$SRC/chip_top.sv" \
     "$TB/bscane2_sim_stub.sv" "$TB/iobuf_sim_stub.sv" "$TB/chip_top_tb.sv"
