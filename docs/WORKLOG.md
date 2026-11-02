@@ -1960,3 +1960,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 ## 2026-10-26, Rahaf (with Claude), branch main — handoff after the EXP-08 follow-ups
 - Done: `docs/HANDOFF.md`: short version with the phirst result (F0C3, 101/101) and the simulation-vs-FPGA difference after `rst_sipo` (C3E7 vs 0000, 100/100); next steps (send Dima's questions first); the sim command for all three virtual-chip sequences. Board unchanged: `vchip_top`, 10 jumpers on.
 - Next steps: send Dima's questions; review of the C5 / C6 code.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, branch feature/yazan-sample-cell — xsim plusarg fix
+- Problem: `SIM=xsim scripts/run_sample_sim.sh` on the Windows lab PC: `sample_loopback_top_tb` did not start (`Expected a switch but found C`). `sim_lib.sh` passed `-testplusarg dump_a=C:\...` on the xsim command line, and `xsim.bat` splits an argument at `=`.
+- Fix (`scripts/sim_lib.sh`, xsim branch only; Icarus unchanged): the plusargs go into an xsim options file (`-f plusargs.f`); backslashes become `/`, because the options-file parser drops them.
+- Results [simulated, xsim 2022.1, lab PC]: `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24, `check_sample_dump` PASS (record A all 10 pins, record B only `clk_in` fails, as intended); `run_phase7_sim.sh` 40/10/27/21; pytest 371 passed, 1 skipped. Full review notes: WORKLOG on `main`, 2026-11-02.
