@@ -1,9 +1,38 @@
-# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done; verification plan Steps 1 + 3 built in simulation, in PRs #2 / #3)
+# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done; verification plan Steps 1 + 3 merged to `main`, passed in xsim, not on the board yet)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
 > and `docs/WORKLOG.md` (newest entry first). Updated 2026-11-01, Yazan's laptop session
 > (no board, no Vivado): the verification plan for the mentors' three requirements, its
-> Step 1 and Step 3. Everything below "2026-10-26" is unchanged from Rahaf's lab session.
+> Step 1 and Step 3. Updated again 2026-11-02, Rahaf's lab session: PRs #2 / #3 reviewed, run
+> in xsim, merged. Everything below "2026-10-26" is unchanged from Rahaf's lab session.
+
+## Short version (2026-11-02, Rahaf, lab PC)
+
+- **PRs #2 and #3 are merged into `main`** (merge commits `a21179d`, `f0ffed7`; docs
+  `1f82f6e`). Reviewed by Rahaf (WORKLOG 2026-11-02). Nothing was built or run on the board.
+- **xsim on the lab PC agrees with Yazan's Icarus results:** `run_phase7_sim.sh` 40 / 10 / 27 /
+  21 (`SAMPLER = 0`, the old design), `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24,
+  `check_sample_dump` PASS; pytest 371 passed, 1 skipped.
+- **One script bug found and fixed** (`d806df7`, on Yazan's branch before the merge): in xsim,
+  `scripts/sim_lib.sh` passed `+dump_a=C:\...` on the command line and Windows `xsim.bat`
+  split it at `=`, so `sample_loopback_top_tb` never started. Plusargs now go in an xsim
+  options file (`-f`), with forward slashes.
+- **Open finding, merged anyway (Rahaf's decision): an `edge_count` expect can never pass**
+  (`docs/issues.md`). `cap_cell` clears its edge count when RUN drops, and `cli verify` reads
+  after the run, so it always reads 0. **Don't put an `expect` on an `edge_count` capture**
+  until it's fixed (refuse it in `validate.py` / `verify.py`, or keep the count in `cap_cell`).
+- **GitHub:** PR #2 shows merged. **PR #3 shows "closed", not merged**, although all its
+  commits are in `main`: deleting `feature/yazan-verify` from the command line closed the
+  stacked PR instead of retargeting it (the website's Delete branch button retargets).
+  Both feature branches still exist; delete them on the website.
+- **Board:** unchanged, `vchip_top` with its 10 jumpers on (the wiring EXP-09 Part A needs).
+- **Next:** the lab steps, later (Rahaf): **EXP-09** (`cli verify`, Part A on `vchip_top`,
+  then remove the 10 jumpers, Part B on `chip_top`); **build `sample_loopback_top`** (record
+  WNS / BRAM), then **EXP-11** with the bring-up jumpers. Each board step after Rahaf's OK.
+  Fix the `edge_count` expect. Rahaf's decisions still open: **Step 2** (pad readback) and
+  a **sampler in `chip_top`**. Dima's questions: still not sent.
+- **Editor:** if it's running from before the merge, restart it (`cd tools`, `python -m
+  nemo_ctl.cli gui`) before using the new **Verify** button.
 
 ## Short version (2026-11-01, Yazan, laptop)
 
@@ -277,6 +306,10 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## Last verified results
 
+- 2026-11-02 on `main` after the merges (lab PC, **xsim 2022.1**): pytest **371 passed,
+  1 skipped**; `run_phase7_sim.sh` 40 / 10 / 27 / 21; `run_sample_sim.sh`: `sample_cell_tb`
+  39/39, `sample_loopback_top_tb` 24/24, `check_sample_dump.py` PASS. `sample_loopback_top`
+  not built yet.
 - 2026-11-01 on the PR #3 branch (Yazan's laptop, Icarus 12, not xsim): pytest **371 passed,
   1 skipped**; `scripts/run_phase7_sim.sh` 40 / 10 / 27 / 21 (SAMPLER = 0);
   `scripts/run_sample_sim.sh`: `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24,
@@ -307,13 +340,14 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 **From 2026-11-01 (verification plan), first:**
 
-A. **Rahaf**: review **PR #2** (Step 1), then **PR #3** (Step 3, stacked on #2: after #2 merges,
-   retarget it to `main`). In #3 check that `phase7_link_top` with `SAMPLER = 0` is the old
-   behaviour (`bus_rdata = reg_rdata`). `validate.py` (hers) got one check in the CAPTURE branch.
+A. ~~Rahaf: review PR #2, then PR #3~~: **done and merged 2026-11-02** (see the short version).
+   Left from the review: the `edge_count` expect (open issue) and the smaller notes in
+   `docs/issues.md`.
 B. **Lab, EXP-09** (`docs/experiments/EXP-09_cli_verify.md`): `vchip_top` with its 10 jumpers,
    `cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --repeat 300`, plus the two
-   negative checks; then `chip_top` (no jumpers), `cli verify --mode INFERENCE`.
-C. **Lab, Step 3**: `SIM=xsim scripts/run_sample_sim.sh` (xsim is stricter than Icarus); build
+   negative checks; then **remove the 10 jumpers** and program `chip_top`,
+   `cli verify --mode INFERENCE`.
+C. **Lab, Step 3**: ~~`SIM=xsim scripts/run_sample_sim.sh`~~ (done 2026-11-02, PASS); build
    `sample_loopback_top` (record WNS and BRAM: expect +2 RAMB36 over `phase7_link_jtag_top`);
    **EXP-11** with the bring-up jumpers (J3-0..4 -> J3-16, J2-17..20), incl. `--check`.
 D. **Rahaf's decisions**: Step 2 (pad readback: `IOBUF` + a `cap_cell` per chip output, in
@@ -361,10 +395,15 @@ E. **Dima's questions**: add the below-ground input rating (EXP-06's -0.41 V), f
 
 - **Rahaf (2026-10-19, used again 2026-10-26):** push directly to `main` after each passing
   step (commit -> `git pull --rebase origin main` -> push); stop for her approval after each
-  phase / decision.
+  phase / decision. **Since `main` has merge commits (2026-11-02), don't `git pull --rebase`
+  over a local merge**: it flattens the merge. If `git fetch` shows no new remote commits,
+  push directly; otherwise `git pull --rebase=merges`.
+- **Rahaf (2026-11-02):** don't push to `main` or merge a PR without asking her first.
+- **Stacked PRs:** delete the first PR's branch only with the website's Delete branch button
+  (or retarget the second PR first); deleting it with `git push --delete` closes the second PR.
 - **Yazan:** ask before pushing to `main`; he has pushed his own work to `main` directly.
-  From 2026-11-01 his work goes through **PRs for Rahaf to review** ("we'll review later"):
-  #2 and #3 are open.
+  From 2026-11-01 his work goes through **PRs for Rahaf to review**: #2 and #3 merged
+  2026-11-02. Pull `main` before new work (his two branches are merged).
 - Both: document every step per CLAUDE.md §9, docs in the same commit as the code.
 
 ## Things a new agent should NOT do
@@ -383,7 +422,9 @@ E. **Dima's questions**: add the below-ground input rating (EXP-06's -0.41 V), f
 - Don't call the virtual chip "the chip": no array, no ADC/TDC, and phirst comes from `pulse`.
 - Don't change `phase7_link_top`'s `SAMPLER` default (0): `phase7_link_jtag_top` (EXP-04) must
   stay the verified design; the sampler is only in `sample_loopback_top`.
-- Don't trust an Icarus pass alone for the sampler: run it in xsim on the lab PC first.
+- Don't trust an Icarus pass alone: run new testbenches in xsim on the lab PC before calling
+  them done (2026-11-02 the sampler tb only ran in xsim after a `sim_lib.sh` fix).
+- Don't put an `expect` on an `edge_count` capture until the open issue is fixed.
 
 ## Key files
 
@@ -395,12 +436,12 @@ E. **Dima's questions**: add the below-ground input rating (EXP-06's -0.41 V), f
 | Spec, pin table (+ the DRIVE 4 note), open questions | `docs/controller_spec.md` |
 | Questions for Dima (draft) | `docs/questions_for_dima_2026-10-22.md` |
 | Link register maps + JTAG scan format | `docs/link_register_map.md` |
-| Experiments | `docs/experiments/EXP-01_*.md` ... `EXP-08_virtual_chip.md`; planned: `EXP-09_cli_verify.md`, `EXP-11_sampler_loopback.md` (EXP-10 reserved for Step 2) |
+| Experiments | `docs/experiments/EXP-01_*.md` ... `EXP-08_virtual_chip.md`; planned, procedures on `main`: `EXP-09_cli_verify.md`, `EXP-11_sampler_loopback.md` (EXP-10 reserved for Step 2) |
 | Verification plan (2026-11-01) | `docs/plan_2026-11-01_verification.md`; Step 1: `tools/nemo_ctl/verify.py`, `cli verify`, editor Verify, `config/exp09_verify_vchip.yaml`; Step 3: `fpga/src/{sample_cell,sample_loopback_top}.sv`, `phase7_link_top.sv` `SAMPLER`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/{run_sample_sim.sh,check_sample_dump.py}`, `tools/nemo_ctl/{samples,seqwaves}.py`, `cli seq sample` |
 | Pin verification per pair | `docs/pin_verification.md` |
 | Bugs / decisions | `docs/issues.md`, `docs/decisions.md` |
 | Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
-| Sims | `scripts/run_phase{3_sims,4_sim,5_link_sim,6_sim,7_sim}.sh`, `scripts/run_jtag_sim.sh` |
+| Sims | `scripts/run_phase{3_sims,4_sim,5_link_sim,6_sim,7_sim}.sh`, `scripts/run_jtag_sim.sh`, `scripts/run_chip_sim.sh`, `scripts/run_vchip_sim.sh`, `scripts/run_sample_sim.sh` |
 | JTAG PC side | `tools/nemo_ctl/jtag.py`, `scripts/jtag_server.tcl` |
 | Chip pipeline | `config/nemo_config.yaml` (`pin_map`), `tools/nemo_ctl/{fmc_pins,sequence,gen_svh}.py`, generated `fpga/src/gen/chip_pkg.sv` + `fpga/constraints/chip_top.xdc`, `fpga/src/chip_top.sv`, `fpga/tb/chip_top_tb.sv`, `config/chip_sim_test.yaml`, `scripts/run_chip_sim.sh`; C5: `tools/nemo_ctl/mode_seq.py`, `cli run-mode`, `gui.py` Run on board, `config/exp07_test.yaml`, `scripts/repeat_mode.py`; C6: `fpga/src/{virtual_chip,vchip_top}.sv`, `config/exp08_vchip.yaml`, generated `fpga/src/gen/vchip_pkg.sv` + `fpga/constraints/vchip_top.xdc`, `fpga/tb/vchip_top_tb.sv`, `scripts/run_vchip_sim.sh`, `scripts/repeat_seq.py` |
 | Python tool (module list, incl. `gui.py`, `waves.py`) | `tools/nemo_ctl/README.md` |

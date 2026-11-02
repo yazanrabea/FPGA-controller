@@ -1993,3 +1993,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 - GitHub state: PR #2 merged; PR #3 shows **closed (not merged)** although its commits are in `main`. Branches `feature/yazan-verify` and `feature/yazan-sample-cell` still exist (delete them on the website when convenient).
 - Lesson: with stacked PRs, delete the first PR's branch only on the website (or retarget the second PR first).
 - Next steps: EXP-09, build `sample_loopback_top` + EXP-11 (later, each after Rahaf's OK); fix the edge_count expect; Rahaf's answers on Step 2 (pad readback) and a sampler in `chip_top`.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — handoff after the merges
+- Done: `docs/HANDOFF.md`: a 2026-11-02 short version (PRs #2 / #3 merged, the xsim results, the sim_lib fix, the open `edge_count` finding, PR #3 shown as closed on GitHub, board unchanged, next steps); last verified results; next steps A and C updated; working rules (don't `pull --rebase` over a merge; ask before pushing to main or merging; stacked PRs); don'ts; key files.
+- Next steps: EXP-09, build `sample_loopback_top` + EXP-11 (each after Rahaf's OK); fix the `edge_count` expect; Rahaf's decisions on Step 2 and a sampler in `chip_top`; Dima's questions.
+
