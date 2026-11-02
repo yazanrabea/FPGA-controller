@@ -34,7 +34,7 @@ from .pins import Pin, load_pin_db
 from .timing import _summarize_setting
 from .validate import has_errors, validate_config
 from .waves import WaveError, mode_waves
-from .mode_seq import mode_table, run_table
+from .mode_seq import mode_steps, mode_table, run_table
 from .sequence import SequenceError
 from .units import UnitsError, parse_duration_ns
 from .verify import VerifyError, parse_expect
@@ -178,6 +178,7 @@ def verify_payload(doc: dict, open_link=_open_board) -> dict:
         dur = doc.get("duration")
         dur_s = parse_duration_ns(dur) * 1e-9 if dur else None
         table, notes = mode_table(config, mode, dur_s)
+        steps = mode_steps(config, mode, dur_s)[0]          # for the pad readback check
         repeat = int(doc["repeat"]) if doc.get("repeat") not in (None, "") else 1
         if not 1 <= repeat <= 10_000:
             raise ValueError("repeat must be 1 .. 10000")
@@ -192,7 +193,7 @@ def verify_payload(doc: dict, open_link=_open_board) -> dict:
     try:
         link = open_link()
         try:
-            res = verify_table(link, table, expect, mode=mode, repeat=repeat)
+            res = verify_table(link, table, expect, mode=mode, repeat=repeat, steps=steps)
         finally:
             link.close()
     except Exception as exc:          # the cable, xsdb, the link: report, don't crash the server

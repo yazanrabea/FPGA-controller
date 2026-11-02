@@ -333,14 +333,21 @@ class VerifyResult:
 
 
 def verify_table(link, table, expect: dict[str, Expectation], mode: str = "",
-                 repeat: int = 1, margin_s: float = 2.0) -> VerifyResult:
+                 repeat: int = 1, margin_s: float = 2.0, steps: list[dict] | None = None) -> VerifyResult:
     """Run an already compiled table (mode_seq.mode_table, or load_verify_sequence) `repeat`
-    times on `link` (a SeqLink to chip_top, opened and closed by the caller), check each run."""
+    times on `link` (a SeqLink to chip_top, opened and closed by the caller), check each run.
+    With the table's raw `steps`, each run also checks the 22 outputs' pad readback
+    (readback.py, plan Step 2): rows of kind "readback" after the captures."""
     from .mode_seq import run_table
     widths = {c.name: c.cap_w for c in link.target.cap_cells}
+    outs = [c.name for c in link.target.sig_cells]
     res = VerifyResult(mode=mode)
     for _ in range(max(1, repeat)):
-        res.runs.append(check_run(expect, run_table(link, table, margin_s), widths))
+        rows = check_run(expect, run_table(link, table, margin_s), widths)
+        if steps is not None and hasattr(link, "read_readback"):
+            from .readback import check_readback
+            rows += check_readback(steps, outs, link.read_readback())
+        res.runs.append(rows)
     return res
 
 

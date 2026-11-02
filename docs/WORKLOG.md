@@ -2015,3 +2015,14 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Problem (not from this work): the editor's Save at 11:22 rewrote `config/nemo_config.yaml` (block style, comments dropped, sipo_in frame filled) and left `nemo_config.yaml.bak` (= the committed version). 22 tests that edit the example config's text fail with it. Not committed; asked Rahaf.
 - Not done yet: PC side (`link.py`, `verify.py` readback rows, editor), build, EXP-10 (after Rahaf's OK).
 
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — Step 2: config restored, pushed, PC side
+- Rahaf: "1 restore the config, push, then do the PC side".
+- Config: `git checkout config/nemo_config.yaml` (the committed version; Rahaf's editor Save of 11:22 discarded), `.bak` deleted; pytest 371 passed. `fd9f54c` pushed.
+- RTL addition: `chip_top` RB_INFO +5..+8 = the readback window length in ticks (so a sequence whose one wait step has no fixed length can still be predicted exactly); RB_INFO now 16 bytes. `chip_top_tb` check: window = 31953 ticks for chip_sim_test.yaml (derived: 5 + 145 us + the PISO read ending at clk_piso's 168th falling edge, 2.5 + 167 us in = 319.5 us, + 3 ticks latency; first range guess 320..330 us was wrong). **xsim 15/15.**
+- PC side:
+  - `link.py`: `V2_RB_*`, `SeqLink.read_readback()` (None on a bitstream without readback).
+  - `readback.py` (new): `expected_readback` (per pin: edges, saw 0/1, end, last period, high, from `seqwaves.sequence_waves`; one wait step's length = window - fixed steps; more than one -> shown, not judged), `expected_sipo`, `check_readback` (edges / flags / end exact, period / high +-1 tick; the sipo_in frame bit-exact + the bit count).
+  - `verify.verify_table(..., steps=)`: readback rows after the captures; `cli verify` (both --mode and --seq) and the editor's Verify pass the steps; the editor shows them under "Pad readback".
+  - Docs: `docs/link_register_map.md` (pad readback region), USER_MANUAL §8.9, tools README, CLAUDE.md §6, `docs/experiments/EXP-10_pad_readback.md` (planned).
+- Results [tested, pytest]: `test_readback.py` 15 passed, incl. **the Python expectation for chip_sim_test.yaml = the numbers the RTL produced in chip_top_tb** (all 22 pins, derived independently); a wrong pin fails only its row; period tolerance 1 tick; the frame (wrong bit, wrong count); an old bitstream / vchip_top notes; `read_readback` parsing, frames <= 255 bytes. Full suite 386 passed, 1 skipped (incl. the page-script syntax check).
+- Next steps: Rahaf's OK -> build `chip_top` (timing: the read path got a bigger mux; WNS was +0.112 ns) -> EXP-10.

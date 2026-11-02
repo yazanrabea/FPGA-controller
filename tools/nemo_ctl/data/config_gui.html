@@ -107,6 +107,7 @@ select.type { font: 13px var(--font); width: 100%; padding: 4px; border: 1px sol
 table.vt { border-collapse: collapse; font-size: 12px; width: 100%; }
 table.vt th, table.vt td { text-align: left; padding: 4px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
 table.vt th { color: var(--muted); font-weight: 500; }
+table.vt tr.sect td { font-weight: 600; padding-top: 12px; }
 table.vt td.m { font-family: var(--mono); overflow-wrap: anywhere; max-width: 360px; }
 table.vt td.res { font-weight: 700; } td.res.pass { color: var(--ok); } td.res.fail { color: var(--error); } td.res.nj { color: var(--muted); }
 table.vt tr.fail { background: var(--error-soft); }
@@ -411,7 +412,7 @@ async function verifyMode() {
   if (!r.ok) { box.replaceChildren(); out.className = "runout err"; out.textContent = "error: " + r.error; return; }
   const what = r.expect.length ? r.expect.map((e) => `  ${e.pin}: ${e.kind} ${e.expected}`).join("\n")
                                : "  (no capture has an expect: only the run status is judged)";
-  if (!confirm(`Verify mode ${cur} on the board, ${repeat} run${repeat > 1 ? "s" : ""}?\n\nChecks:\n${what}\n\nchip_top must be programmed, J18 on 1V8.`)) return;
+  if (!confirm(`Verify mode ${cur} on the board, ${repeat} run${repeat > 1 ? "s" : ""}?\n\nChecks:\n${what}\n  + the pad readback of the 22 outputs (if this chip_top has it)\n\nchip_top must be programmed, J18 on 1V8.`)) return;
   box.replaceChildren();
   out.className = "runout"; out.textContent = `Verifying ${cur} on the board, ${repeat} run${repeat > 1 ? "s" : ""} (opening the JTAG link takes a few seconds)…`;
   $("rrun").disabled = $("rdry").disabled = $("vrun").disabled = true;
@@ -431,11 +432,17 @@ async function verifyMode() {
   const sum = el("div", {class: "vsum " + (r.passed ? "pass" : "fail")},
     `${r.passed ? "PASS" : "FAIL"}: ${c.pass} pass, ${c.fail} fail, ${c.not_judged} not judged, ${r.runs} run${r.runs > 1 ? "s" : ""}`, copy);
   const tb = el("tbody");
+  let rbHead = false;
   for (const x of r.rows) {
-    const pinRow = x.pin !== "(run)";
+    if (x.kind === "readback" && !rbHead) {         // pad readback (plan Step 2): its own section
+      rbHead = true;
+      tb.append(el("tr", {class: "sect"}, el("td", {colspan: "6"}, "Pad readback: what each output pin did, read back at the pin")));
+    }
+    const target = x.pin.endsWith(" frame") ? x.pin.slice(0, -6) : x.pin;
+    const pinRow = !x.pin.startsWith("(");
     const res = x.ok === true ? "PASS" : x.ok === false ? "FAIL" : "–";
     tb.append(el("tr", {class: (x.ok === false ? "fail" : "") + (pinRow ? " jump" : ""),
-                        title: pinRow ? "Show this pin's row" : null, onclick: pinRow ? () => jumpTo(x.pin) : null},
+                        title: pinRow ? "Show this pin's row" : null, onclick: pinRow ? () => jumpTo(target) : null},
       el("td", {class: "m"}, x.pin), el("td", {}, x.kind), el("td", {class: "m"}, x.expected),
       el("td", {class: "m"}, x.measured), el("td", {class: "res " + (x.ok === true ? "pass" : x.ok === false ? "fail" : "nj")}, res),
       el("td", {}, x.note)));

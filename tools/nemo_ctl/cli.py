@@ -183,7 +183,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     from datetime import datetime
     import yaml
     from .config import load_config
-    from .mode_seq import mode_table
+    from .mode_seq import mode_steps, mode_table
     from .sequence import SequenceError
     from .units import UnitsError, parse_duration_ns
     from .verify import (VerifyError, format_csv, format_markdown, format_text,
@@ -192,12 +192,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     try:
         if args.seq:
             table, expect, margin = load_verify_sequence(args.seq)
+            steps = (yaml.safe_load(Path(args.seq).read_text()) or {}).get("steps") or []
             notes, what = [], f"sequence {Path(args.seq).name}"
         else:
             config = load_config(args.config)
             expect = mode_expectations(config, args.mode)
             dur = parse_duration_ns(args.duration) * 1e-9 if args.duration else None
             table, notes = mode_table(config, args.mode, dur)
+            steps = mode_steps(config, args.mode, dur)[0]      # for the pad readback check
             what = f"mode {args.mode}"
     except (SequenceError, UnitsError, VerifyError, ValueError, OSError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
@@ -220,7 +222,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
         return 1
     sl = _open_chip_link(args)
     try:
-        res = verify_table(sl, table, expect, mode=args.mode or what, repeat=args.repeat, margin_s=margin)
+        res = verify_table(sl, table, expect, mode=args.mode or what, repeat=args.repeat, margin_s=margin,
+                           steps=steps)
     finally:
         sl.close()
     for line in format_text(res):

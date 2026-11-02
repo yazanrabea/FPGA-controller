@@ -807,6 +807,16 @@ python -m nemo_ctl.cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --r
 What a pass shows on hardware: `PASS: k pass, 0 fail, …` in the terminal / editor. A check
 that should fail must fail: change one `expect` bit on purpose and see FAIL on that pin only.
 
+**Pad readback (plan Step 2, from the `chip_top` built after 2026-11-02):** `verify` also
+checks the **22 outputs**, read back at their own pins during the run. Nothing to type: the
+expected values come from the run's steps. A "Pad readback" section lists, per pin, the
+rising edges, whether it was seen at 0 / 1, the level at the end, and for clocks / pulses the
+last period and high time (±1 tick of 10 ns), plus the `sipo_in` frame bit for bit (sampled
+on `clk_sipo`'s read-back). A pin stuck, shorted or wrong at the FPGA pin fails its row.
+It can't see an open after the pin (connector, HTG board, wire, chip) or the analog level.
+On an older `chip_top` the section says "no pad readback (rebuild chip_top)". `vchip_top`
+reads its outputs back inside the FPGA (its DFT outputs have no pin): the section says so.
+
 ### 8.10 Record the pins inside the FPGA (`seq sample`, plan 2026-11-01 Step 3)
 
 `sample_loopback_top` is the Phase 7 link bench (`phase7_link_jtag_top`: same pins, same 5

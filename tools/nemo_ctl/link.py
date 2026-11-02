@@ -356,6 +356,8 @@ V2_TABLE_BASE = 0x1000  # step k's entry at V2_TABLE_BASE + k * target.entry_byt
 V2_SAMPLER = 0x0020     # 24 bytes: config +0..10 (R/W), status +11..19, info +20/+21 (R)
 V2_SAMPLES = 0x4000     # sample i at V2_SAMPLES + bytes_per_sample * i (READ_REG)
 SAMPLE_READ_WORDS = 100 # samples per READ_REG frame (2-byte samples: 200 B, under 255)
+# pad readback (chip_top, verification plan Step 2): = gen_svh.RB_* (= chip_pkg RB_*)
+V2_RB_BASE, V2_RB_STRIDE, V2_RB_INFO, V2_RB_SIPO = 0x0200, 16, 0x0360, 0x0380
 
 # byte offsets inside one cap cell's result block
 V2_CAP_FLAGS, V2_CAP_EDGES, V2_CAP_PERIOD, V2_CAP_HIGH, V2_CAP_DATA = 0, 1, 5, 9, 13
@@ -472,6 +474,38 @@ class SeqLink(Link):
         k = self.target.cap_index(cap_cell)
         b = self.read_capture_raw(k * v2_cap_stride(self.target) + V2_CAP_PERIOD, 8)
         return {"period": int.from_bytes(b[0:4], "little"), "high": int.from_bytes(b[4:8], "little")}
+
+    # ---- pad readback (chip_top, verification plan Step 2) ----
+    def read_readback(self) -> dict | None:
+        """What each output pin did during the last run, read back at its pad (chip_top's
+        readback cells; docs/plan_2026-11-01_verification.md Step 2). None on a bitstream
+        without it (its RB_INFO reads 0). Otherwise {'pad': True if read at the pads (False:
+        from the output registers, vchip_top), 'window': window length in ticks, 'sipo_bits',
+        'sipo' (int, the sipo_in readback frame), 'cells': {sig cell name: {'edges', 'period',
+        'high', 'saw0', 'saw1', 'end'}}} in the target's sig-cell order."""
+        info = self.read_reg(V2_RB_INFO, 9)
+        n = info[0]
+        if n == 0:
+            return None
+        if n != len(self.target.sig_cells):
+            raise LinkError(f"readback has {n} cells, the target {self.target.name} has "
+                            f"{len(self.target.sig_cells)}")
+        raw = b""
+        total = n * V2_RB_STRIDE
+        for off in range(0, total, 176):                  # 11 cells per READ_REG frame
+            raw += self.read_reg(V2_RB_BASE + off, min(176, total - off))
+        cells = {}
+        for i, c in enumerate(self.target.sig_cells):
+            r = raw[i * V2_RB_STRIDE:(i + 1) * V2_RB_STRIDE]
+            cells[c.name] = {"edges": int.from_bytes(r[1:5], "little"),
+                             "period": int.from_bytes(r[5:9], "little"),
+                             "high": int.from_bytes(r[9:13], "little"),
+                             "saw0": bool(r[0] & 1), "saw1": bool(r[0] & 2), "end": (r[0] >> 2) & 1}
+        width = info[4]
+        sipo = self.read_reg(V2_RB_SIPO, (width + 7) // 8) if width else b""
+        return {"pad": bool(info[1]), "sipo_bits": int.from_bytes(info[2:4], "little"),
+                "sipo_width": width, "window": int.from_bytes(info[5:9], "little"),
+                "sipo": int.from_bytes(sipo, "little"), "cells": cells}
 
     # ---- sampler (sample_loopback_top) ----
     def sampler_info(self) -> tuple[int, int]:

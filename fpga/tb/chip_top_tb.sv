@@ -320,9 +320,16 @@ module chip_top_tb;
         end
         begin
             automatic logic [135:0] got = '0;
-            request(8'h02, chip_pkg::RB_INFO, 5, rc, rd, ok);
-            check(ok && rd.size() == 5 && rd[0] == NS && rd[1] == 8'd1 && {rd[3], rd[2]} == 16'd136 && rd[4] == 8'd136,
+            request(8'h02, chip_pkg::RB_INFO, 9, rc, rd, ok);
+            check(ok && rd.size() == 9 && rd[0] == NS && rd[1] == 8'd1 && {rd[3], rd[2]} == 16'd136 && rd[4] == 8'd136,
                   $sformatf("7. RB_INFO: %0d cells, PAD_READBACK 1, 136 SIPO bits of 136 (got %p)", NS, rd));
+            // window = the run as the pins saw it: 5 us idle + 145 us sipo_load + the PISO read,
+            // which ends on the 168th capture = clk_piso's 168th falling edge, 2.5 + 167 us
+            // into the step: 319.5 us = 31950 ticks, plus a few ticks of capture / step latency
+            begin
+                automatic int len = {rd[8], rd[7], rd[6], rd[5]};
+                check(ok && len >= 31950 && len <= 31960, $sformatf("7. RB_INFO window length %0d ticks (31950 .. 31960)", len));
+            end
             request(8'h02, chip_pkg::RB_SIPO, 17, rc, rd, ok);
             for (int i = 0; i < rd.size() && i < 17; i++) got[i*8 +: 8] = rd[i];
             check(ok && rd.size() == 17 && got == chip_tb_pkg::SIPO_FRAME,

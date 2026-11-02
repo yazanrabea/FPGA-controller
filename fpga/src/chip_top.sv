@@ -258,22 +258,27 @@ module chip_top #(
     localparam int SPW = chip_pkg::SIG_SERIAL_W[chip_pkg::SIPO_CELL];   // 136
     logic [SPW-1:0] rb_sipo;
     logic [15:0]    rb_sipo_n;           // bits shifted in this window (saturating)
+    logic [TW-1:0]  rb_len;              // window length in ticks (the run as the pins saw it)
     logic           rb_sclk_d, rb_run_d;
     wire rb_sclk  = rb_s1[chip_pkg::SIPO_CLK_CELL];
     wire rb_sedge = chip_pkg::SIPO_ON_FALLING ? (rb_sclk && !rb_sclk_d)    // data on falling -> sample rising
                                               : (!rb_sclk && rb_sclk_d);
     always_ff @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            rb_sipo <= '0; rb_sipo_n <= '0; rb_sclk_d <= 1'b0; rb_run_d <= 1'b0;
+            rb_sipo <= '0; rb_sipo_n <= '0; rb_len <= '0; rb_sclk_d <= 1'b0; rb_run_d <= 1'b0;
         end else begin
             rb_sclk_d <= rb_sclk;
             rb_run_d  <= rb_run;
             if (rb_run && !rb_run_d) begin                    // window opens: start over
                 rb_sipo   <= rb_sedge ? SPW'(rb_s1[chip_pkg::SIPO_CELL]) : '0;
                 rb_sipo_n <= rb_sedge ? 16'd1 : 16'd0;
-            end else if (rb_run && rb_sedge) begin
-                rb_sipo   <= {rb_sipo[SPW-2:0], rb_s1[chip_pkg::SIPO_CELL]};   // MSB first, as sent
-                if (rb_sipo_n != 16'hFFFF) rb_sipo_n <= rb_sipo_n + 16'd1;
+                rb_len    <= 1;
+            end else if (rb_run) begin
+                if (~rb_len != '0) rb_len <= rb_len + 1'b1;   // saturating
+                if (rb_sedge) begin
+                    rb_sipo <= {rb_sipo[SPW-2:0], rb_s1[chip_pkg::SIPO_CELL]};   // MSB first, as sent
+                    if (rb_sipo_n != 16'hFFFF) rb_sipo_n <= rb_sipo_n + 16'd1;
+                end
             end
         end
     end
@@ -283,7 +288,7 @@ module chip_top #(
     localparam int SPB = (SPW + 7) / 8;                                   // 17 bytes
     function automatic logic in_rb_region(input logic [15:0] a);
         return (a >= chip_pkg::RB_BASE && a < chip_pkg::RB_BASE + RBN)
-            || (a >= chip_pkg::RB_INFO && a < chip_pkg::RB_INFO + 8)
+            || (a >= chip_pkg::RB_INFO && a < chip_pkg::RB_INFO + 16)
             || (a >= chip_pkg::RB_SIPO && a < chip_pkg::RB_SIPO + SPB);
     endfunction
 
@@ -303,13 +308,17 @@ module chip_top #(
                        5'b0, rb_end[i], rb_saw1[i], rb_saw0[i]};
         if (bus_raddr >= chip_pkg::RB_BASE && bus_raddr < chip_pkg::RB_BASE + RBN)
             rb_byte = rec[b*8 +: 8];
-        else if (bus_raddr >= chip_pkg::RB_INFO && bus_raddr < chip_pkg::RB_INFO + 8) begin
+        else if (bus_raddr >= chip_pkg::RB_INFO && bus_raddr < chip_pkg::RB_INFO + 16) begin
             case (bus_raddr - chip_pkg::RB_INFO)
                 16'd0: rb_byte = 8'(NS);
                 16'd1: rb_byte = {7'b0, PAD_READBACK};
                 16'd2: rb_byte = rb_sipo_n[7:0];
                 16'd3: rb_byte = rb_sipo_n[15:8];
                 16'd4: rb_byte = 8'(SPW);
+                16'd5: rb_byte = rb_len[7:0];      // +5..+8: the window length in ticks
+                16'd6: rb_byte = rb_len[15:8];
+                16'd7: rb_byte = rb_len[23:16];
+                16'd8: rb_byte = rb_len[31:24];
                 default: rb_byte = 8'h00;
             endcase
         end else if (bus_raddr >= chip_pkg::RB_SIPO && bus_raddr < chip_pkg::RB_SIPO + SPB) begin
