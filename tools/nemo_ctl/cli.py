@@ -319,6 +319,82 @@ def cmd_seq_read(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_seq_sample(args: argparse.Namespace) -> int:
+    """Plan 2026-11-01 Step 3: set up sample_loopback_top's sampler, optionally run the
+    loaded sequence, read the record and save it (CSV / VCD)."""
+    from .link import LinkError, V2_STEP
+    from .samples import (LOOPBACK_PINS, STEP_FIELD, SampleError, decode, make_setup, record_window,
+                          to_csv, to_vcd)
+    params = {"pins": args.pins or ",".join(LOOPBACK_PINS), "rate": args.rate, "period": args.period,
+              "samples": args.samples, "pre": args.pre, "trigger": args.trigger, "on": args.on,
+              "step": args.step}
+    steps = None
+    try:
+        setup = make_setup(params, list(LOOPBACK_PINS), n_bits=16)
+        if args.check:
+            import yaml
+            steps = (yaml.safe_load(Path(args.check).read_text()) or {}).get("steps") or []
+            if not steps:
+                raise SampleError(f"{args.check}: no steps")
+    except (SampleError, OSError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"sampler: {setup.summary()}")
+    sl = _open_seqlink(args)
+    try:
+        try:
+            bits, depth = sl.sampler_info()
+        except LinkError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        if setup.n > depth:
+            print(f"error: {setup.n} samples, this bitstream holds {depth}", file=sys.stderr)
+            return 1
+        if not args.read_only:
+            sl.sampler_setup(setup)
+            if not args.run:
+                print("sampler set up; it records on the next sequence start (seq run)")
+                return 0
+            sl.start()
+            r = sl.wait(args.wait)
+            _print_seq_status(sl.seq_status(), sl.read_reg(V2_STEP, 1)[0], r.step)
+        st = sl.sampler_status()
+        rec = sl.read_samples(bits)
+    finally:
+        sl.close()
+    flags = [k for k in ("armed", "triggered", "done") if st[k]]
+    print(f"record: {st['n_valid']} samples, trigger at index {st['trig_idx']} "
+          f"(sample {st['trig_count']} since the start); {' '.join(flags) or 'nothing recorded'}")
+    if not rec.words:
+        return 1
+    w = record_window(setup, rec)
+    print(f"  from {w[0]:g} ns to {w[1]:g} ns after RUN")
+    for pin, segs in decode(setup, rec).items():
+        edges = segs[1:]
+        first = ", ".join(f"{'rise' if v else 'fall'} {t:g} ns" for t, v in edges[:3])
+        print(f"  {pin:8s} starts {segs[0][1]}, {len(edges)} edges" + (f": {first}" + (" ..." if len(edges) > 3 else "") if edges else ""))
+    passed, expected = True, None
+    if steps is not None:
+        from .seqwaves import SeqWaveError, check_record, expected_for
+        from .verify import VerifyResult, format_text
+        try:
+            rows = check_record(steps, setup, rec)
+            expected = expected_for(steps, setup, rec)
+        except SeqWaveError as exc:
+            print(f"error: can't build the expected waves: {exc}", file=sys.stderr)
+            return 1
+        print(f"check against {args.check} (outputs: their expected wave; inputs: their output's):")
+        for line in format_text(VerifyResult(mode="record", runs=[rows])):
+            print("  " + line)
+        passed = all(r.ok is not False for r in rows)
+    if args.out:
+        out = Path(args.out)
+        out.write_text(to_vcd(setup, rec, expected=expected, step_field=STEP_FIELD)
+                       if out.suffix.lower() == ".vcd" else to_csv(setup, rec), encoding="utf-8")
+        print(f"written to {out}")
+    return 0 if st["done"] and passed else 1
+
+
 def cmd_link_status(args: argparse.Namespace) -> int:
     lnk = _open_link(args)
     try:
@@ -750,6 +826,40 @@ def build_parser() -> argparse.ArgumentParser:
                                 help="print a cap cell's capture register and edge count")
     sq_read.add_argument("cell", help="cap cell name, e.g. data_in")
     sq_read.set_defaults(func=cmd_seq_read)
+    sq_sample = sq_sub.add_parser(
+        "sample", parents=[seq_common], formatter_class=_RDF,
+        help="record the 10 loopback pins with the in-FPGA sampler (sample_loopback_top)",
+        description=_wrap(
+            "Verification plan Step 3. Needs sample_loopback_top on the board (phase7_link_top "
+            "with the sampler; same pins and jumpers as EXP-03/04). Sets up the sampler (rate, "
+            "length, trigger), and with --run starts the loaded sequence and waits; then reads "
+            "the record and prints each pin's edges. --out x.vcd (GTKWave / PulseView / Vivado) "
+            "or x.csv. Pins: clk rst data cs en (outputs LA00-04) and clk_in .. en_in (inputs "
+            "LA16-20). Times are ns from RUN, resolution one sample. See docs/USER_MANUAL.md 8.10."),
+        epilog=_wrap("Example (from tools/, after `seq load ../config/phase7_seq_loopback.yaml --jtag`):\n"
+                     "  python -m nemo_ctl.cli seq sample --jtag --rate 1kHz --samples 4000 "
+                     "--trigger ext --step 1 --pre 100 --run --wait 15 --out record.vcd"),
+    )
+    sq_sample.add_argument("--pins", default=None, help="comma list to show (default: all 10)")
+    sq_sample.add_argument("--rate", default=None, help="samples per second, e.g. 10MHz or 1kHz")
+    sq_sample.add_argument("--period", default=None, help="or the time per sample, e.g. 100ns")
+    sq_sample.add_argument("--samples", type=int, default=4096, help="record length (1..4096)")
+    sq_sample.add_argument("--pre", type=int, default=0, help="samples kept before the trigger")
+    sq_sample.add_argument("--trigger", default="now", choices=["now", "ext", "rise", "fall", "high", "low"],
+                           help="now (at the start), ext (start of --step), or rise/fall/high/low on --on")
+    sq_sample.add_argument("--on", default=None, help="trigger pin for rise / fall / high / low")
+    sq_sample.add_argument("--step", type=int, default=None, help="trigger ext: the step whose start triggers")
+    sq_sample.add_argument("--run", action="store_true", help="start the loaded sequence and wait")
+    sq_sample.add_argument("--wait", type=float, default=10.0, metavar="SECONDS", help="with --run (default 10)")
+    sq_sample.add_argument("--read-only", action="store_true",
+                           help="only read the last record (no setup, no run); the setup options "
+                                "must match the one it was recorded with")
+    sq_sample.add_argument("--check", default=None, metavar="SEQUENCE.yaml",
+                           help="judge the record against this sequence (the one loaded): each "
+                                "output against its expected wave, each input against its output's "
+                                "(loopback); the VCD then also gets <pin>_exp")
+    sq_sample.add_argument("--out", default=None, help="write the record: .vcd or .csv")
+    sq_sample.set_defaults(func=cmd_seq_sample)
 
     return p
 

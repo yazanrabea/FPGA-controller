@@ -85,6 +85,32 @@ Goal: check all 22 outputs on every run, with the chip connected, without extra 
 
 ## Step 3: sample cell (logic-analyser capture, R2)
 
+**Progress 2026-11-01 (Yazan):** item 1 (RTL) and the decode/compare half of item 4 are done
+and [simulated] / [tested]: `fpga/src/sample_cell.sv` + `fpga/tb/sample_cell_tb.sv` 39/39
+(Icarus 12; xsim still to run on the lab PC), `tools/nemo_ctl/samples.py` + pytest 24.
+Changes from the text below: the config is taken when a record is **armed** (run rising), not
+on apply (a mid-run apply would have changed a running record); a `trig_count` output places
+the record on the RUN time axis. Open: where `sample:` lives in the config (a mode only holds
+blocks, as for `expect`), the link region (item 2), the test top on the loopback pairs (item 6),
+and the editor overlay.
+
+**Progress 2026-11-01, later (Yazan):** items 2 and 6 (laptop part) done: `phase7_link_top`
+parameter `SAMPLER` + wrapper `fpga/src/sample_loopback_top.sv` / `.xdc` (pins of
+`phase7_link_jtag_top`, none moved), register map "v2 sampler", `SeqLink.sampler_*`,
+`cli seq sample` (VCD / CSV out), `fpga/tb/sample_loopback_top_tb.sv` 19/19. Next on the lab
+PC: xsim, the bitstream, EXP-11 (`docs/experiments/EXP-11_sampler_loopback.md`). Still open: a
+sampler in `chip_top` (with Rahaf), `sample:` in the mode config, the editor overlay.
+
+**Progress 2026-11-01, third part (Yazan):** the PC-side comparison (item 4) for sequences: the
+record now carries the step number (bits 13:10), `tools/nemo_ctl/seqwaves.py` builds a
+sequence's expected waves from the step starts the record shows (others derived across
+fixed-length steps), and `cli seq sample --check <sequence>` gives PASS / FAIL per pin and a
+VCD with `<pin>_exp`. Checked on the RTL's own records in simulation
+(`scripts/check_sample_dump.py`: jumpers in -> all pass; `clk_in` pulled -> only `clk_in`
+fails). **What's left of Step 3 needs the lab or Rahaf:** xsim + the build + EXP-11, and a
+sampler in `chip_top`. The `sample:` part of the mode config and the editor overlay are only
+useful once `chip_top` has a sampler (the editor works on chip modes), so they move there.
+
 Goal: record chosen pins at a chosen rate into FPGA memory and show them on the PC.
 
 1. **RTL.** New `fpga/src/sample_cell.sv`: N input bits (outputs' readback from Step 2 +

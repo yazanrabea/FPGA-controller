@@ -804,6 +804,40 @@ python -m nemo_ctl.cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --r
 What a pass shows on hardware: `PASS: k pass, 0 fail, …` in the terminal / editor. A check
 that should fail must fail: change one `expect` bit on purpose and see FAIL on that pin only.
 
+### 8.10 Record the pins inside the FPGA (`seq sample`, plan 2026-11-01 Step 3)
+
+`sample_loopback_top` is the Phase 7 link bench (`phase7_link_jtag_top`: same pins, same 5
+jumpers J3-0..4 -> J3-16, J2-17..20) plus a small logic analyser in the FPGA: it records
+all 10 pins (the 5 outputs and the 5 inputs) into block RAM, up to 4096 samples, at up to
+100 MHz, around a trigger, and the PC reads it back over JTAG. **[simulated] only so far;
+not built or run on the board.**
+
+```
+create_project.tcl -tclargs sample_loopback_top build        # lab PC, once
+python -m nemo_ctl.cli seq load ../config/phase7_seq_loopback.yaml --jtag
+python -m nemo_ctl.cli seq sample --jtag --rate 1kHz --samples 4000 \
+    --trigger ext --step 1 --pre 100 --run --wait 15 --out record.vcd
+```
+
+- `--rate 10MHz` or `--period 100ns`: one sample per period (whole 10 ns ticks only).
+- `--samples N` (1..4096), `--pre K`: K of them from before the trigger.
+- `--trigger now` (from the sequence start), `ext --step k` (the start of step k),
+  `rise` / `fall` / `high` / `low --on <pin>` (judged between samples).
+- `--run`: starts the loaded sequence and waits; without it, the setup waits for the next
+  `seq run`. `--read-only` reads the last record again.
+- It prints each pin's level and first edges (ns from RUN) and writes `--out x.vcd`
+  (open in GTKWave, PulseView or Vivado) or `x.csv`.
+- `--check ../config/phase7_seq_loopback.yaml` (the sequence you loaded): PASS / FAIL per
+  pin. Each output is held to its expected wave (built from the sequence and the step
+  starts the record shows in its step bits, `tools/nemo_ctl/seqwaves.py`), each input to its
+  output's expected wave (the loopback). Tolerance: 2 samples + 20 ns. The VCD then also
+  has `<pin>_exp` and a `step` bus, so measured and expected sit side by side. Exit 0 only
+  if every pin passes.
+- Resolution = one sample period. The span is `samples x period` (4096 at 1 kHz = 4 s).
+
+What a pass looks like on the board: with the jumpers in, every input follows its output
+(`clk_in` edges = `clk` edges at the same times); a pulled jumper shows that input flat at 0.
+
 ## 9. Troubleshooting
 
 | Symptom | Likely cause | Fix |

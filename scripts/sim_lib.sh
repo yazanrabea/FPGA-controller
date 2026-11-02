@@ -10,6 +10,7 @@
 # Usage inside a script:
 #   source "$(dirname "$0")/sim_lib.sh"
 #   sim_run <tb_top_module> <source files...>
+#   SIM_PLUSARGS="+name=value ..." sim_run ...   # optional plusargs for the testbench
 #   PYTHON=$(sim_python)      # python3 if it can import yaml, else python
 
 WORK=$(mktemp -d)
@@ -51,7 +52,8 @@ sim_run() {
     local top=$1; shift
     if [ "$SIM" = icarus ]; then
         "$(_find iverilog /opt/homebrew/bin /c/iverilog/bin)" -g2012 -o "$WORK/$top.vvp" "$@"
-        "$(_find vvp /opt/homebrew/bin /c/iverilog/bin)" "$WORK/$top.vvp"
+        # shellcheck disable=SC2086  # SIM_PLUSARGS is a list of +args
+        "$(_find vvp /opt/homebrew/bin /c/iverilog/bin)" "$WORK/$top.vvp" ${SIM_PLUSARGS:-}
     else
         local d="$WORK/$top" f srcs=()
         mkdir -p "$d"
@@ -63,7 +65,13 @@ sim_run() {
             || { cat "$d/xvlog.log"; return 1; }
         ( cd "$d" && _xsim_tool xelab -debug off -s snap "$top" > xelab.log 2>&1 ) \
             || { cat "$d/xelab.log"; return 1; }
-        ( cd "$d" && _xsim_tool xsim snap -R > xsim.log 2>&1 ) \
+        # plusargs go in an options file: on Windows xsim.bat splits a command-line
+        # argument at "=" (+name=C:\path arrived as "name" and "C:\path"), and the
+        # options file drops backslashes, so paths get forward slashes (Windows takes both)
+        local a
+        : > "$d/plusargs.f"
+        for a in ${SIM_PLUSARGS:-}; do a=${a#+}; echo "-testplusarg ${a//\\//}" >> "$d/plusargs.f"; done
+        ( cd "$d" && _xsim_tool xsim snap -R -f plusargs.f > xsim.log 2>&1 ) \
             || { cat "$d/xsim.log"; return 1; }
         grep -v -E '^(Vivado Simulator|Copyright|Time resolution|source |# |INFO:|\$finish called|exit$|run -all|quit$)' "$d/xsim.log" \
             | sed '/^[[:space:]]*$/d'

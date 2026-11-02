@@ -7,9 +7,140 @@ Tag every result **[simulated]** or **[measured on board]**.
 | Person | Task | Branch | Files touched |
 |---|---|---|---|
 | Rahaf | Chip pipeline C1-C6 (pin map -> generator -> chip_top -> EXP-07/08); C1-C4 done 2026-10-26 (chip_top built, sim 11/11); C1-C5 done; EXP-07 PASS 2026-10-26. C6: EXP-08 PASS 2026-10-26 (309/310 exact; 1 transient open). Chip pipeline C1-C6 done. | `main` | `config/nemo_config.yaml` (pin_map), `tools/nemo_ctl/{fmc_pins,validate,sequence,gen_svh}.py`, next `fpga/src/chip_top.sv`, `fpga/constraints/chip_top.xdc` |
-| Yazan | Verification plan Step 1: `expect` on capture settings + `cli verify` + editor Verify button (`docs/plan_2026-11-01_verification.md`). | `feature/yazan-verify` | new `tools/nemo_ctl/verify.py`, `tools/nemo_ctl/{validate,cli,gui}.py`, `tools/nemo_ctl/data/config_gui.html`, new `tools/nemo_ctl/tests/test_verify.py`, `docs/{USER_MANUAL,WORKLOG,decisions}.md`, `tools/nemo_ctl/README.md`. Reads `mode_seq.run_table`, doesn't change it |
+| Yazan | Verification plan Step 3 (sampler): cell + `sample_loopback_top` + link + `cli seq sample` done in simulation; next: lab (xsim, build, EXP-11). PRs for review: #2 (Step 1, EXP-09 not run) and #3 (Step 3, stacked on #2). | `feature/yazan-sample-cell` (on top of `feature/yazan-verify`) | `fpga/src/{sample_cell,sample_loopback_top,phase7_link_top}.sv`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/run_sample_sim.sh`, `tools/nemo_ctl/{samples,link,cli}.py`, `tests/test_samples.py`; docs |
 
 ---
+
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 record check (`seq sample --check`)
+- Goal: Yazan: "yes continue with step 3" (the remaining laptop parts).
+- Done:
+  - `fpga/src/phase7_link_top.sv` (SAMPLER = 1 only): sample bits 13:10 = the step number
+    through 2 FFs (`stp_s0` / `stp_s1`), bits 14-15 = 0.
+  - **`tools/nemo_ctl/seqwaves.py`** (new): `sequence_waves` (a sequence's expected pin
+    waves: waves.py's `_lane` per setting, + sig_cell's 2-tick latency, a cell keeps running
+    across steps it isn't in), `step_starts` (seen in the record / derived across `after`
+    steps), `check_record` (verify.Row per pin; inputs vs their loopback output's wave),
+    `expected_for`, `scale_steps` (= `compile_steps(scale=)`).
+  - `samples.py`: `LOOPBACK_PAIRS`, `STEP_FIELD`; `to_vcd(expected=, step_field=)` adds
+    `<pin>_exp` and a `step` bus. `cli seq sample --check <sequence.yaml>`.
+  - `fpga/tb/sample_loopback_top_tb.sv`: checks of the step bits; section 7 (a record of step 2
+    with the `clk_in` jumper pulled); writes records A / B with `+dump_a` / `+dump_b`.
+    `scripts/sim_lib.sh`: optional `SIM_PLUSARGS` (Icarus: after the .vvp; xsim:
+    `-testplusarg`). `scripts/check_sample_dump.py` + `run_sample_sim.sh`: the RTL's records
+    through `seqwaves.check_record`.
+  - `tests/test_seqwaves.py` (new). Docs: register map, USER_MANUAL §8.10, EXP-11, plan,
+    decisions, README, `CLAUDE.md` §6.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_loopback_top_tb` **24/24** (+ bits 13:10 = the step
+    register 2 ticks earlier on every tick; the record shows step 1 from index 50; record of
+    step 2: 8 `clk` rising edges, `clk_in` flat with its jumper pulled).
+  - **The RTL's records through the PC check** (`check_sample_dump.py`): record A (step 1,
+    jumpers in) 10/10 PASS; record B (step 2, `clk_in` pulled) fails on `clk_in` only (16
+    expected edges not seen), the other 9 PASS -> PASS.
+  - [tested, pytest] `test_seqwaves.py` 10 passed (incl. `scale_steps` == the compiler's
+    scaling, derived starts, pulled jumper, clock 1 vs 5 samples late, CLI `--check` on a fake
+    board, VCD `_exp` / `step`); full suite 371 passed, 1 skipped. Phase 7 regression
+    40/10/27/21 PASS.
+- Problems / fixes: the first check of record B also failed `rst` / `rst_in`: a step already
+  running when the record starts was taken to start at the record's first sample, so the
+  expected `rst` pulse was 95 us late. Now only a change in the record counts as a seen
+  start; the rest are derived (decision). Two test mistakes fixed (0xA5's merged 0s; a
+  record relabelled to another start time).
+- Decisions: `docs/decisions.md` 2026-11-01 (step number in the record; overlay and
+  `sample:` config wait for a sampler in `chip_top`).
+- Next steps: lab: `SIM=xsim scripts/run_sample_sim.sh`, build `sample_loopback_top`, EXP-11
+  (now with `--check`). With Rahaf: Step 2 and a sampler in `chip_top`.
+
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 link region + test top
+- Goal: Yazan: "yes continue with the link region and test top".
+- Done:
+  - **`fpga/src/phase7_link_top.sv`**: new `parameter bit SAMPLER = 0`. With 1: a
+    `sample_cell` (16 bits x 4096): bits 0-4 the outputs through 2 FFs, 5-9 the synchronized
+    inputs; armed by the sequencer's `run`; "ext" trigger = `step_start` of step `S_TRIG_STEP`;
+    config registers 0x0020-0x002A (a write -> the cell's pending config), status / info
+    0x002B-0x0035, samples at 0x4000 + 2i; `bus_rdata` = the registered register read, or the
+    block RAM's byte when the last read was a sample (keeps the 1-tick latency). With 0:
+    nothing extra (decision).
+  - **`fpga/src/sample_loopback_top.sv`** (LINK JTAG, SAMPLER 1) + `fpga/constraints/
+    sample_loopback_top.xdc` (= `phase7_link_jtag_top.xdc` pin lines, diffed identical, no
+    pin moved). `create_project.tcl -tclargs sample_loopback_top` finds it by name.
+  - **`fpga/tb/sample_loopback_top_tb.sv`** (core over UART at 2 Mbaud, the Phase 7 table
+    x1e-4); `scripts/run_sample_sim.sh` runs both sampler tbs.
+  - PC: `link.py` `V2_SAMPLER`, `V2_SAMPLES`, `SeqLink.sampler_info / sampler_setup /
+    sampler_status / read_samples` (100 samples per frame); `samples.py` wiring
+    (`LOOPBACK_PINS`, bit = the top's order, not the list order), ext `step`, `to_csv`,
+    `to_vcd`; `cli seq sample` (setup, `--run`, `--read-only`, edges printed, `--out`
+    .vcd / .csv).
+  - Docs: `docs/link_register_map.md` "v2 sampler", USER_MANUAL §8.10, EXP-11 procedure
+    (planned), plan progress, decisions, `CLAUDE.md` §6 rows, nemo_ctl README.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_loopback_top_tb` **19/19**: info / defaults / config
+    readback; a record triggered at step 1's start with 50 pre-samples (done, 400 samples,
+    trigger index 50); **all 400 words read over the link = the cell's input on tick
+    `(trig_count - trig_idx + i) * div + 1`**, and that input = the pins 2 ticks earlier
+    on every tick (the `samples.py` time formula, confirmed); jumpers in: bits 9:5 = bits
+    4:0; the trigger sample is the first after step 1's apply; `rst` falls at index 51 and
+    stays low 250 samples (= its 5000 ticks); the record is kept after the run; a new run
+    re-arms; a pulled `rst_in` jumper reads 0.
+  - `step_start` comes on a step's APPLY cycle with `step` = the new step (seen in the tb);
+    step 0's comes one tick before `run` rises.
+  - Regression with SAMPLER = 0: `seq_engine_tb` 40, `seq_bank_tb` 10,
+    `phase7_seq_loopback_top_tb` 27, `phase7_link_top_tb` 21, all PASS; generated
+    `phase7_link_pkg.sv` unchanged.
+  - Icarus elaboration of `sample_loopback_top` and `phase7_link_jtag_top` (JTAG,
+    `bscane2_sim_stub.sv` + a dummy `jtag_tap`): 0 errors.
+  - [tested, pytest] `test_samples.py` 32 passed (incl. the setup bytes, 3-frame readout, CLI
+    on a fake board); full suite 361 passed, 1 skipped.
+  - Not yet: xsim, synthesis / timing / BRAM count, the board.
+- Problems / fixes: the tb first looked up step 1 at the wrong index (step 0's `step_start`
+  is before `run` rises); fixed in the tb, the RTL was right.
+- Next steps (lab PC): `SIM=xsim scripts/run_sample_sim.sh`; build `sample_loopback_top`
+  (WNS, BRAM); EXP-11. Laptop: a sampler in `chip_top` (with Rahaf), `sample:` in the mode
+  config, the editor overlay.
+
+## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-sample-cell: Step 3 started (sample cell)
+- Goal: Yazan: "push it and we will review later, can u continue without the EXP-09?".
+  Step 1 pushed as PR #2 (https://github.com/yazanrabea/FPGA-controller/pull/2), not merged.
+  Step 2 (pad readback) waits for Rahaf (changes `chip_top` / `gen_svh.py --chip`), so
+  Step 3's stand-alone parts first.
+- Done:
+  - **`fpga/src/sample_cell.sv`** (new): N pins (already 2-FF synchronized) into a block-RAM
+    ring (`ram_style = "block"`), one sample every `cfg_div` ticks; triggers now / ext strobe
+    (remembered until the next sample) / rise / fall / high / low on `cfg_trig_pin`, judged
+    between samples; `cfg_pre` samples kept before the trigger, `cfg_n` in all, then done;
+    arming = run rising (clears the record, takes the pending config); run falling stops
+    and keeps the data; logical read index (0 = oldest), `rd_data` 1 clock later; status
+    armed / triggered / done / `n_valid` / `trig_idx` / `trig_count`.
+  - **`fpga/tb/sample_cell_tb.sv`** (new, self-checking; pins = a tick counter + a trigger
+    line, so each sample tells when it was taken), `scripts/run_sample_sim.sh`.
+  - **`tools/nemo_ctl/samples.py`** (new): `make_setup` (checks against 4096 samples and the
+    10 ns tick), `sample_times_ns` / `record_window`, `decode` (waves.py lane shape),
+    `compare` (expected edges vs recorded, one sample + sync tolerance), `words_from_bytes`.
+    `tests/test_samples.py`.
+  - Docs: plan Step 3 progress, `docs/decisions.md`, `CLAUDE.md` §6 row, nemo_ctl README.
+- Hardware setup: none.
+- Results:
+  - **[simulated, Icarus 12]** `sample_cell_tb` **39/39**: immediate trigger, rate divider
+    (incl. div 0 = 1), rising edge with pre-trigger after the 16-deep ring wrapped twice,
+    already-high line is not a rising edge, early trigger (short front), falling edge (and
+    already-low is not one), HIGH / LOW, EXT strobe between samples, run falling mid-record,
+    re-arm clears, mid-run apply doesn't change the record, n clamps, `trig_count` timing.
+  - Mutation check of the testbench: 6 deliberate RTL bugs, each now fails the tb (the first
+    run missed "RISE = HIGH", "FALL = LOW" and "EXT strobe not remembered": 3 tests added);
+    1 more was an equivalent mutant (can't change behaviour).
+  - [tested, pytest] `test_samples.py` 24 passed; full suite 353 passed, 1 skipped.
+  - Not run in xsim (lab PC), not synthesized, not in any top, not on hardware.
+- Problems / fixes:
+  - tb: a mid-run `apply` changed a running record's length -> config is now pending until
+    the next arming (decision).
+  - `compare` took its window from the last *change*, so a pin that never moved hid a
+    missing pulse (a false PASS); now the window is the record's first..last *sample*
+    (`record_window`). Also the start-level check skipped records starting before t=0.
+- Next steps: the link region for the samples (register map v3 section) and a test top
+  `sample_loopback_top` on loopback pairs 0-4 (Phase 4 pins, no `chip_top` change), with a
+  testbench; then xsim + a board run on the lab PC; where `sample:` lives in the config.
 
 ## 2026-11-01 (laptop), Yazan + Claude, branch feature/yazan-verify: verification plan + Step 1 (`cli verify`)
 - Goal: the mentors' three requirements (read a file -> waveform; sample per a setting;
@@ -1845,3 +1976,7 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Decisions: none (merge / Step 2 / sampler in chip_top are Rahaf's questions, asked).
 - Next steps: Rahaf's answers; Yazan fixes; then the board steps (EXP-09, build sample_loopback_top, EXP-11), each after Rahaf's OK.
 
+## 2026-11-02, Rahaf (with Claude), lab PC, branch feature/yazan-sample-cell — xsim plusarg fix
+- Problem: `SIM=xsim scripts/run_sample_sim.sh` on the Windows lab PC: `sample_loopback_top_tb` did not start (`Expected a switch but found C`). `sim_lib.sh` passed `-testplusarg dump_a=C:\...` on the xsim command line, and `xsim.bat` splits an argument at `=`.
+- Fix (`scripts/sim_lib.sh`, xsim branch only; Icarus unchanged): the plusargs go into an xsim options file (`-f plusargs.f`); backslashes become `/`, because the options-file parser drops them.
+- Results [simulated, xsim 2022.1, lab PC]: `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24, `check_sample_dump` PASS (record A all 10 pins, record B only `clk_in` fails, as intended); `run_phase7_sim.sh` 40/10/27/21; pytest 371 passed, 1 skipped. Full review notes: WORKLOG on `main`, 2026-11-02.

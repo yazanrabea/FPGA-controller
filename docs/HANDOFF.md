@@ -1,9 +1,49 @@
-# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done: EXP-07 + EXP-08 PASS, both EXP-08 follow-ups done)
+# Handoff — NEMO generic controller (Phases 4, 5, 7 verified on the board; chip pipeline C1-C6 done; verification plan Steps 1 + 3 built in simulation, in PRs #2 / #3)
 
 > For a fresh agent picking this up with no prior context. Read this, then `CLAUDE.md`
-> and `docs/WORKLOG.md` (newest entry first). Updated 2026-10-26, late evening, end of
-> Rahaf's lab session (Rahaf at the bench, Claude on the lab PC): C5 + EXP-07, then C6 + EXP-08
-> and its two follow-ups (phirst, sel after a reset).
+> and `docs/WORKLOG.md` (newest entry first). Updated 2026-11-01, Yazan's laptop session
+> (no board, no Vivado): the verification plan for the mentors' three requirements, its
+> Step 1 and Step 3. Everything below "2026-10-26" is unchanged from Rahaf's lab session.
+
+## Short version (2026-11-01, Yazan, laptop)
+
+- **The mentors' three requirements** (Hebrew brief: read the input from a file and output
+  the waveform; sample the waveform per a setting; check the output is what was expected):
+  1 was already done (config -> `run-mode` -> `chip_top`, EXP-07). For 2 and 3: the plan
+  **`docs/plan_2026-11-01_verification.md`** (Step 1 `expect` + `cli verify`; Step 2 pad
+  readback of the 22 outputs; Step 3 the in-FPGA sampler; Step 4 Dima's questions).
+  Rejected: looping the outputs back with jumpers in rounds (26 of 34 LA_P pins are used,
+  only LA26-33 free; `docs/decisions.md`).
+- **Step 1, PR #2** (`feature/yazan-verify`, **not merged, review pending**): an `expect`
+  (+ `tolerance` / `mask`) inside each CAPTURE setting; `python -m nemo_ctl.cli verify
+  --mode M | --seq FILE [--repeat N] [--out x.md|x.csv] --jtag` -> PASS / FAIL per pin (a
+  168-bit PISO mismatch names the stage / field / bit); a **Verify** button in the editor.
+  `mode_seq.py` / `sequence.py` unchanged. pytest only. **EXP-09** written, not run
+  (`docs/experiments/EXP-09_cli_verify.md`, config `config/exp09_verify_vchip.yaml`:
+  EXP-08's measured readback as the expect).
+- **Step 3, PR #3** (`feature/yazan-sample-cell`, **stacked on #2**, not merged):
+  - `fpga/src/sample_cell.sv`: a logic analyser in the FPGA (block-RAM ring, rate divider,
+    trigger now / step start / rise / fall / high / low, pre-trigger samples). [simulated]
+    39/39, mutation-checked.
+  - `phase7_link_top` parameter **`SAMPLER`** (default 0 = the old design, its tbs rerun:
+    40/10/27/21) and wrapper **`sample_loopback_top`** (JTAG, SAMPLER 1, the EXP-04 pins and
+    jumpers, XDC diffed identical). Records the 5 outputs, 5 inputs and the step number,
+    16 x 4096. Register map "v2 sampler" (`docs/link_register_map.md`).
+  - PC: `samples.py`, `seqwaves.py` (a sequence's expected waves from the record's step
+    starts), `SeqLink.sampler_*`, `cli seq sample [--check <sequence>] [--out x.vcd|x.csv]`.
+  - [simulated, Icarus 12] `sample_loopback_top_tb` 24/24; the RTL's own records go through
+    the PC check (`scripts/check_sample_dump.py`): jumpers in -> 10/10 PASS, `clk_in` pulled
+    -> only `clk_in` fails. **Not yet: xsim, the build, the board** (EXP-11 written).
+- **Step 2 (pad readback) not started**: it changes `chip_top.sv` and `gen_svh.py --chip`
+  (Rahaf's), so it waits for her OK. It does **not** need Dima (the expected values come
+  from the FPGA's own settings). The plan's "tie a pin to GND" negative check for EXP-10 is
+  not safe as written; replace it when Step 2 is built.
+- **Board:** not touched in this session. As far as these notes know, `vchip_top` with its
+  10 jumpers (see 2026-10-26 below). `sample_loopback_top` / EXP-09 part B need other
+  jumpers: check "Board setup" before programming.
+- **Next:** lab: EXP-09, then `SIM=xsim scripts/run_sample_sim.sh`, build
+  `sample_loopback_top`, EXP-11. Rahaf: review PR #2 then #3, and say yes / no to Step 2 and
+  to a sampler in `chip_top`. Dima's questions: add the below-ground input rating, send.
 
 ## Short version (2026-10-26, late evening)
 
@@ -55,6 +95,7 @@
 | — | **Scope timing** | **EXP-06 (2026-10-26):** timing exact; ringing 0.4-0.7 V on the jumper wires; **DRIVE 4 halves it**, so it's now the rule for chip-facing outputs |
 | — | **Chip pipeline** (C1-C6) | **All done 2026-10-26.** **C6 + EXP-08 PASS** (`vchip_top`: controller + Dima's SIPO/PISO as a virtual chip over jumpers, 309/310 readbacks exact). **C5 done + EXP-07 PASS 2026-10-26** (mode -> sequence, `run-mode`, Run on board button; all 22 outputs right on the logic analyser). **C1-C4 done 2026-10-26** (C4: `fpga/src/chip_top.sv`, sim 11/11 incl. a 136-bit SIPO load and 168-bit PISO read over JTAG, bitstream built with DRIVE 4 / PULLDOWN confirmed in the I/O report; C3: `gen_svh.py --chip` -> `fpga/src/gen/chip_pkg.sv` + `fpga/constraints/chip_top.xdc`, generated from the pin map with the DRIVE 4 rule): the chip-pin -> FMC map decided (jumper wires, by block) and checked by `validate`; the CHIP sequencer target (22 + 4 cells, 136 / 168-bit serial, 1024-byte entries). Next: C6 |
 | 8 | Chip-ready checklist | Not started: needs Dima's answers (the pin map no longer waits on him) |
+| — | **Verification plan** (2026-11-01, `docs/plan_2026-11-01_verification.md`) | Step 1 `expect` + `cli verify` + editor Verify: **PR #2**, pytest only, EXP-09 not run. Step 2 pad readback: not started (Rahaf's OK). Step 3 sampler (`sample_cell`, `sample_loopback_top`, `cli seq sample --check`): **PR #3** (stacked on #2), [simulated] Icarus 39/39 + 24/24, not built, EXP-11 not run; a sampler in `chip_top` waits for Rahaf. Step 4 Dima's questions: not sent |
 
 ## Chip pipeline (C1-C6): prove the whole flow before the chip arrives
 
@@ -202,7 +243,9 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
   - `git push` works (GitHub signed in via Git Credential Manager).
   - Memory is tight; long idle background jobs can be killed.
 - **Yazan's laptop** (Windows 11): no Vivado; Icarus 12 at `C:\iverilog\bin` (a few
-  limits, see CLAUDE.md §4); `python` 3.10; `gh` signed in as `yazanrabea`.
+  limits, see CLAUDE.md §4); `python` 3.10; `gh` signed in as `yazanrabea`. Headless
+  Microsoft Edge renders the editor for screenshots (scratch only). On this PC the Bash tool
+  mangles long heredocs with quotes: write edit scripts to a file first.
 
 ## Lab equipment (2026-10-26)
 
@@ -234,7 +277,12 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 ## Last verified results
 
-- pytest (from `tools/`): 288 passed, 1 skipped.
+- 2026-11-01 on the PR #3 branch (Yazan's laptop, Icarus 12, not xsim): pytest **371 passed,
+  1 skipped**; `scripts/run_phase7_sim.sh` 40 / 10 / 27 / 21 (SAMPLER = 0);
+  `scripts/run_sample_sim.sh`: `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24,
+  `check_sample_dump.py` PASS. `sample_loopback_top` and `phase7_link_jtag_top` elaborate in
+  Icarus with the BSCANE2 stub. Not built in Vivado.
+- pytest (from `tools/`), 2026-10-26 on `main`: 288 passed, 1 skipped.
 - [simulated, xsim]:
   - Phase 3: 28 / 16 / 9 / 16.
   - Phase 4: 21 + `phase4_serial_tb` 2.
@@ -256,6 +304,24 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
   an open issue, not a fail. EXP-07: `chip_top`, all 22 chip-input pins at the logic level.
 
 ## What to do next
+
+**From 2026-11-01 (verification plan), first:**
+
+A. **Rahaf**: review **PR #2** (Step 1), then **PR #3** (Step 3, stacked on #2: after #2 merges,
+   retarget it to `main`). In #3 check that `phase7_link_top` with `SAMPLER = 0` is the old
+   behaviour (`bus_rdata = reg_rdata`). `validate.py` (hers) got one check in the CAPTURE branch.
+B. **Lab, EXP-09** (`docs/experiments/EXP-09_cli_verify.md`): `vchip_top` with its 10 jumpers,
+   `cli verify --seq ../config/exp09_verify_vchip.yaml --jtag --repeat 300`, plus the two
+   negative checks; then `chip_top` (no jumpers), `cli verify --mode INFERENCE`.
+C. **Lab, Step 3**: `SIM=xsim scripts/run_sample_sim.sh` (xsim is stricter than Icarus); build
+   `sample_loopback_top` (record WNS and BRAM: expect +2 RAMB36 over `phase7_link_jtag_top`);
+   **EXP-11** with the bring-up jumpers (J3-0..4 -> J3-16, J2-17..20), incl. `--check`.
+D. **Rahaf's decisions**: Step 2 (pad readback: `IOBUF` + a `cap_cell` per chip output, in
+   `chip_top.sv` and `gen_svh.py --chip`) and a sampler in `chip_top` (then the editor
+   overlay and a sampling section in the mode config).
+E. **Dima's questions**: add the below-ground input rating (EXP-06's -0.41 V), final read, send.
+
+**Still open from 2026-10-26:**
 
 0. **C6 follow-ups** (EXP-08 §5), both done:
    - ~~phirst stepping~~: **done, PASS** (EXP-08 §7: `F0C3E7`, 101 / 101 on the board);
@@ -297,6 +363,8 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
   step (commit -> `git pull --rebase origin main` -> push); stop for her approval after each
   phase / decision.
 - **Yazan:** ask before pushing to `main`; he has pushed his own work to `main` directly.
+  From 2026-11-01 his work goes through **PRs for Rahaf to review** ("we'll review later"):
+  #2 and #3 are open.
 - Both: document every step per CLAUDE.md §9, docs in the same commit as the code.
 
 ## Things a new agent should NOT do
@@ -313,6 +381,9 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
   `vchip_pkg.sv` (`config/exp08_vchip.yaml`, `gen_svh.py --vchip`).
 - Don't program a top with another top's jumpers on (see "Board setup").
 - Don't call the virtual chip "the chip": no array, no ADC/TDC, and phirst comes from `pulse`.
+- Don't change `phase7_link_top`'s `SAMPLER` default (0): `phase7_link_jtag_top` (EXP-04) must
+  stay the verified design; the sampler is only in `sample_loopback_top`.
+- Don't trust an Icarus pass alone for the sampler: run it in xsim on the lab PC first.
 
 ## Key files
 
@@ -324,7 +395,8 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 | Spec, pin table (+ the DRIVE 4 note), open questions | `docs/controller_spec.md` |
 | Questions for Dima (draft) | `docs/questions_for_dima_2026-10-22.md` |
 | Link register maps + JTAG scan format | `docs/link_register_map.md` |
-| Experiments | `docs/experiments/EXP-01_*.md` ... `EXP-08_virtual_chip.md` |
+| Experiments | `docs/experiments/EXP-01_*.md` ... `EXP-08_virtual_chip.md`; planned: `EXP-09_cli_verify.md`, `EXP-11_sampler_loopback.md` (EXP-10 reserved for Step 2) |
+| Verification plan (2026-11-01) | `docs/plan_2026-11-01_verification.md`; Step 1: `tools/nemo_ctl/verify.py`, `cli verify`, editor Verify, `config/exp09_verify_vchip.yaml`; Step 3: `fpga/src/{sample_cell,sample_loopback_top}.sv`, `phase7_link_top.sv` `SAMPLER`, `fpga/constraints/sample_loopback_top.xdc`, `fpga/tb/{sample_cell,sample_loopback_top}_tb.sv`, `scripts/{run_sample_sim.sh,check_sample_dump.py}`, `tools/nemo_ctl/{samples,seqwaves}.py`, `cli seq sample` |
 | Pin verification per pair | `docs/pin_verification.md` |
 | Bugs / decisions | `docs/issues.md`, `docs/decisions.md` |
 | Build / program | `scripts/create_project.tcl`, `scripts/program_board.tcl` |
@@ -338,6 +410,7 @@ Rule kept throughout: stop for Rahaf's OK before each board step.
 
 - **Rahaf**: at the bench 2026-10-26 (EXP-06, the DRIVE 4 decision, the EXP-03 rerun, the
   review decisions); did Phases 0-5.
-- **Yazan**: owns the repo; did Phases 6-7, the JTAG bring-up runs (10-22) and the GUI.
+- **Yazan**: owns the repo; did Phases 6-7, the JTAG bring-up runs (10-22), the GUI and the
+  2026-11-01 verification plan (Steps 1, 3).
 - **Dima**: SIPO/PISO RTL and chip details; the open questions go to him.
 - **Supervisor**: Ilan Lipschutz, ASIC² Lab, Technion, NEMO project.

@@ -164,6 +164,45 @@ ticks, or a wait whose condition is already true), step k+1 starts as soon as th
 lands and STATUS.late is set. `python -m nemo_ctl.cli seq load` warns about fixed
 steps that are too short; waits can only be caught by the flag.
 
+## v2 sampler: `sample_loopback_top.sv` (verification plan 2026-11-01 Step 3)
+
+`phase7_link_top` with `SAMPLER = 1` (wrapper `sample_loopback_top`, JTAG) adds a
+`sample_cell` to the v2 map above; everything else is unchanged. Without it
+(`phase7_link_jtag_top`) these addresses read 0, so `INFO` = 0 means "no sampler".
+PC side: `link.SeqLink.sampler_info / sampler_setup / sampler_status / read_samples`,
+`tools/nemo_ctl/samples.py`, `cli seq sample`.
+
+Each sample is 16 bits: bits 0-4 = the 5 outputs `clk rst data cs en` (LA00-04_P, delayed
+by 2 FFs so they line up with the inputs), bits 5-9 = the 5 inputs `clk_in .. en_in`
+(LA16-20_P after their 2-FF synchronizer), bits 10-13 = the sequencer's current step
+(also through 2 FFs, so the PC sees when each step started, even after a wait step),
+bits 14-15 = 0. 4096 samples.
+
+| Addr | Name | Access | Meaning |
+|---|---|---|---|
+| 0x0020-0x0023 | `S_DIV` | R/W | ticks per sample (0 or 1 = every 10 ns tick) |
+| 0x0024-0x0025 | `S_N` | R/W | samples to record, 1..4096 (0 -> 1, more -> 4096) |
+| 0x0026-0x0027 | `S_PRE` | R/W | of those, kept from before the trigger (< `S_N`) |
+| 0x0028 | `S_TRIG` | R/W | 0 now (first sample), 1 ext (start of step `S_TRIG_STEP`), 2 rise, 3 fall, 4 high, 5 low (on bit `S_TRIG_PIN`, judged between samples) |
+| 0x0029 | `S_TRIG_PIN` | R/W | bit 0..15 of the sample for rise / fall / high / low |
+| 0x002A | `S_TRIG_STEP` | R/W | step number for ext |
+| 0x002B | `S_STATUS` | R | bit0 armed (recording, waiting for the trigger), bit1 triggered, bit2 done |
+| 0x002C-0x002D | `S_N_VALID` | R | samples in the record |
+| 0x002E-0x002F | `S_TRIG_IDX` | R | index of the trigger sample in the record |
+| 0x0030-0x0033 | `S_TRIG_COUNT` | R | samples taken since the sequence started, at the trigger sample |
+| 0x0034 | `S_INFO_BITS` | R | 16 (bits per sample) |
+| 0x0035 | `S_INFO_DEPTH` | R | 12 (log2 of the buffer: 4096) |
+| 0x4000 + 2·i | sample i | R (`READ_REG`) | 2 bytes LE; i = 0 is the oldest sample kept, up to `S_N_VALID` - 1 |
+
+- A config write takes effect at the **next sequence start** (RUN): the record being made
+  is never changed. RUN clears the record and arms; the end of the sequence stops it and
+  the record stays until the next RUN, so it is read after the run.
+- Sample i holds the pins as they were `((S_TRIG_COUNT - S_TRIG_IDX + i) * S_DIV + 1 - 2)`
+  ticks after the sequencer's run rose (step 0's APPLY is one tick before that).
+  [simulated] word by word in `fpga/tb/sample_loopback_top_tb.sv`.
+- Reading: up to 100 samples (200 bytes) per `READ_REG` frame; 4096 samples = 41 frames.
+  The block RAM's output goes straight onto the bus, so the 1-tick read latency holds.
+
 ## Transport: JTAG over J17 (instead of the UART), from 2026-10-22
 
 The frames above are a byte stream; it doesn't matter how the bytes travel. With the JTAG
