@@ -172,3 +172,14 @@ Each entry: date, decision, reason, rejected options.
 - Reason: after a wait step (`until: captured / edges / level / done`) the timing isn't known in advance, so expected waves computed from the table alone would be wrong after the first wait. The 6 spare bits of the 16-bit sample cost nothing. A step that began before the record isn't "seen" (its first sample is just the record's start): taking that as its start put an expected `rst` pulse 95 us late in the first try (found by the RTL-record check).
 - The editor overlay and a `sample:` part of the mode config wait for a sampler in `chip_top`: the editor works on chip modes, and today only the loopback bench has a sampler.
 - Rejected: predicting wait-step ends by simulating the conditions on the PC (needs a model of the chip's outputs); recording step starts in separate registers (only 16 steps, and the record already has room).
+
+## 2026-11-02: Step 2, pad readback design (Rahaf)
+- **A new `readback_cell`**, not a change to `cap_cell`. Reason: results must survive the end
+  of the run (`cap_cell` clears its edge count when RUN drops, and the outputs return to idle);
+  changing `cap_cell` would touch every top and behaviour EXP-01..08 verified.
+- **`sipo_in` bit-exact readback now** (136 more flip-flops): the frame is the main data path.
+- **Work on `main`**, stop after simulation for Rahaf's OK, then PC side, build, EXP-10.
+- **Rejected:** checking PULSE / CLOCK by `cap_cell` edge counts (cleared after the run);
+  "tie a pin to GND" as EXP-10's negative check (shorts a driving output); loopback jumpers
+  (no free pins, `decisions.md` 2026-11-01).
+

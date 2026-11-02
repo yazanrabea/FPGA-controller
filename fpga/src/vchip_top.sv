@@ -34,8 +34,10 @@ module vchip_top (
     output logic [1:0]                   vc_out    // virtual chip -> jumpers
 );
     // ---- the controller, exactly as chip_top ----
-    logic [chip_pkg::N_SIG-1:0] chip_out;
-    chip_top u_ctl (.clk(clk), .led(led), .chip_out(chip_out), .chip_in(ctl_in));
+    // PAD_READBACK = 0: the 7 DFT outputs have no pin here, so there is no pad to read back;
+    // chip_top's readback cells read the output registers instead (RB_INFO +1 = 0).
+    wire [chip_pkg::N_SIG-1:0] chip_out;
+    chip_top #(.PAD_READBACK(1'b0)) u_ctl (.clk(clk), .led(led), .chip_out(chip_out), .chip_in(ctl_in));
 
     genvar k;
     generate

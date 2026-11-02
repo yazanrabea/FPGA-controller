@@ -57,32 +57,45 @@ Goal: one command that runs a mode on the board and says PASS/FAIL per captured 
 
 Done when: pytest green, EXP-09 PASS, USER_MANUAL section added.
 
-## Step 2: read every output back at its own pad (RTL, `chip_top`; agree with Rahaf first)
+## Step 2: read every output back at its own pad (RTL, `chip_top`; agreed with Rahaf 2026-11-02)
 
 Goal: check all 22 outputs on every run, with the chip connected, without extra pins.
 
-1. **How.** Each chip output becomes an `IOBUF` with `T = 0` (always driving); its `O`
-   (the pad's input buffer) goes through a 2-FF synchronizer into a `cap_cell`. The XDC
-   keeps `DRIVE 4` + `SLEW SLOW` (they apply to the IOBUF output driver the same way).
-2. **What it proves / doesn't.** Proves the right level/edges/period leave the FPGA pad,
-   and catches a pad shorted to ground or to another pin (readback disagrees). Does **not**
-   catch an open after the pad (FMC connector, HTG board, wire) - that stays with the
-   logic analyser / scope.
-3. **Files.** `gen_svh.py --chip` (Rahaf's generator: readback cells in `chip_pkg.sv`, the
-   ports in the XDC), `chip_top.sv`, `sequence.chip_target()` (22 more cap cells: each step
-   entry grows by 22 x 5 B, check it still fits `Target.entry_bytes` = 1024),
-   `link_register_map.md`. Either Rahaf does the RTL and I do the PC side, or I do it on
-   a branch she reviews - decided with her before starting.
-4. **Expect.** `verify.py` derives the expected readback from each output's own setting
-   (HIGH -> level 1, CLOCK -> edges + period, PULSE -> edges, SERIAL -> bits), so no
-   `expect:` lines are needed for outputs; the 2-3 tick sync delay is part of the tolerance.
-5. **Tests (laptop).** `chip_top_tb` extended: readback matches for every pin type; a
-   forced pad value (tb drives the pad against the FPGA) is reported as a mismatch.
-   pytest for the derived expectations. Resource check: 22 more `cap_cell`s (estimate on
-   the lab PC from the Vivado utilization report).
-6. **Lab.** xsim, bitstream, timing met, I/O report still shows DRIVE 4 / SLOW. EXP-10:
-   every mode in the config gives readback PASS on all 22 pins; one pin tied to GND through
-   a jumper to the SMA shell gives FAIL on that pin only (pass criterion for the check itself).
+**Decided 2026-11-02 (Rahaf):** a new cell (not a change to `cap_cell`); the `sipo_in`
+bit-exact check now; work on `main`; RTL + tests first, stop after simulation, then the PC
+side, the build and EXP-10, each after her OK. (Design below replaces the 2026-11-01 sketch:
+that one counted edges with `cap_cell`, which clears its count when the run ends.)
+
+1. **The problem the design works around.** Everything is read after the run: by then the
+   outputs are back at idle and `cap_cell` has cleared its edge count. So the readback cell
+   records during the run and keeps its results until the next RUN starts.
+2. **`fpga/src/readback_cell.sv` (new), one per output:** during the run (its `run` delayed
+   by the same 2 ticks as the synchronizer, so the window matches the pin): rising-edge
+   count, "saw 0" / "saw 1", last period and high time, level when the run ended. Cleared
+   on RUN rising, held after. No settings (nothing in the step table).
+3. **`chip_top.sv`:** each output an `IOBUF` (T = 0, always driving); its `O` through a 2-FF
+   synchronizer into its `readback_cell`. Parameter `PAD_READBACK` (1 = IOBUF; 0 = the cell
+   reads the output register internally, for `vchip_top`, whose 7 DFT outputs have no pin).
+   **`sipo_in` bit-exact:** its readback shifted on the readback of `clk_sipo`'s sampling
+   edge (the edge opposite `SIPO_ON_FALLING`, as the chip samples) into a 136-bit register.
+   Link region (READ_REG): 0x0200 + 16 x cell (flags, edges, period, high), an info block
+   (cell count, `PAD_READBACK`, SIPO bit count) and the SIPO register. 16-byte stride: the
+   address bits pick the cell, no compare chain (timing was +0.112 ns).
+4. **`gen_svh.py --chip`:** the region constants in `chip_pkg.sv`. XDC unchanged (same port
+   names; DRIVE 4 / SLEW SLOW apply to the IOBUF's driver). `chip_target()` and the step
+   table unchanged (534 of 1024 bytes).
+5. **PC (`link.py`, `verify.py`, editor):** the expected readback derived from the run itself
+   (`waves.py` for a mode, `seqwaves.py` for a sequence): edges and flags exact, period /
+   high within a few ticks; wait steps (variable length) only by flags. A "Readback" table
+   in `cli verify` and the editor's Verify.
+6. **Tests:** `readback_cell_tb`; `chip_top_tb` extended (every pin type, a pin forced wrong
+   -> only that pin FAILs, the SIPO frame bit-exact); `vchip_top_tb` still 9/9; xsim; pytest.
+7. **Lab:** build (timing, I/O report still DRIVE 4 / SLOW, resources); **EXP-10**: every
+   mode -> readback PASS on all 22 pins, compared once with the logic analyser; negative
+   check = a deliberately wrong expectation. The 2026-11-01 "tie a pin to GND" is dropped
+   (shorting a driving output is not safe).
+8. **What it can't see:** an open after the pad (connector, HTG board, wire, chip socket),
+   and analog level / ringing (0/1 at the 0.9 V threshold). Those stay with the scope.
 
 ## Step 3: sample cell (logic-analyser capture, R2)
 

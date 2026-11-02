@@ -42,7 +42,7 @@ sim_run vchip_top_tb \
     "$SRC/gen/chip_pkg.sv" "$SRC/gen/vchip_pkg.sv" "$TBL" "$EXP" \
     "$SRC/link_frame.sv" "$SRC/sig_cell.sv" "$SRC/cap_cell.sv" \
     "$SRC/seq_engine.sv" "$SRC/seq_bank.sv" \
-    "$SRC/jtag_link_bridge.sv" "$SRC/jtag_link_bscan.sv" "$SRC/chip_top.sv" \
+    "$SRC/jtag_link_bridge.sv" "$SRC/jtag_link_bscan.sv" "$SRC/readback_cell.sv" "$SRC/chip_top.sv" \
     "$TB/tower_cell_stubs.sv" "$DIMA/piso.sv" "$SRC/virtual_chip.sv" "$SRC/vchip_top.sv" \
     "$TB/bscane2_sim_stub.sv" "$TB/vchip_top_tb.sv" \
     "$DIMA/sipo.sv" "$SIPO_WRAPPER"

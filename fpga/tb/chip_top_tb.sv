@@ -21,7 +21,16 @@
 //   5. A PISO model (one bit of a known 168-bit pattern per clk_piso rising edge, like the
 //      chip) is captured by piso_out's cap cell; READ_CAPTURE over JTAG returns all 168 bits.
 //   6. STATUS = done, LD4 on, no fault / link error.
-// On the board: EXP-07 (pins on the logic analyser) and EXP-08 (Dima's models as the chip).
+//   7. Pad readback (verification plan Step 2): READ_REG of the readback region gives, for
+//      every one of the 22 outputs, what the pin did during the run (edges, saw 0 / 1,
+//      period, high, end level), equal to the values derived here from the table: the
+//      clocks 136 / 168 edges of 100 ticks (50 high), cs one 100-tick pulse, sipo_in the
+//      frame's rising transitions, shift one edge still high at the end, the rest static.
+//      The sipo_in readback frame (sampled on clk_sipo's readback) = the 136-bit frame.
+//      Fault: the testbench forces the s0_p pad HIGH through the run while the FPGA drives
+//      it LOW: its readback shows HIGH (saw1, not saw0), every other pin as expected.
+// On the board: EXP-07 (pins on the logic analyser), EXP-08 (Dima's models as the chip),
+// EXP-10 (pad readback).
 //==========================================================================
 
 module chip_wrap (
@@ -29,7 +38,7 @@ module chip_wrap (
     input  logic tck, sel, capture, shift, update, tdi,
     output logic tdo,
     output logic [7:0] led,
-    output logic [chip_pkg::N_SIG-1:0] chip_out,
+    inout  wire  [chip_pkg::N_SIG-1:0] chip_out,
     input  logic [chip_pkg::N_CAP-1:0] chip_in
 );
     jtag_tap_model jtag_tap (.tck(tck), .sel(sel), .capture(capture), .shift(shift),
@@ -225,10 +234,13 @@ module chip_top_tb;
         end
 
         // 4./5. RUN; the sequence takes ~330 us
+        // the fault for check 7: s0_p's pad held HIGH while its cell drives it LOW
+        force chip_out[chip_pkg::SIG_S0_P] = 1'b1;
         armed = 1;
         send_frame(8'h05, 16'h0000, none);
         flush(0);
         #400000;
+        release chip_out[chip_pkg::SIG_S0_P];
         check(sipo_edges == 136, $sformatf("4. exactly 136 clk_sipo rising edges (%0d)", sipo_edges));
         check(sipo_seen == chip_tb_pkg::SIPO_FRAME,
               $sformatf("4. sipo_in = the 136-bit frame from the config (%h)", sipo_seen));
@@ -249,6 +261,73 @@ module chip_top_tb;
                   $sformatf("5. READ_CAPTURE piso_out over JTAG = the 168-bit pattern (%h)", got));
         end
         check(led[4] && !led[5] && !led[7], $sformatf("6. LD4 done on, LD5 fault / LD7 link error off (led=%b)", led));
+
+        // 7. pad readback
+        begin
+            automatic int e_edges[NS], e_per[NS], e_high[NS];
+            automatic logic e_s0[NS], e_s1[NS], e_end[NS];
+            automatic int rise = 0, bad = 0;
+            automatic logic prev = 1'b0;
+            for (int i = 0; i < NS; i++) begin       // default: a static LOW pin
+                e_edges[i] = 0; e_per[i] = 0; e_high[i] = 0; e_s0[i] = 1; e_s1[i] = 0; e_end[i] = 0;
+            end
+            for (int j = 0; j < 3; j++) begin         // held HIGH (step 0)
+                automatic int i = (j == 0) ? chip_pkg::SIG_RESET : (j == 1) ? chip_pkg::SIG_RST_SIPO : chip_pkg::SIG_RST_PISO;
+                e_s0[i] = 0; e_s1[i] = 1; e_end[i] = 1;
+            end
+            // clk_sipo / clk_piso: 1 MHz, 50 %, 136 / 168 cycles, low at the end
+            e_edges[chip_pkg::SIG_CLK_SIPO] = 136; e_per[chip_pkg::SIG_CLK_SIPO] = 100; e_high[chip_pkg::SIG_CLK_SIPO] = 50;
+            e_s1[chip_pkg::SIG_CLK_SIPO] = 1;
+            e_edges[chip_pkg::SIG_CLK_PISO] = 168; e_per[chip_pkg::SIG_CLK_PISO] = 100; e_high[chip_pkg::SIG_CLK_PISO] = 50;
+            e_s1[chip_pkg::SIG_CLK_PISO] = 1;
+            // cs: one 1 us pulse
+            e_edges[chip_pkg::SIG_CS] = 1; e_high[chip_pkg::SIG_CS] = 100; e_s1[chip_pkg::SIG_CS] = 1;
+            // shift: rises 2.7 us into piso_read, 170 us wide: still high when the read ends
+            e_edges[chip_pkg::SIG_SHIFT] = 1; e_s1[chip_pkg::SIG_SHIFT] = 1; e_end[chip_pkg::SIG_SHIFT] = 1;
+            // sipo_in: the frame MSB first (one bit per 100-tick period) after idle 0; after the
+            // last bit it falls back to idle 0. period = the last two rises apart, high = the
+            // last complete high run (readback_cell's definitions), both x 100 ticks.
+            begin
+                automatic int last_rise = -1, prev_rise = -1, hi_bits = 0;
+                for (int pos = 0; pos <= 136; pos++) begin
+                    automatic logic bit_now = (pos < 136) ? chip_tb_pkg::SIPO_FRAME[135 - pos] : 1'b0;
+                    if (bit_now && !prev) begin rise++; prev_rise = last_rise; last_rise = pos; end
+                    if (!bit_now && prev && last_rise >= 0) hi_bits = pos - last_rise;
+                    prev = bit_now;
+                end
+                e_edges[chip_pkg::SIG_SIPO_IN] = rise; e_s1[chip_pkg::SIG_SIPO_IN] = 1;
+                e_per[chip_pkg::SIG_SIPO_IN]  = (prev_rise >= 0) ? 100 * (last_rise - prev_rise) : 0;
+                e_high[chip_pkg::SIG_SIPO_IN] = 100 * hi_bits;
+            end
+            // the forced pad: HIGH the whole run, although the cell drives LOW
+            e_s0[chip_pkg::SIG_S0_P] = 0; e_s1[chip_pkg::SIG_S0_P] = 1; e_end[chip_pkg::SIG_S0_P] = 1;
+
+            for (int i = 0; i < NS; i++) begin
+                automatic logic [31:0] ge, gp, gh;
+                request(8'h02, 16'(chip_pkg::RB_BASE + chip_pkg::RB_STRIDE * i), 13, rc, rd, ok);
+                ge = {rd[4], rd[3], rd[2], rd[1]};
+                gp = {rd[8], rd[7], rd[6], rd[5]};
+                gh = {rd[12], rd[11], rd[10], rd[9]};
+                if (!(ok && rd.size() == 13 && ge == e_edges[i] && gp == e_per[i] && gh == e_high[i]
+                      && rd[0][0] == e_s0[i] && rd[0][1] == e_s1[i] && rd[0][2] == e_end[i])) begin
+                    bad++;
+                    $display("    pin %0d: edges %0d period %0d high %0d saw0 %0d saw1 %0d end %0d, want %0d %0d %0d %0d %0d %0d",
+                             i, ge, gp, gh, rd[0][0], rd[0][1], rd[0][2],
+                             e_edges[i], e_per[i], e_high[i], e_s0[i], e_s1[i], e_end[i]);
+                end
+            end
+            check(bad == 0, $sformatf("7. readback of all %0d outputs matches the table (%0d mismatches)", NS, bad));
+        end
+        begin
+            automatic logic [135:0] got = '0;
+            request(8'h02, chip_pkg::RB_INFO, 5, rc, rd, ok);
+            check(ok && rd.size() == 5 && rd[0] == NS && rd[1] == 8'd1 && {rd[3], rd[2]} == 16'd136 && rd[4] == 8'd136,
+                  $sformatf("7. RB_INFO: %0d cells, PAD_READBACK 1, 136 SIPO bits of 136 (got %p)", NS, rd));
+            request(8'h02, chip_pkg::RB_SIPO, 17, rc, rd, ok);
+            for (int i = 0; i < rd.size() && i < 17; i++) got[i*8 +: 8] = rd[i];
+            check(ok && rd.size() == 17 && got == chip_tb_pkg::SIPO_FRAME,
+                  $sformatf("7. sipo_in readback frame = the config's frame (%h)", got));
+        end
 
         if (fails == 0) $display("ALL TESTS PASSED (%0d checks)", checks);
         else            $display("%0d CHECK(S) FAILED out of %0d", fails, checks);

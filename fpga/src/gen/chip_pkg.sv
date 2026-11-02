@@ -58,6 +58,12 @@ package chip_pkg;
     localparam int PISO_CLK_CELL = 19;    // clk_piso
     localparam bit PISO_ON_FALLING = 1'b1;   // falling
 
+    // ---- pad readback (verification plan Step 2, readback_cell.sv; READ_REG) ----
+    localparam logic [15:0] RB_BASE = 16'h0200;    // cell i at RB_BASE + RB_STRIDE * i
+    localparam int RB_STRIDE = 16;   // +0 flags (saw0, saw1, end_level), +1 edges, +5 period, +9 high
+    localparam logic [15:0] RB_INFO = 16'h0360;    // +0 cells, +1 PAD_READBACK, +2..3 SIPO bits, +4 SIPO width
+    localparam logic [15:0] RB_SIPO = 16'h0380;    // the sipo_in readback frame, little-endian
+
     // ---- cell names, for reference ----
     localparam int SIG_CLK = 0;   // -> LA00_P
     localparam int SIG_RESET = 1;   // -> LA01_P

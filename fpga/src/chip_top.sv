@@ -30,11 +30,27 @@
 // Outputs come straight from each sig_cell's output register; inputs get a
 // 2-FF synchronizer (CLAUDE.md §8). LEDs: LD0-LD2 step (current while running,
 // last afterwards), LD3 busy, LD4 done, LD5 FAULT, LD6 LATE, LD7 link error.
+//
+// Pad readback (verification plan Step 2, 2026-11-02): each output is an IOBUF
+// that always drives (T = 0); its input buffer reads the same pad back, through
+// a 2-FF synchronizer, into a readback_cell, which records what the pin did
+// during the run and keeps it after (edges, saw 0 / 1, period, high, end level).
+// The cells' window is RUN delayed by the same 2 ticks. sipo_in's readback is
+// also shifted, on the readback of clk_sipo's sampling edge (the edge opposite
+// SIPO_ON_FALLING, as the chip samples), into a 136-bit register. All read with
+// READ_REG at chip_pkg RB_BASE / RB_INFO / RB_SIPO; the 16-byte stride lets
+// the address bits pick the cell (no compare chain). PAD_READBACK = 0 (for
+// vchip_top, whose DFT outputs have no pin) reads the output registers instead
+// of the pads; RB_INFO +1 tells the PC which.
+// What it can't see: an open after the pad (connector, board, wire, chip) and
+// analog level / ringing (0/1 at the input buffer's threshold).
 //==========================================================================
-module chip_top (
+module chip_top #(
+    parameter bit PAD_READBACK = 1'b1   // 1: IOBUF readback from the pads; 0: from the output registers
+) (
     input  logic                     clk,        // 100 MHz ZedBoard system clock
     output logic [7:0]               led,
-    output logic [chip_pkg::N_SIG-1:0] chip_out,  // -> chip inputs (DRIVE 4, SLEW SLOW in the XDC)
+    inout  wire  [chip_pkg::N_SIG-1:0] chip_out,  // -> chip inputs (DRIVE 4, SLEW SLOW in the XDC); read back
     input  logic [chip_pkg::N_CAP-1:0] chip_in    // <- chip outputs (PULLDOWN in the XDC)
 );
     localparam int TW  = 32;
@@ -69,6 +85,7 @@ module chip_top (
     logic        bus_we, bus_re, cmd_apply, cmd_run, cmd_stop, rx_overflow;
     logic [15:0] bus_waddr, bus_raddr;
     logic [7:0]  bus_wdata, bus_rdata;
+    logic [7:0]  rb_byte;            // the readback region's byte at bus_raddr (below)
     link_frame #(.MAX_PAYLOAD(255), .CAP_BASE(CBASE), .STATUS_ADDR(chip_pkg::REG_STATUS)) u_frame (
         .clk(clk), .rst_n(rst_n),
         .rx_byte(rx_byte), .rx_byte_valid(rx_byte_valid),
@@ -162,7 +179,7 @@ module chip_top (
             bus_rdata      <= '0;
         end else begin
             if (rx_overflow_jtag || rx_overflow) link_error <= 1'b1;
-            if (bus_re) bus_rdata <= read_byte(bus_raddr);
+            if (bus_re) bus_rdata <= in_rb_region(bus_raddr) ? rb_byte : read_byte(bus_raddr);
             if (bus_we) begin
                 if (bus_waddr == 16'h0000) scratch <= bus_wdata;
                 if (bus_waddr == chip_pkg::REG_STATUS) table_rejected <= 1'b0;
@@ -204,7 +221,103 @@ module chip_top (
                 .active(), .done(sig_done[g]));
         end
     endgenerate
-    assign chip_out = pin_out;   // straight from each cell's output register
+    // ---- outputs + pad readback (verification plan Step 2) ----
+    wire [NS-1:0] rb_raw;                // what each output pad reads back
+    generate
+        for (g = 0; g < NS; g++) begin : g_out
+            if (PAD_READBACK) begin : g_iobuf
+                // always driving (T = 0); O = the pad through its input buffer
+                IOBUF u_iobuf (.I(pin_out[g]), .T(1'b0), .O(rb_raw[g]), .IO(chip_out[g]));
+            end else begin : g_internal
+                assign chip_out[g] = pin_out[g];   // straight from the cell's output register
+                assign rb_raw[g]   = pin_out[g];
+            end
+        end
+    endgenerate
+
+    // 2-FF sync (CLAUDE.md §8) and the window: RUN delayed by the same 2 ticks
+    logic [NS-1:0] rb_s0, rb_s1;
+    logic          rb_run0, rb_run;
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin rb_s0 <= '0; rb_s1 <= '0; rb_run0 <= 1'b0; rb_run <= 1'b0; end
+        else begin rb_s0 <= rb_raw; rb_s1 <= rb_s0; rb_run0 <= run; rb_run <= rb_run0; end
+    end
+
+    wire [NS*TW-1:0] rb_edges, rb_period, rb_high;
+    wire [NS-1:0]    rb_saw0, rb_saw1, rb_end;
+    generate
+        for (g = 0; g < NS; g++) begin : g_rb
+            readback_cell #(.TICK_W(TW)) u_rb (
+                .clk(clk), .rst_n(rst_n), .run(rb_run), .sync_in(rb_s1[g]),
+                .edges(rb_edges[g*TW +: TW]), .period(rb_period[g*TW +: TW]), .high(rb_high[g*TW +: TW]),
+                .saw0(rb_saw0[g]), .saw1(rb_saw1[g]), .end_level(rb_end[g]));
+        end
+    endgenerate
+
+    // sipo_in bit-exact: its readback shifted on the readback of clk_sipo's sampling edge
+    localparam int SPW = chip_pkg::SIG_SERIAL_W[chip_pkg::SIPO_CELL];   // 136
+    logic [SPW-1:0] rb_sipo;
+    logic [15:0]    rb_sipo_n;           // bits shifted in this window (saturating)
+    logic           rb_sclk_d, rb_run_d;
+    wire rb_sclk  = rb_s1[chip_pkg::SIPO_CLK_CELL];
+    wire rb_sedge = chip_pkg::SIPO_ON_FALLING ? (rb_sclk && !rb_sclk_d)    // data on falling -> sample rising
+                                              : (!rb_sclk && rb_sclk_d);
+    always_ff @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            rb_sipo <= '0; rb_sipo_n <= '0; rb_sclk_d <= 1'b0; rb_run_d <= 1'b0;
+        end else begin
+            rb_sclk_d <= rb_sclk;
+            rb_run_d  <= rb_run;
+            if (rb_run && !rb_run_d) begin                    // window opens: start over
+                rb_sipo   <= rb_sedge ? SPW'(rb_s1[chip_pkg::SIPO_CELL]) : '0;
+                rb_sipo_n <= rb_sedge ? 16'd1 : 16'd0;
+            end else if (rb_run && rb_sedge) begin
+                rb_sipo   <= {rb_sipo[SPW-2:0], rb_s1[chip_pkg::SIPO_CELL]};   // MSB first, as sent
+                if (rb_sipo_n != 16'hFFFF) rb_sipo_n <= rb_sipo_n + 16'd1;
+            end
+        end
+    end
+
+    // readback region (READ_REG): cell i at RB_BASE + 16 i, then RB_INFO, then RB_SIPO
+    localparam int RBN = NS * chip_pkg::RB_STRIDE;                       // 352 bytes
+    localparam int SPB = (SPW + 7) / 8;                                   // 17 bytes
+    function automatic logic in_rb_region(input logic [15:0] a);
+        return (a >= chip_pkg::RB_BASE && a < chip_pkg::RB_BASE + RBN)
+            || (a >= chip_pkg::RB_INFO && a < chip_pkg::RB_INFO + 8)
+            || (a >= chip_pkg::RB_SIPO && a < chip_pkg::RB_SIPO + SPB);
+    endfunction
+
+    always_comb begin
+        logic [15:0] o;
+        logic [8:0]  ci;                                                  // cell index (address bits)
+        logic [3:0]  b;                                                   // byte in the cell's record
+        logic [127:0] rec;
+        rb_byte = 8'h00;
+        o  = bus_raddr - chip_pkg::RB_BASE;
+        ci = o[12:4];
+        b  = o[3:0];
+        rec = '0;
+        for (int i = 0; i < NS; i++)
+            if (ci == 9'(i))
+                rec = {24'h0, rb_high[i*TW +: TW], rb_period[i*TW +: TW], rb_edges[i*TW +: TW],
+                       5'b0, rb_end[i], rb_saw1[i], rb_saw0[i]};
+        if (bus_raddr >= chip_pkg::RB_BASE && bus_raddr < chip_pkg::RB_BASE + RBN)
+            rb_byte = rec[b*8 +: 8];
+        else if (bus_raddr >= chip_pkg::RB_INFO && bus_raddr < chip_pkg::RB_INFO + 8) begin
+            case (bus_raddr - chip_pkg::RB_INFO)
+                16'd0: rb_byte = 8'(NS);
+                16'd1: rb_byte = {7'b0, PAD_READBACK};
+                16'd2: rb_byte = rb_sipo_n[7:0];
+                16'd3: rb_byte = rb_sipo_n[15:8];
+                16'd4: rb_byte = 8'(SPW);
+                default: rb_byte = 8'h00;
+            endcase
+        end else if (bus_raddr >= chip_pkg::RB_SIPO && bus_raddr < chip_pkg::RB_SIPO + SPB) begin
+            o = bus_raddr - chip_pkg::RB_SIPO;
+            for (int k = 0; k < SPB; k++)
+                if (o == 16'(k)) rb_byte = 8'({{(SPB * 8 - SPW){1'b0}}, rb_sipo} >> (8 * k));
+        end
+    end
 
     // ---- 2-FF sync on the chip outputs (CLAUDE.md §8) ----
     logic [NC-1:0] in_s0, in_s1;

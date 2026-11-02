@@ -520,6 +520,11 @@ BOARD_XDC_LINES = (
 )
 
 
+# pad readback region (verification plan Step 2): 16 bytes per chip_top output, then an info
+# block and the sipo_in readback frame; read with READ_REG (link.py SeqLink.read_readback)
+RB_BASE, RB_STRIDE, RB_INFO, RB_SIPO = 0x0200, 16, 0x0360, 0x0380
+
+
 def _chip_pin_map(config_path: Path) -> dict[str, str]:
     """The config's pin_map, refused unless every chip signal has a valid, unique pin."""
     from .config import load_config
@@ -622,6 +627,12 @@ def generate_chip(config_path: Path | None = None,
         f"    localparam int PISO_CELL = {piso_j};        // piso_out, CAP_W {piso.cap_w}",
         f"    localparam int PISO_CLK_CELL = {tg.sig_index(piso.strobe[0])};    // {piso.strobe[0]}",
         f"    localparam bit PISO_ON_FALLING = 1'b{int(piso.strobe[1] == 'falling')};   // {piso.strobe[1]}",
+        "",
+        "    // ---- pad readback (verification plan Step 2, readback_cell.sv; READ_REG) ----",
+        f"    localparam logic [15:0] RB_BASE = 16'h{RB_BASE:04x};    // cell i at RB_BASE + RB_STRIDE * i",
+        f"    localparam int RB_STRIDE = {RB_STRIDE};   // +0 flags (saw0, saw1, end_level), +1 edges, +5 period, +9 high",
+        f"    localparam logic [15:0] RB_INFO = 16'h{RB_INFO:04x};    // +0 cells, +1 PAD_READBACK, +2..3 SIPO bits, +4 SIPO width",
+        f"    localparam logic [15:0] RB_SIPO = 16'h{RB_SIPO:04x};    // the sipo_in readback frame, little-endian",
         "",
         "    // ---- cell names, for reference ----",
     ]
