@@ -149,7 +149,7 @@ def test_against_a_real_waves_lane():
     """The INFERENCE mode's clk_sipo / cs as waves.py draws them, recorded by a good board."""
     from pathlib import Path
     text = (Path(__file__).resolve().parents[3] / "config" / "nemo_config.yaml").read_text()
-    cfg = config_from_dict(yaml.safe_load(text.replace('data: "0x" ,', 'data: "0x5A",')))
+    cfg = config_from_dict(yaml.safe_load(text.replace('data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7",', 'data: "0x5A",')))
     lanes = {l["key"]: l["segments"] for l in mode_waves(cfg, "INFERENCE", 0, 160_000)["lanes"]
              if l["key"] in ("clk_sipo", "cs")}
     s = make_setup({"pins": ["clk_sipo", "cs"], "rate": "20MHz", "samples": 3200}, PINS)

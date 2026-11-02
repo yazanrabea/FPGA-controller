@@ -29,8 +29,8 @@ PISO_OUT = "piso_out: {type: CAPTURE, mode: serial, clock: clk_piso, bits: 168, 
 
 
 def _text(sipo_out=SIPO_OUT, piso_out=PISO_OUT):
-    t = TEXT.replace('data: "0x" ,', f'data: "{FRAME}",')
-    assert SIPO_OUT in t and PISO_OUT in t
+    t = TEXT                                   # the config carries FRAME (2026-11-02)
+    assert f'data: "{FRAME}"' in t and SIPO_OUT in t and PISO_OUT in t
     return t.replace(SIPO_OUT, sipo_out).replace(PISO_OUT, piso_out)
 
 

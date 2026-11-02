@@ -32,7 +32,7 @@ modes:
     SIPO:
       rst_sipo: {type: PULSE, width: 100ns, polarity: active_low, delay: 0}
       clk_sipo: {type: CLOCK, freq: 1MHz, cycles: 136, delay: 2us}
-      sipo_in:  {type: SERIAL, clock: clk_sipo, data: "0x" ,
+      sipo_in:  {type: SERIAL, clock: clk_sipo, data: "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7",
                  msb_first: true, data_edge: falling, bits: 136}
       cs:       {type: PULSE, width: 1us, delay: 140us}
       sipo_out: {type: CAPTURE, mode: level}   # liveness echo only, not a real output

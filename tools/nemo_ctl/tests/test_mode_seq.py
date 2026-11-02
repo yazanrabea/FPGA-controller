@@ -19,7 +19,10 @@ TOOLS = Path(__file__).resolve().parents[2]
 CONFIG = TOOLS.parent / "config" / "nemo_config.yaml"
 TEXT = CONFIG.read_text()
 FRAME = "0x5AA55A0FF0123456789ABCDEF0C3C3E7E7"
-FILLED = TEXT.replace('data: "0x" ,', f'data: "{FRAME}",')
+# the config carries the example frame since 2026-11-02 (Rahaf's editor save); EMPTY is the
+# same config with the frame left blank, as it was before
+FILLED = TEXT
+EMPTY = TEXT.replace(f'data: "{FRAME}",', 'data: "0x" ,')
 CHIP = chip_target()
 
 
@@ -29,10 +32,11 @@ def _cfg(tmp_path, text=FILLED):
     return p
 
 
-def test_the_example_config_needs_sipo_data(tmp_path):
-    assert FILLED != TEXT
+def test_a_blank_sipo_frame_is_refused(tmp_path):
+    assert EMPTY != TEXT
     with pytest.raises(ModeError, match="sipo_in: SERIAL data '0x' isn't a number"):
-        mode_steps(load_config(CONFIG), "INFERENCE")
+        mode_steps(load_config(_cfg(tmp_path, EMPTY)), "INFERENCE")
+    mode_steps(load_config(CONFIG), "INFERENCE")          # the example config itself runs
 
 
 def test_inference_becomes_idle_then_the_mode(tmp_path):
@@ -148,7 +152,7 @@ def test_cli_dry_run(tmp_path):
 
 
 def test_cli_error_and_no_link(tmp_path):
-    r = _run(["run-mode", "--mode", "INFERENCE", "--config", str(CONFIG), "--dry-run"])
+    r = _run(["run-mode", "--mode", "INFERENCE", "--config", str(_cfg(tmp_path, EMPTY)), "--dry-run"])
     assert r.returncode == 1 and "isn't a number yet" in r.stderr
     r = _run(["run-mode", "--mode", "INFERENCE", "--config", str(_cfg(tmp_path))])
     assert r.returncode == 1 and "give --jtag" in r.stderr

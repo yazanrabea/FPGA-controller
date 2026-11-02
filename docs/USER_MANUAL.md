@@ -725,8 +725,9 @@ Afterwards chip_top goes back to the idle levels. `run-mode` prints `STATUS: don
 FAULT) and, for each chip output, the level, the edge count, the PERIOD/HIGH counters in
 10 ns ticks, and the serial capture in hex.
 
-It refuses, with a message, anything it would have to guess: a SERIAL with no data (the
-example INFERENCE has `data: "0x"`, so fill in the frame first), an unknown capture mode,
+It refuses, with a message, anything it would have to guess: a SERIAL with no data (`data:
+"0x"`; since 2026-11-02 the example INFERENCE carries the EXP-08 frame
+`0x5AA55A0FF0123456789ABCDEF0C3C3E7E7`), an unknown capture mode,
 a pin set twice, or a capture edge that chip_top isn't wired for (`piso_out` is sampled on
 `clk_piso`'s falling edge).
 
