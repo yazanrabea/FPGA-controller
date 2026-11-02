@@ -199,3 +199,16 @@ Each entry: date, decision, reason, rejected options.
 - **Rejected:** 8192 deep (8 RAMB36; 4096 at 10 MHz already covers a whole 320 us run);
   only `chip_top` (`vchip_top` gives a sampler test with known answers before the real chip);
   the output registers instead of the pads (that would hide what EXP-10 can see).
+
+## 2026-11-02: open items dropped (Rahaf)
+- Rahaf: "no need for these". **Not to be done / not listed as open any more:**
+  - ringing of 0.4-0.7 V re-measured with a short ground (scope);
+  - pairs 5-15 as loopbacks, and the analog levels;
+  - sending Dima the questions Q1-Q7 (edges, polarities, chip delay, reset / set, `sel[23:8]`);
+  - the EXP-08 transient (1 in 511; not seen again in the 2026-11-02 runs);
+  - a disconnected `data_in` not FAULTing a "captured" wait (`docs/issues.md`);
+  - the editor's Save dropping the config's comments / layout;
+  - the editor showing sampler records;
+  - a hold step after the PISO read (to get the last `piso_out` bit into records);
+  - the small code-review notes.
+- Still open: EXP-12 Part B (`chip_top`, no jumpers); EXP-11 step 4 (logic analyser, optional); Yazan's review of the 2026-11-02 work; deleting Yazan's two old branches on GitHub.
