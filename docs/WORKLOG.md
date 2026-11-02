@@ -2068,3 +2068,4 @@ Tag every result **[simulated]** or **[measured on board]**.
   - At 10 ticks / 4096 the run (31953 ticks) ended first: status triggered, 3166 valid, not done (the cell stops with the run, as designed; EXP-11 run 1 the same). The 3-tick version fills the buffer (done).
   - The step bits change one sample after the trigger sample at 3 ticks/sample (the step goes through 2 FFs like the pins; the trigger is judged on the undelayed step start).
 - Next steps: Rahaf's OK -> build `chip_top` and `vchip_top` (timing: the read path got one more mux; WNS was +0.176 / +0.060 ns) -> EXP-12 on the board (`vchip_top` with the 10 jumpers first: known answers).
+- Builds (Rahaf "ok", 15:08-15:28): **`chip_top` WNS +0.095 / WHS +0.010 ns**, 18,001 LUT / 23,807 FF / **8 BRAM** (was +0.176 ns, 17,652 / 23,433 / 4.5); **`vchip_top` WNS +0.161 / WHS +0.027 ns**, 18,121 LUT / 24,270 FF; both 0 critical warnings. The sampler took 3.5 BRAM tiles (estimate 4). Not on the board yet.
