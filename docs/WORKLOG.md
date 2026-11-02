@@ -2032,3 +2032,5 @@ Tag every result **[simulated]** or **[measured on board]**.
 - `ad5d186` pushed. Build 1: timing failed (-0.046 ns, the readback read path), not programmed; fixed with an address-bit decode (after an xsim part-select surprise, `docs/issues.md`); `chip_top_tb` 15/15, `vchip_top_tb` 9/9. Build 2: **WNS +0.176 ns**, 0 critical warnings, 17.7k LUT / 23.4k FF; 22 outputs BIDIR DRIVE 4 SLOW, 4 inputs PULLDOWN.
 - **EXP-10** [measured on board], `chip_top` programmed 12:28:47, no jumpers: step 1 all 22 pins + the frame PASS, window 31953 ticks (= simulation); step 2 100 runs, every readback row 100/100 (`docs/measurements/EXP-10_verify_seq_100.md`); step 5 a wrong expectation fails exactly clk_sipo, sipo_in and the frame count. Step 3 (editor) with Rahaf; editor restarted with the current code.
 - Next steps: step 3; then commit + push (Rahaf's OK).
+- Step 3 (Rahaf, editor): "all pass in the editor" (INFERENCE + a typed frame, Verify). **EXP-10 PASS.** Rahaf: push.
+

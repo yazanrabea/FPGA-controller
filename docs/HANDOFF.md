@@ -6,6 +6,22 @@
 > Step 1 and Step 3. Updated again 2026-11-02, Rahaf's lab session: PRs #2 / #3 reviewed, run
 > in xsim, merged. Everything below "2026-10-26" is unchanged from Rahaf's lab session.
 
+## Short version (2026-11-02 afternoon, Rahaf, lab PC): Step 2 done
+
+- **Pad readback (verification plan Step 2) is built and verified: EXP-10 PASS.** Each of
+  `chip_top`'s 22 outputs is an `IOBUF` read back at its own pin into a new
+  `readback_cell.sv`; `cli verify` and the editor's **Verify** show a "Pad readback" section
+  (22 pins + the `sipo_in` frame), expected values derived from the steps. On the board: all
+  PASS, 100/100, window = the simulation's to the tick; a wrong expectation fails exactly the
+  affected rows. Timing +0.176 ns after an address-bit decode fix (the first build failed by
+  0.046 ns, `docs/issues.md`).
+- Also today: the `edge_count` expect is refused (it could never pass); PRs #2 / #3 merged.
+- **Board:** the new `chip_top`, no jumpers. **Editor** running with the current code.
+- `config/nemo_config.yaml`: restored to the committed version (an editor Save had dropped its
+  comments). In the editor, type the `sipo_in` frame for a run but **don't Save**.
+- **Next:** EXP-09 (`cli verify` on `vchip_top`: needs the 10 jumpers and `vchip_top`), build
+  `sample_loopback_top` + EXP-11, a sampler in `chip_top` (Rahaf's decision), Dima's questions.
+
 ## Short version (2026-11-02, Rahaf, lab PC)
 
 - **PRs #2 and #3 are merged into `main`** (merge commits `a21179d`, `f0ffed7`; docs

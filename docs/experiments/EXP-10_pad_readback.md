@@ -4,8 +4,8 @@ Verification plan Step 2 (`docs/plan_2026-11-01_verification.md`, decided 2026-1
 checked the 22 outputs once, by eye, on the logic analyser. This experiment checks that the
 FPGA itself reads every output back at its pin and that `cli verify` judges them right.
 
-**Status: IN PROGRESS, steps 1, 2, 5 PASS** [measured on board] 2026-11-02; step 3 (editor)
-with Rahaf, step 4 optional. [simulated] `chip_top_tb` 15/15, `readback_cell_tb` 10/10 (xsim);
+**Status: PASS** [measured on board] 2026-11-02 (steps 1, 2, 3, 5; step 4, the optional
+logic-analyser cross-check, not done). [simulated] `chip_top_tb` 15/15, `readback_cell_tb` 10/10 (xsim);
 pytest `test_readback.py` 15 (the Python expectation = the RTL's numbers).
 
 ## 1. Setup
@@ -65,7 +65,18 @@ pytest `test_readback.py` 15 (the Python expectation = the RTL's numbers).
   cycles: FAIL on exactly `clk_sipo` (edges), `sipo_in` (end, high) and `sipo_in frame` (136
   bits sampled, 135 expected); the other 20 rows PASS. The checker catches a real difference
   and nothing else.
-- Step 3 (editor Verify on a mode): with Rahaf. Step 4 (logic analyser): optional, not done.
+- **Step 3** (editor, restarted with the current code): Rahaf, mode INFERENCE with a `sipo_in`
+  frame typed (not saved), **Verify**: "all pass in the editor" (the Pad readback section, 22
+  pins + the frame). The table itself was not copied into this report.
+- Step 4 (logic analyser cross-check): optional, not done.
 
 ## 4. Conclusion
-(to be filled in)
+- **EXP-10 PASS.** The FPGA reads every one of its 22 chip outputs back at the pin during the
+  run, and the PC predicts each pin's behaviour from the steps alone (no hand-written
+  expectations): all 22 + the `sipo_in` frame match, 100/100, for a sequence and for an editor
+  mode. The window length matches the simulation to the tick, and a wrong expectation fails
+  exactly the affected rows.
+- Limits: it sees the pin at the FPGA, not after it (an open in the connector, HTG board, wire
+  or chip socket is invisible), and only 0/1 at the input threshold (no analog level, no
+  ringing: the scope's job). In `vchip_top` the readback is internal (no pads for the DFT
+  outputs).
