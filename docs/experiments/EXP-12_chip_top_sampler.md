@@ -96,6 +96,24 @@ run ends, as `cap_cell` does) and `piso_out`'s level 0 is `shift` back at idle a
 All four chip-output inputs of `chip_top` (LA16-19) capture correctly on the board: LEVEL,
 SERIAL (168 bits, bit order right) and PERIOD.
 
+**The same from the editor (Rahaf, INFERENCE mode, Verify, ~16:40).** First all four read 0:
+the mode had no capture on `dft0_buff` / `dft1_buff`, an editor Save (15:52) had set
+`piso_out`'s edge to `rising` (refused by `chip_top`), and in INFERENCE `reset` / `shift` are
+back LOW when the captures are read. Fixed in `config/nemo_config.yaml`: `piso_out` edge
+falling, `dft0_buff` / `dft1_buff: {type: CAPTURE, mode: period}`. Jumpers moved to sources that
+are HIGH after the run: J3-6 (`rst_sipo`) -> J3-16, J3-9 (`rst_piso`) -> J2-17; J3-4 -> J2-18 and
+J3-7 -> J2-19 as before. Editor Verify:
+
+| Input | Measured (editor) | Predicted |
+|---|---|---|
+| `sipo_out` (J3-16) | level 1 | 1 |
+| `piso_out` (J2-17) | capture `0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF`, level 1 | 168 ones |
+| `dft0_buff` (J2-18) | period 100 ticks | 100 |
+| `dft1_buff` (J2-19) | period 100 ticks | 100 |
+
+Note for modes: a LEVEL capture reads the pin after the run, when the outputs are back at
+their idle levels; `piso_out` in a one-step mode sees `shift` LOW the whole time.
+
 ## 4. Conclusion
 
 **Part A PASS.** The sampler inside the chip controller works on the board: it records a whole

@@ -45,6 +45,8 @@ modes:
 
     DFT - All:
       dft_select: {adc: 3, signal: phi1}   # helper -> b0..b2, s0..s3 — UNCONFIRMED, spec §4
+      dft0_buff: {type: CAPTURE, mode: period}   # measures period + high (ticks); Verify shows them
+      dft1_buff: {type: CAPTURE, mode: period}
       # raw alternative, kept available per generic_controller_prompt.md §1:
       # b_dft: {type: BUS, value: 0b011}
 
