@@ -221,3 +221,18 @@ Format: symptom, suspected cause, fix, confirmation.
   is left unmodified (`fpga/reference/dima_blocks/`).
 - Status: reported for Dima (questions file, Q1). Controller rule until answered: don't use
   `sel[23:8]` between a reset and the first phirst.
+
+## 2026-11-02: `cli verify` — an `edge_count` expect can never pass on the board (OPEN)
+- Found in the review of PR #2 (merged 2026-11-02 with this open, Rahaf's decision).
+- `cap_cell.sv` clears `edge_count` whenever `run` is low (the `else if (!run)` branch), and
+  `cli verify` / the editor's Verify read the captures after the run, so the edge count read is
+  always 0 (EXP-07 / EXP-08 always printed `edges 0`). An `expect` on an `edge_count` capture
+  (e.g. the USER_MANUAL example `dft0_buff: ... edge_count, expect: 136`) always FAILs.
+- The pytest fake link returns any count, so the tests don't show it.
+- Fix options (to decide): refuse `expect` on `edge_count` in `validate.py` / `verify.py` and
+  drop the example; or keep the count in `cap_cell` after the run (RTL change to a cell every
+  top uses: re-run all sims). Until then, don't put an `expect` on an `edge_count` capture.
+- Other review notes, smaller: `expect` on a BUS group / the DFT helper isn't flagged by
+  `validate.py`; unused variable `last` in `verify.sequence_expectations`; EXP-09 Part B should
+  say to remove the 10 vchip jumpers before programming `chip_top`; the plan's "26 of the 34
+  LA_P pins" vs the 32 in the verified mapping (LA00-31).

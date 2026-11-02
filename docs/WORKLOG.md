@@ -1980,3 +1980,16 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Problem: `SIM=xsim scripts/run_sample_sim.sh` on the Windows lab PC: `sample_loopback_top_tb` did not start (`Expected a switch but found C`). `sim_lib.sh` passed `-testplusarg dump_a=C:\...` on the xsim command line, and `xsim.bat` splits an argument at `=`.
 - Fix (`scripts/sim_lib.sh`, xsim branch only; Icarus unchanged): the plusargs go into an xsim options file (`-f plusargs.f`); backslashes become `/`, because the options-file parser drops them.
 - Results [simulated, xsim 2022.1, lab PC]: `sample_cell_tb` 39/39, `sample_loopback_top_tb` 24/24, `check_sample_dump` PASS (record A all 10 pins, record B only `clk_in` fails, as intended); `run_phase7_sim.sh` 40/10/27/21; pytest 371 passed, 1 skipped. Full review notes: WORKLOG on `main`, 2026-11-02.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — PRs #2 and #3 merged
+- Goal: Rahaf: "review the branches and then merge, we will do the EXP later".
+- Review (after the first one): no new commits from Yazan; PR #3's PC side checked against the RTL (`SeqLink.sampler_setup` writes the 11 config bytes at 0x0020-0x002A in the RTL's order; `sampler_status` / `sampler_info` offsets match `samp_regs`; `read_samples` reads 200-byte frames, even address = low byte, as `lane_q`). Nothing new found. Finding 1 (edge_count expect) still open: merged anyway by Rahaf's decision, recorded in `docs/issues.md`.
+- Done:
+  - PR #2: `git merge --no-ff origin/feature/yazan-verify` -> `a21179d`, pytest 329 passed / 1 skipped, pushed. GitHub: PR #2 closed, merged.
+  - Then `git push origin --delete feature/yazan-verify` (Rahaf's plan: delete #2's branch, #3's base moves to main). **Problem:** GitHub does not retarget a stacked PR when its base branch is deleted from the command line (only from the website's Delete branch button): it **closed PR #3**. The branch was restored at once (`feature/yazan-verify` = dd1956d). Reopening needs the website (no `gh` on the lab PC); Rahaf chose to merge with git instead.
+  - PR #3: `git merge --no-ff origin/feature/yazan-sample-cell` (incl. the sim_lib fix d806df7) -> `f0ffed7`; one conflict in `docs/WORKLOG.md` (both sides appended 2026-11-02 entries; kept both). Merged code = the branch tested in xsim (no diff in fpga / tools / scripts / config). pytest 371 passed, 1 skipped.
+  - Follow-up: CLAUDE.md §6 rows (sampler: xsim results added, register range 0x0020-0x0037 not -0x0035), `docs/issues.md` (edge_count expect, open; the smaller review notes).
+- Results: [simulated] as in the review entry above (xsim 40/10/27/21, 39/39, 24/24, check_sample_dump PASS); nothing built, nothing on the board.
+- GitHub state: PR #2 merged; PR #3 shows **closed (not merged)** although its commits are in `main`. Branches `feature/yazan-verify` and `feature/yazan-sample-cell` still exist (delete them on the website when convenient).
+- Lesson: with stacked PRs, delete the first PR's branch only on the website (or retarget the second PR first).
+- Next steps: EXP-09, build `sample_loopback_top` + EXP-11 (later, each after Rahaf's OK); fix the edge_count expect; Rahaf's answers on Step 2 (pad readback) and a sampler in `chip_top`.
