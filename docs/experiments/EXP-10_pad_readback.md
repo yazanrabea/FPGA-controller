@@ -4,9 +4,9 @@ Verification plan Step 2 (`docs/plan_2026-11-01_verification.md`, decided 2026-1
 checked the 22 outputs once, by eye, on the logic analyser. This experiment checks that the
 FPGA itself reads every output back at its pin and that `cli verify` judges them right.
 
-**Status: PLANNED, not run.** [simulated] `chip_top_tb` 15/15, `readback_cell_tb` 10/10
-(xsim, 2026-11-02); pytest `test_readback.py` 15 (the Python expectation = the RTL's numbers).
-Not built yet.
+**Status: IN PROGRESS, steps 1, 2, 5 PASS** [measured on board] 2026-11-02; step 3 (editor)
+with Rahaf, step 4 optional. [simulated] `chip_top_tb` 15/15, `readback_cell_tb` 10/10 (xsim);
+pytest `test_readback.py` 15 (the Python expectation = the RTL's numbers).
 
 ## 1. Setup
 - **Bitstream:** `chip_top` rebuilt with the readback (`create_project.tcl -tclargs chip_top
@@ -35,8 +35,37 @@ Not built yet.
    ```
    No pin is shorted on purpose (not safe for a driving output).
 
-## 3. Results
-(to be filled in on the lab PC)
+## 3. Results (2026-11-02, lab PC), [measured on board]
+
+### Build
+- First build (12:14): **timing NOT met**, WNS -0.046 ns, 3 failing endpoints, all
+  `u_frame/bus_raddr -> bus_rdata` (14 logic levels, 6 CARRY4): the readback region's range
+  compares / subtractions on the register read path, which had +0.112 ns before. Not
+  programmed. Fix: the region decoded from address bits only (0x0200-0x03FF = `a[15:9]`,
+  `a[8:4]` = 32 records of 16 bytes, `a[3:0]` = the byte), same addresses
+  (`docs/issues.md`). In xsim the first version of that (`rec[a[3:0]*8 +: 8]`) returned byte
+  0 for every address; shifts by `{a, 3'b0}` instead -> `chip_top_tb` 15/15 again,
+  `vchip_top_tb` 9/9.
+- Second build (12:27): **timing met, WNS +0.176 ns**, WHS +0.013 ns, 0 critical warnings;
+  17,652 LUT / 23,433 FF / 4.5 BRAM / 35 IOB (was 12.5k / 19.4k / 4.5 / 35). I/O report: all
+  22 `chip_out[*]` BIDIR, LVCMOS18, **DRIVE 4, SLOW**; the 4 `chip_in[*]` PULLDOWN.
+
+### Runs
+- Setup (Rahaf, unchanged since 11:25): J18 1V8, J17, **no jumpers**. 12:28:47 programmed
+  `chip_top` (DONE=1).
+- **Step 1** `verify --seq ../config/chip_sim_test.yaml --jtag`: `(run)` PASS; readback "22 pins
+  at the pads, window **31953 ticks** (319.53 us)" = the simulation's number exactly; **all 22
+  pins + the sipo_in frame PASS**, each equal to the RTL table (clk_sipo 136 / 100 / 50,
+  clk_piso 168 / 100 / 50, sipo_in 32 edges / 800 / 300, cs 1 / high 100, shift 1 edge ending
+  high, reset / rst_sipo / rst_piso held high, the other 14 held low); frame
+  `0x5AA55A0FF0123456789ABCDEF0C3C3E7E7` bit-exact. `PASS: 24 pass, 0 fail, 5 not judged`.
+- **Step 2** `... --repeat 100 --out ../docs/measurements/EXP-10_verify_seq_100.md`
+  (12:28:59-12:29:11): **every readback row 100/100**, `PASS: 24 pass, 0 fail, 100 runs`.
+- **Step 5** (negative): the board's readback checked against a copy with clk_sipo 135
+  cycles: FAIL on exactly `clk_sipo` (edges), `sipo_in` (end, high) and `sipo_in frame` (136
+  bits sampled, 135 expected); the other 20 rows PASS. The checker catches a real difference
+  and nothing else.
+- Step 3 (editor Verify on a mode): with Rahaf. Step 4 (logic analyser): optional, not done.
 
 ## 4. Conclusion
 (to be filled in)

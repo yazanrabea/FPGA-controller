@@ -2026,3 +2026,9 @@ Tag every result **[simulated]** or **[measured on board]**.
   - Docs: `docs/link_register_map.md` (pad readback region), USER_MANUAL §8.9, tools README, CLAUDE.md §6, `docs/experiments/EXP-10_pad_readback.md` (planned).
 - Results [tested, pytest]: `test_readback.py` 15 passed, incl. **the Python expectation for chip_sim_test.yaml = the numbers the RTL produced in chip_top_tb** (all 22 pins, derived independently); a wrong pin fails only its row; period tolerance 1 tick; the frame (wrong bit, wrong count); an old bitstream / vchip_top notes; `read_readback` parsing, frames <= 255 bytes. Full suite 386 passed, 1 skipped (incl. the page-script syntax check).
 - Next steps: Rahaf's OK -> build `chip_top` (timing: the read path got a bigger mux; WNS was +0.112 ns) -> EXP-10.
+
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — Step 2: build + EXP-10
+- Rahaf: "ok" (push, build, EXP-10), bench unchanged ("nothing changed, go ahead").
+- `ad5d186` pushed. Build 1: timing failed (-0.046 ns, the readback read path), not programmed; fixed with an address-bit decode (after an xsim part-select surprise, `docs/issues.md`); `chip_top_tb` 15/15, `vchip_top_tb` 9/9. Build 2: **WNS +0.176 ns**, 0 critical warnings, 17.7k LUT / 23.4k FF; 22 outputs BIDIR DRIVE 4 SLOW, 4 inputs PULLDOWN.
+- **EXP-10** [measured on board], `chip_top` programmed 12:28:47, no jumpers: step 1 all 22 pins + the frame PASS, window 31953 ticks (= simulation); step 2 100 runs, every readback row 100/100 (`docs/measurements/EXP-10_verify_seq_100.md`); step 5 a wrong expectation fails exactly clk_sipo, sipo_in and the frame count. Step 3 (editor) with Rahaf; editor restarted with the current code.
+- Next steps: step 3; then commit + push (Rahaf's OK).

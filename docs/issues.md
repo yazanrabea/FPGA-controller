@@ -244,3 +244,15 @@ Format: symptom, suspected cause, fix, confirmation.
   `validate.py`; unused variable `last` in `verify.sequence_expectations`; EXP-09 Part B should
   say to remove the 10 vchip jumpers before programming `chip_top`; the plan's "26 of the 34
   LA_P pins" vs the 32 in the verified mapping (LA00-31).
+
+## 2026-11-02: `chip_top` with pad readback failed timing (-0.046 ns) — FIXED
+- Symptom: first build of `chip_top` with the readback region: WNS -0.046 ns, 3 endpoints,
+  `u_frame/bus_raddr -> bus_rdata` (14 levels, 6 CARRY4). Not programmed.
+- Cause: the readback region's range compares (`>=` / `<` on 16-bit addresses) and
+  subtractions added carry chains to the register read path, which had only +0.112 ns.
+- Fix: decode from address bits only (region 0x0200-0x03FF = `a[15:9] == 0000001`;
+  `a[8:4]` picks one of 32 records of 16 bytes, `a[3:0]` the byte). Same addresses, a
+  `$error` at elaboration if the chip_pkg layout stops fitting. Confirmed: WNS +0.176 ns.
+- xsim note found on the way: `rec[bus_raddr[3:0]*8 +: 8]` in an always_comb read byte 0 for
+  every address in xsim 2022.1; a shift by `{bus_raddr[3:0], 3'b0}` works (no multiplier in the
+  index). `chip_top_tb` caught it (every readback byte wrong).

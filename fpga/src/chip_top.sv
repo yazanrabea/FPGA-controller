@@ -283,50 +283,52 @@ module chip_top #(
         end
     end
 
-    // readback region (READ_REG): cell i at RB_BASE + 16 i, then RB_INFO, then RB_SIPO
-    localparam int RBN = NS * chip_pkg::RB_STRIDE;                       // 352 bytes
+    // readback region (READ_REG), decoded from address bits only (no compares or
+    // subtractions: the read path had no timing margin, the first build with
+    // range compares failed by 0.046 ns). The whole region is 0x0200-0x03FF
+    // (a[15:9] = 0000001); a[8:4] picks one of 32 records of 16 bytes, a[3:0] the byte:
+    //   records 0..21 = the cells (RB_BASE + 16 i), 22 = info (RB_INFO = 0x0360),
+    //   24..25 = the sipo_in frame (RB_SIPO = 0x0380, 17 bytes), the rest 0.
     localparam int SPB = (SPW + 7) / 8;                                   // 17 bytes
+    localparam int REC_INFO = (chip_pkg::RB_INFO - chip_pkg::RB_BASE) / 16;   // 22
+    localparam int REC_SIPO = (chip_pkg::RB_SIPO - chip_pkg::RB_BASE) / 16;   // 24
+    // the layout this decode assumes (a wrong one fails elaboration, not the board)
+    if (chip_pkg::RB_BASE != 16'h0200 || chip_pkg::RB_STRIDE != 16 || NS > REC_INFO
+        || REC_SIPO + (SPB + 15) / 16 > 32)
+        $error("chip_top readback: chip_pkg RB_* layout doesn't fit the 0x0200-0x03FF bit decode");
+
     function automatic logic in_rb_region(input logic [15:0] a);
-        return (a >= chip_pkg::RB_BASE && a < chip_pkg::RB_BASE + RBN)
-            || (a >= chip_pkg::RB_INFO && a < chip_pkg::RB_INFO + 16)
-            || (a >= chip_pkg::RB_SIPO && a < chip_pkg::RB_SIPO + SPB);
+        return a[15:9] == 7'b0000001;
     endfunction
 
-    always_comb begin
-        logic [15:0] o;
-        logic [8:0]  ci;                                                  // cell index (address bits)
-        logic [3:0]  b;                                                   // byte in the cell's record
-        logic [127:0] rec;
-        rb_byte = 8'h00;
-        o  = bus_raddr - chip_pkg::RB_BASE;
-        ci = o[12:4];
-        b  = o[3:0];
-        rec = '0;
-        for (int i = 0; i < NS; i++)
-            if (ci == 9'(i))
-                rec = {24'h0, rb_high[i*TW +: TW], rb_period[i*TW +: TW], rb_edges[i*TW +: TW],
-                       5'b0, rb_end[i], rb_saw1[i], rb_saw0[i]};
-        if (bus_raddr >= chip_pkg::RB_BASE && bus_raddr < chip_pkg::RB_BASE + RBN)
-            rb_byte = rec[b*8 +: 8];
-        else if (bus_raddr >= chip_pkg::RB_INFO && bus_raddr < chip_pkg::RB_INFO + 16) begin
-            case (bus_raddr - chip_pkg::RB_INFO)
-                16'd0: rb_byte = 8'(NS);
-                16'd1: rb_byte = {7'b0, PAD_READBACK};
-                16'd2: rb_byte = rb_sipo_n[7:0];
-                16'd3: rb_byte = rb_sipo_n[15:8];
-                16'd4: rb_byte = 8'(SPW);
-                16'd5: rb_byte = rb_len[7:0];      // +5..+8: the window length in ticks
-                16'd6: rb_byte = rb_len[15:8];
-                16'd7: rb_byte = rb_len[23:16];
-                16'd8: rb_byte = rb_len[31:24];
-                default: rb_byte = 8'h00;
-            endcase
-        end else if (bus_raddr >= chip_pkg::RB_SIPO && bus_raddr < chip_pkg::RB_SIPO + SPB) begin
-            o = bus_raddr - chip_pkg::RB_SIPO;
-            for (int k = 0; k < SPB; k++)
-                if (o == 16'(k)) rb_byte = 8'({{(SPB * 8 - SPW){1'b0}}, rb_sipo} >> (8 * k));
+    wire [32*128-1:0] rb_recs;            // record k at [k*128 +: 128], byte j at [+ 8 j]
+    wire [SPB*8-1:0]  rb_sipo_bytes = {{(SPB * 8 - SPW){1'b0}}, rb_sipo};
+    generate
+        for (g = 0; g < 32; g++) begin : g_rec
+            if (g < NS) begin : g_cell
+                assign rb_recs[g*128 +: 128] = {24'h0, rb_high[g*TW +: TW], rb_period[g*TW +: TW],
+                                                rb_edges[g*TW +: TW], 5'b0, rb_end[g], rb_saw1[g], rb_saw0[g]};
+            end else if (g == REC_INFO) begin : g_info
+                assign rb_recs[g*128 +: 128] = {56'h0, rb_len, 8'(SPW), rb_sipo_n,
+                                                7'b0, PAD_READBACK, 8'(NS)};   // +0 cells .. +5..8 window
+            end else if (g >= REC_SIPO && (g - REC_SIPO) * 16 < SPB) begin : g_sipo
+                localparam int LO = (g - REC_SIPO) * 16;                // first frame byte in this record
+                localparam int N  = (SPB - LO < 16) ? SPB - LO : 16;
+                if (N == 16) begin : g_full
+                    assign rb_recs[g*128 +: 128] = rb_sipo_bytes[LO*8 +: 128];
+                end else begin : g_part
+                    assign rb_recs[g*128 +: 128] = {{(128 - N * 8){1'b0}}, rb_sipo_bytes[LO*8 +: N*8]};
+                end
+            end else begin : g_zero
+                assign rb_recs[g*128 +: 128] = '0;
+            end
         end
-    end
+    endgenerate
+
+    // shift by the address bits with zeros appended (x128 = 7 zeros, x8 = 3 zeros): no
+    // multiplier in the index (xsim evaluated `a[3:0]*8` in a part-select too narrowly)
+    wire [127:0] rb_rec = 128'(rb_recs >> {bus_raddr[8:4], 7'b0});
+    assign rb_byte = 8'(rb_rec >> {bus_raddr[3:0], 3'b0});
 
     // ---- 2-FF sync on the chip outputs (CLAUDE.md §8) ----
     logic [NC-1:0] in_s0, in_s1;
