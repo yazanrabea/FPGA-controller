@@ -178,6 +178,66 @@ def cmd_run_mode(args: argparse.Namespace) -> int:
     return 0 if r["done"] and not r["fault"] else 1
 
 
+def cmd_verify(args: argparse.Namespace) -> int:
+    """Plan 2026-11-01 Step 1: run a mode on chip_top and judge every capture with an expect."""
+    from datetime import datetime
+    import yaml
+    from .config import load_config
+    from .mode_seq import mode_table
+    from .sequence import SequenceError
+    from .units import UnitsError, parse_duration_ns
+    from .verify import (VerifyError, format_csv, format_markdown, format_text,
+                         load_verify_sequence, mode_expectations, verify_table)
+    margin = 2.0
+    try:
+        if args.seq:
+            table, expect, margin = load_verify_sequence(args.seq)
+            notes, what = [], f"sequence {Path(args.seq).name}"
+        else:
+            config = load_config(args.config)
+            expect = mode_expectations(config, args.mode)
+            dur = parse_duration_ns(args.duration) * 1e-9 if args.duration else None
+            table, notes = mode_table(config, args.mode, dur)
+            what = f"mode {args.mode}"
+    except (SequenceError, UnitsError, VerifyError, ValueError, OSError, yaml.YAMLError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if args.repeat < 1:
+        print("error: --repeat must be >= 1", file=sys.stderr)
+        return 1
+    for n in notes:
+        print(f"note: {n}")
+    if not expect:
+        print(f"warning: {what} has no capture with an expect: nothing is judged "
+              f"except the run status", file=sys.stderr)
+    print(f"{what}: {len(expect)} expectation(s)")
+    for e in expect.values():
+        print(f"  {e.pin}: {e.kind} {e.expected_text()}")
+    if args.dry_run:
+        return 0
+    if not (args.jtag or args.port):
+        print("error: give --jtag (or --port) to run it on the board, or --dry-run", file=sys.stderr)
+        return 1
+    sl = _open_chip_link(args)
+    try:
+        res = verify_table(sl, table, expect, mode=args.mode or what, repeat=args.repeat, margin_s=margin)
+    finally:
+        sl.close()
+    for line in format_text(res):
+        print(line)
+    if args.out:
+        out = Path(args.out)
+        if out.suffix.lower() == ".csv":
+            out.write_text(format_csv(res), encoding="utf-8")
+        else:
+            out.write_text(format_markdown(res, {
+                "date": datetime.now().strftime("%Y-%m-%d %H:%M"), "config": args.seq or args.config,
+                "duration": "the sequence's steps" if args.seq else (args.duration or "default (last event + 10 %)"),
+                "link": "JTAG (J17)" if args.jtag else f"serial {args.port}"}), encoding="utf-8")
+        print(f"report written to {out}")
+    return 0 if res.ok else 1
+
+
 def _print_seq_status(st, step, last) -> None:
     flags = [n for n in ("run", "busy", "done", "fault", "aborted", "late", "table_rejected",
                          "rx_overflow") if getattr(st, n)]
@@ -614,6 +674,37 @@ def build_parser() -> argparse.ArgumentParser:
     rm.add_argument("--baud", type=int, default=115_200, help="with --port")
     rm.add_argument("--timeout", type=float, default=1.0, help="link response timeout, seconds")
     rm.set_defaults(func=cmd_run_mode)
+
+    vf = sub.add_parser(
+        "verify", formatter_class=_RDF,
+        help="run one mode on chip_top and check every capture against its expect",
+        description=_wrap(
+            "Like run-mode, then each capture that has an `expect` in the config (level / edges "
+            "/ period / serial, see tools/nemo_ctl/verify.py) is judged PASS or FAIL; captures "
+            "without one are shown but not judged. The run itself must end done without FAULT. "
+            "Exit code 0 only if everything passes. --repeat N runs it N times and counts the "
+            "passes per pin. --out writes the table as Markdown (.md) or every run as CSV (.csv). "
+            "--seq runs a step sequence instead of a mode (needed when a pin must change between "
+            "steps, e.g. shift for a PISO read; expect goes on the last step that captures the pin)."),
+        epilog=_wrap("Example (from tools/):\n"
+                     "  python -m nemo_ctl.cli verify --mode INFERENCE --dry-run\n"
+                     "  python -m nemo_ctl.cli verify --mode INFERENCE --jtag --repeat 100 --out verify.md"),
+    )
+    what = vf.add_mutually_exclusive_group(required=True)
+    what.add_argument("--mode", help="mode of the config, e.g. INFERENCE")
+    what.add_argument("--seq", help="a step sequence YAML for chip_top instead (expect on its "
+                                    "capture entries), e.g. ../config/exp09_verify_vchip.yaml")
+    vf.add_argument("--config", default=str(DEFAULT_CONFIG_PATH),
+                    help="config file for --mode (default: config/nemo_config.yaml)")
+    vf.add_argument("--duration", default=None, help="as for run-mode (--mode only)")
+    vf.add_argument("--repeat", type=int, default=1, help="run the mode N times (default 1)")
+    vf.add_argument("--out", default=None, help="write a report: .md (table) or .csv (every run)")
+    vf.add_argument("--dry-run", action="store_true", help="only list the expectations, no board")
+    vf.add_argument("--jtag", action="store_true", help="over the JTAG link on J17")
+    vf.add_argument("--port", default=None, help="serial port instead (not used by chip_top today)")
+    vf.add_argument("--baud", type=int, default=115_200, help="with --port")
+    vf.add_argument("--timeout", type=float, default=1.0, help="link response timeout, seconds")
+    vf.set_defaults(func=cmd_verify)
 
     sq = sub.add_parser(
         "seq",

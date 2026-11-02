@@ -1,5 +1,6 @@
 """Validator: allowed types per pin, safe limits, SERIAL->CLOCK references, no pin used
-twice — the four checks generic_controller_prompt.md §1/Phase 1 calls out explicitly.
+twice — the four checks generic_controller_prompt.md §1/Phase 1 calls out explicitly —
+plus a CAPTURE's `expect` / `tolerance` / `mask` (verify.py, plan 2026-11-01 Step 1).
 """
 from __future__ import annotations
 
@@ -11,6 +12,7 @@ from .groups import PIN_GROUPS
 from .pins import Pin
 from .pin_types import PinType
 from .units import UnitsError, quantize_clock, quantize_duration
+from .verify import EXPECT_KEYS, VerifyError, parse_expect
 
 # generic_controller_prompt.md §2: warn above 10 MHz (jumper-wire signal integrity,
 # docs/issues.md), hard limit 50 MHz — applies to every CLOCK pin regardless of any
@@ -85,6 +87,10 @@ def validate_config(config: Config, pin_db: dict[str, Pin]) -> list[Issue]:
                        f"type {pin_type.value} not allowed for {key!r} "
                        f"(allowed: {[t.value for t in pin.allowed_types]})")
                 continue
+
+            if pin_type != PinType.CAPTURE and any(setting.params.get(k) not in (None, "") for k in EXPECT_KEYS):
+                _error(issues, mode, block, key,
+                       "expect / tolerance / mask only go on a CAPTURE pin (what it should read back)")
 
             _validate_limits(issues, mode, block, key, pin, setting, clock_pins)
 
@@ -215,6 +221,10 @@ def _validate_limits(issues, mode, block, key, pin: Pin, setting: PinSetting, cl
         if clock and clock not in clock_pins:
             _error(issues, mode, block, key,
                    f"CAPTURE references {clock!r}, which is not configured as a CLOCK in mode {mode!r}")
+        try:
+            parse_expect(key, block, setting.params)
+        except VerifyError as exc:
+            _error(issues, mode, block, key, f"expect: {exc}")
 
 
 def has_errors(issues: list[Issue]) -> bool:

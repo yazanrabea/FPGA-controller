@@ -17,7 +17,7 @@ from .pins import Pin
 PARAM_COLUMNS = [
     "freq", "duty", "delay", "cycles", "width", "repeat", "period", "polarity",
     "clock", "data", "msb_first", "data_edge", "bits", "mode", "edge", "value",
-    "adc", "signal",
+    "adc", "signal", "expect", "tolerance", "mask",
 ]
 COLUMNS = ["Block", "Pin", "Type"] + PARAM_COLUMNS
 
