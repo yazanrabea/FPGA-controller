@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="450" font-family="monospace" font-size="12">
+<rect width="100%" height="100%" fill="white"/><text x="10" y="20" font-size="14">EXP-11 run 1 (FAULT): J3-4->J2-20 not making contact, en_in flat</text>
+<text x="5" y="57">clk</text><polyline fill="none" stroke="#1f5fbf" stroke-width="1.5" points="80.0,62 426.0,62 426.0,40 464.9,40 464.9,62 503.9,62 503.9,40 542.8,40 542.8,62 581.7,62 581.7,40 620.6,40 620.6,62 659.6,62 659.6,40 698.5,40 698.5,62 737.4,62 737.4,40 776.4,40 776.4,62 815.3,62 815.3,40 854.2,40 854.2,62 893.1,62 893.1,40 932.1,40 932.1,62 971.0,62 971.0,40 1009.9,40 1009.9,62 1080.0,62"/>
+<text x="5" y="93">rst</text><polyline fill="none" stroke="#1f5fbf" stroke-width="1.5" points="80.0,76 111.5,76 111.5,98 267.2,98 267.2,76 1080.0,76"/>
+<text x="5" y="129">data</text><polyline fill="none" stroke="#1f5fbf" stroke-width="1.5" points="80.0,134 422.9,134 422.9,112 464.9,112 464.9,134 542.8,134 542.8,112 620.6,112 620.6,134 776.4,134 776.4,112 854.2,112 854.2,134 932.1,134 932.1,112 1009.9,112 1009.9,134 1080.0,134"/>
+<text x="5" y="165">cs</text><polyline fill="none" stroke="#1f5fbf" stroke-width="1.5" points="80.0,170 1048.9,170 1048.9,148 1080.0,148"/>
+<text x="5" y="201">en</text><polyline fill="none" stroke="#1f5fbf" stroke-width="1.5" points="80.0,206 971.0,206 971.0,184 1080.0,184"/>
+<text x="5" y="237">clk_in</text><polyline fill="none" stroke="#c0392b" stroke-width="1.5" points="80.0,242 426.0,242 426.0,220 464.9,220 464.9,242 503.9,242 503.9,220 542.8,220 542.8,242 581.7,242 581.7,220 620.6,220 620.6,242 659.6,242 659.6,220 698.5,220 698.5,242 737.4,242 737.4,220 776.4,220 776.4,242 815.3,242 815.3,220 854.2,220 854.2,242 893.1,242 893.1,220 932.1,220 932.1,242 971.0,242 971.0,220 1009.9,220 1009.9,242 1080.0,242"/>
+<text x="5" y="273">rst_in</text><polyline fill="none" stroke="#c0392b" stroke-width="1.5" points="80.0,256 111.5,256 111.5,278 267.2,278 267.2,256 1080.0,256"/>
+<text x="5" y="309">data_in</text><polyline fill="none" stroke="#c0392b" stroke-width="1.5" points="80.0,314 422.9,314 422.9,292 464.9,292 464.9,314 542.8,314 542.8,292 620.6,292 620.6,314 776.4,314 776.4,292 854.2,292 854.2,314 932.1,314 932.1,292 1009.9,292 1009.9,314 1080.0,314"/>
+<text x="5" y="345">cs_in</text><polyline fill="none" stroke="#c0392b" stroke-width="1.5" points="80.0,350 1048.9,350 1048.9,328 1080.0,328"/>
+<text x="5" y="381">en_in</text><polyline fill="none" stroke="#c0392b" stroke-width="1.5" points="80.0,386 1080.0,386"/>
+<line x1="80.0" y1="35" x2="80.0" y2="400" stroke="#ddd"/><text x="60.0" y="415">0 ms</text>
+<line x1="180.0" y1="35" x2="180.0" y2="400" stroke="#ddd"/><text x="160.0" y="415">321 ms</text>
+<line x1="280.0" y1="35" x2="280.0" y2="400" stroke="#ddd"/><text x="260.0" y="415">642 ms</text>
+<line x1="380.0" y1="35" x2="380.0" y2="400" stroke="#ddd"/><text x="360.0" y="415">963 ms</text>
+<line x1="480.0" y1="35" x2="480.0" y2="400" stroke="#ddd"/><text x="460.0" y="415">1284 ms</text>
+<line x1="580.0" y1="35" x2="580.0" y2="400" stroke="#ddd"/><text x="560.0" y="415">1606 ms</text>
+<line x1="680.0" y1="35" x2="680.0" y2="400" stroke="#ddd"/><text x="660.0" y="415">1927 ms</text>
+<line x1="780.0" y1="35" x2="780.0" y2="400" stroke="#ddd"/><text x="760.0" y="415">2248 ms</text>
+<line x1="880.0" y1="35" x2="880.0" y2="400" stroke="#ddd"/><text x="860.0" y="415">2569 ms</text>
+<line x1="980.0" y1="35" x2="980.0" y2="400" stroke="#ddd"/><text x="960.0" y="415">2890 ms</text>
+<line x1="1080.0" y1="35" x2="1080.0" y2="400" stroke="#ddd"/><text x="1060.0" y="415">3211 ms</text>
+<text x="80" y="430">time from the first sample (VCD time 0); blue = output, red = input</text></svg>

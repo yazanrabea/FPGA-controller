@@ -256,3 +256,8 @@ Format: symptom, suspected cause, fix, confirmation.
 - xsim note found on the way: `rec[bus_raddr[3:0]*8 +: 8]` in an always_comb read byte 0 for
   every address in xsim 2022.1; a shift by `{bus_raddr[3:0], 3'b0}` works (no multiplier in the
   index). `chip_top_tb` caught it (every readback byte wrong).
+
+## 2026-11-02: a disconnected SERIAL input doesn't FAULT a "captured" wait — OPEN (note)
+- Seen in EXP-11 step 6 [measured on board]: with jumper J3-2 -> J2-18 pulled, `data_in` stayed at 0, yet step 2 (`until: captured data_in`) ended normally and the sequence finished `done late`.
+- Why: the SERIAL capture counts its clock input (`clk_in`) edges, not data edges, so it "captures" 0x00 on schedule. Correct for the cell; it just means `captured` proves the clock arrived, not the data.
+- Caught by: the sampler `--check` (data_in 0 edges, FAIL) and by reading the capture (0x00 instead of 0xA5, as `cli verify` does). No change made; worth remembering when a chip sequence waits on `captured piso_out`.

@@ -2034,3 +2034,14 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Next steps: step 3; then commit + push (Rahaf's OK).
 - Step 3 (Rahaf, editor): "all pass in the editor" (INFERENCE + a typed frame, Verify). **EXP-10 PASS.** Rahaf: push.
 
+## 2026-11-02, Rahaf (with Claude), lab PC, branch main — EXP-11 (in-FPGA sampler on the board)
+- Goal: Rahaf "lets do 3 and 4": EXP-11, then EXP-09 Part A.
+- Hardware setup: J18 1V8, J17. No jumpers -> 13:08:12 `sample_loopback_top` programmed (DONE=1, sampler 16 x 4096) -> Rahaf put on the 5 bring-up jumpers (pairs 0-4).
+- Results [measured on board] (`docs/experiments/EXP-11_sampler_loopback.md`):
+  - run 1: FAULT at step 4, the record showed `en_in` flat while `en` rose: the J3-4 -> J2-20 jumper wasn't making contact; Rahaf re-seated it.
+  - run 2: **PASS 10/10**, 4000 samples, trigger at index 100; rst 1.001 -> 1.501 s, clk 4 Hz, data 0xA5, every input = its output.
+  - 10 MHz trigger on the clk rise: low to index 49, high from 50. Re-arm: a different trigger (cs) set up, `seq run`, `--read-only` -> new record at 4.010 s.
+  - negative: Rahaf pulled J2-18 (the plan said J2-17; the record showed data_in flat, she confirmed J2-18): FAIL on `data_in` only.
+  - Records + SVG drawings in `docs/measurements/EXP-11_*` (no VCD viewer on the lab PC).
+- Problems / fixes: loose jumper (above). Found: a sequence that waits for `data_in` "captured" doesn't FAULT when data_in is disconnected (`docs/issues.md`).
+- Next steps: Rahaf's decision on a sampler inside `chip_top`; EXP-09 Part A; step 4 (logic analyser) optional.

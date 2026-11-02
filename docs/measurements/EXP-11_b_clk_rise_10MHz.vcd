@@ -1,0 +1,32 @@
+$comment sample_cell record: 10 pins, every 100 ns (10 MHz), 4096 samples = 409.6 us, 50 before the trigger (rise on clk); first sample at 2.01e+09 ns from RUN $end
+$timescale 1ns $end
+$scope module fpga $end
+$var wire 1 ! clk $end
+$var wire 1 " rst $end
+$var wire 1 # data $end
+$var wire 1 $ cs $end
+$var wire 1 % en $end
+$var wire 1 & clk_in $end
+$var wire 1 ' rst_in $end
+$var wire 1 ( data_in $end
+$var wire 1 ) cs_in $end
+$var wire 1 * en_in $end
+$var wire 4 + step $end
+$upscope $end
+$enddefinitions $end
+#0
+0!
+1"
+1#
+0$
+0%
+0&
+1'
+1(
+0)
+0*
+b0010 +
+#5000
+1!
+1&
+#409600
