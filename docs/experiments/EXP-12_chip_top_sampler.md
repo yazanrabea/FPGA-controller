@@ -6,8 +6,8 @@ experiment checks it on the board with `vchip_top`, whose answers are known (EXP
 the 22 controller outputs, the virtual chip's `sipo_out` / `piso_out` and the step number,
 recorded during one whole run and read back over JTAG.
 
-**Status: Part A (`vchip_top`) PASS** [measured on board] 2026-11-02. Part B (`chip_top`,
-no jumpers) not run yet. [simulated] `chip_top_tb` 21/21 (check 8: every sample = the pins at
+**Status: PASS** [measured on board] 2026-11-02: Part A (`vchip_top`, 10 jumpers) and Part B
+(`chip_top`, no jumpers, recorded at the pads). [simulated] `chip_top_tb` 21/21 (check 8: every sample = the pins at
 the PC's tick, exact; a 1-FF mutant caught), `vchip_top_tb` 9/9; pytest 391.
 
 ## 1. Setup
@@ -61,6 +61,21 @@ Problems / fixes:
   required "done". Fixed: a triggered record counts (`cli.py`, test
   `test_a_record_the_run_ended_early_still_passes`).
 
+### Part B: `chip_top`, no jumpers (recorded at the pads)
+| Time | What | Result |
+|---|---|---|
+| 15:47:03 | Rahaf: jumpers off; programmed `chip_top` | DONE=1; link idle; sampler 32 x 4096 |
+| 15:47:53 | `seq load ../config/chip_sim_test.yaml --jtag`; `seq sample --jtag --rate 10MHz --samples 3300 --run --wait 5 --check ../config/chip_sim_test.yaml --out exp12_b.vcd` | **PASS: 22 pass, 0 fail, 5 not judged, exit 0**; record 3196 samples (-10 ns .. 319.49 us), triggered; steps 1 at 4.99 us, 2 at 149.99 us |
+
+- The 22 outputs **as read back at their pads** (IOBUF -> 2 FFs): `clk_sipo` 272 edges from
+  7.09 us, `sipo_in` 64, `cs` 145.09 -> 146.09 us, `clk_piso` 335 from 152.09 us, `shift` up at
+  152.79 us, `reset` / `rst_sipo` / `rst_piso` held at 1, the other 14 at 0: equal to the
+  predicted waves and to Part A (same times to the sample).
+- **`sipo_in` read at each `clk_sipo` rising edge in the record = `0x5AA55A0FF0123456789ABCDEF0C3C3E7E7`,
+  all 136 bits** (the chip's sampling edge), decoded from the pad record.
+- The 4 chip inputs stay 0 (nothing connected, PULLDOWN).
+- Files: `docs/measurements/EXP-12_chip_top_pads_record.vcd` / `.svg`.
+
 ## 4. Conclusion
 
 **Part A PASS.** The sampler inside the chip controller works on the board: it records a whole
@@ -70,5 +85,8 @@ match what the steps predict, and the recorded `piso_out` is the expected frame 
 (an open `piso_out` wire) directly. On `vchip_top` the outputs are recorded from inside the
 FPGA; the pad version is Part B.
 
-Next: Part B, `chip_top` with no jumpers (`--check ../config/chip_sim_test.yaml`), where the 22
-outputs are recorded at the pads.
+**Part B PASS.** On `chip_top` the same record is taken at the pads: the 22 outputs as the pins
+really did it, matching the steps, and the SIPO frame bit-exact from the pins. Together with the
+pad readback (EXP-10) the controller now checks every run of the real chip by itself, both as
+counts (readback) and as a waveform (sampler). Limit as before: logic level at the FPGA pad, not
+after the connector / wire, and not the analog level.
