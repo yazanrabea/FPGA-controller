@@ -2081,3 +2081,8 @@ Tag every result **[simulated]** or **[measured on board]**.
 - **EXP-12 Part C** [measured on board] (Rahaf: "check if the inputs capture"): 4 loopback jumpers chip_top output -> input (J3-1 -> J3-16, J3-8 -> J2-17, J3-4 -> J2-18, J3-7 -> J2-19), `verify --seq chip_sim_test.yaml`: sipo_out level 1, piso_out capture 0x7FF...F (168 bits, first 0), dft0/1_buff period 100 ticks: all as predicted. The 4 inputs capture LEVEL / SERIAL / PERIOD correctly.
 - Editor Verify showed the 4 inputs as 0 (Rahaf). Causes: no capture on dft0/1_buff in INFERENCE; a 15:52 editor Save had set `piso_out` edge `rising` (chip_top captures on falling: Verify refuses); in INFERENCE reset / shift are LOW when read. Config fixed (committed text + edge falling + `dft0_buff` / `dft1_buff: {type: CAPTURE, mode: period}`), validate clean, pytest 391. Jumpers moved to J3-6 -> J3-16, J3-9 -> J2-17. **Editor Verify: sipo_out 1, piso_out 0xFF..F (168), dft0/1_buff period 100**, all as predicted (EXP-12 Part C).
 - The editor background process was stopped once by Claude Code for low memory; restarted on request.
+
+## 2026-11-03, Rahaf (with Claude), lab PC, branch main
+- Rahaf sent the mentor the progress summary (claude.ai doc "FPGA Controller for the Y-Flash Test Chip: Progress Summary", written 2026-11-02: setup, architecture, EXP-01..12, self-checks, problems, what the real chip needs).
+- Pushed `52faebe`, `0450769` (input-capture check, config fix).
+- Open: Yazan's review; deleting his old branches; EXP-11 step 4 (optional); the real chip (pad voltage, analog supplies / power-up order, polarities of reset / set / s*_p / pulse, hardware, READ / WRITE modes).
