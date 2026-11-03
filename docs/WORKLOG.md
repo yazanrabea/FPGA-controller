@@ -2086,3 +2086,29 @@ Tag every result **[simulated]** or **[measured on board]**.
 - Rahaf sent the mentor the progress summary (claude.ai doc "FPGA Controller for the Y-Flash Test Chip: Progress Summary", written 2026-11-02: setup, architecture, EXP-01..12, self-checks, problems, what the real chip needs).
 - Pushed `52faebe`, `0450769` (input-capture check, config fix).
 - Open: Yazan's review; deleting his old branches; EXP-11 step 4 (optional); the real chip (pad voltage, analog supplies / power-up order, polarities of reset / set / s*_p / pulse, hardware, READ / WRITE modes).
+
+## 2026-11-03, Yazan (with Claude), laptop, branch main: review of Rahaf's 2026-11-02 work
+- Goal: Rahaf's handoff item "Yazan: review today's work"; delete Yazan's two old branches.
+- Scope: `f238d81..cb14f61` (25 code files, ~1,400 lines): `readback_cell.sv`, the `IOBUF`
+  readback / readback decode / sampler in `chip_top.sv`, `vchip_top.sv` `PAD_READBACK = 0`,
+  `gen_svh.py` RB_* constants, `readback.py`, `link.py` `read_readback` / `read_samples`,
+  `samples.chip_layout`, `seqwaves` layout args, `verify.py` (edge_count refused), tests.
+- Results on the laptop: pytest **391 passed, 1 skipped** (= the lab PC); [simulated, Icarus
+  12] `run_readback_sim.sh` 10/10, `run_sample_sim.sh` 39/39 + 24/24 + `check_sample_dump`
+  PASS (= xsim). `run_chip_sim.sh` doesn't compile in Icarus 12 (array localparams in the
+  generated `chip_pkg.sv`, there since 2026-10-26): `chip_top_tb` is xsim-only, not a new issue.
+- Findings:
+  1. **False PASS in the `sipo_in frame` readback row** with two or more wait steps (0 bits
+     received -> PASS), or when the frame is wider than the register. Reproduced on the PC;
+     not affecting the 2026-11-02 runs (one wait step). `docs/issues.md` 2026-11-03, fix proposed
+     for Rahaf (her file).
+  2. Note: the pad-readback and chip-input synchronizer FFs (`rb_s0` / `in_s0` in `chip_top.sv`)
+     have no `ASYNC_REG`; the 2 FFs work as is (results to the tick in EXP-10), `ASYNC_REG` only
+     makes Vivado place them together (better MTBF). Optional.
+  3. No other findings: the readback window = RUN delayed by the synchronizer's 2 ticks; the
+     bit-only address decode, elaboration-time layout checks, sample region 0x8000-0xBFFF /
+     `rd_idx = a[13:2]`, frame sizes under 255 bytes, `edge_count` refusal all read correct.
+- Branches: both old branches confirmed fully in `main` (0 commits not in `main`); the delete
+  (`git push origin --delete ...`) was blocked by the session's permission rules, left for
+  Yazan to run himself.
+- Next: Rahaf decides on finding 1 (fix in `readback.py`); delete the two branches.

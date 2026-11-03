@@ -261,3 +261,18 @@ Format: symptom, suspected cause, fix, confirmation.
 - Seen in EXP-11 step 6 [measured on board]: with jumper J3-2 -> J2-18 pulled, `data_in` stayed at 0, yet step 2 (`until: captured data_in`) ended normally and the sequence finished `done late`.
 - Why: the SERIAL capture counts its clock input (`clk_in`) edges, not data edges, so it "captures" 0x00 on schedule. Correct for the cell; it just means `captured` proves the clock arrived, not the data.
 - Caught by: the sampler `--check` (data_in 0 edges, FAIL) and by reading the capture (0x00 instead of 0xA5, as `cli verify` does). No change made; worth remembering when a chip sequence waits on `captured piso_out`.
+
+## 2026-11-03: pad readback — the `sipo_in frame` row can PASS without being checked (OPEN, found in Yazan's review)
+- Symptom [tested on the PC, `tools/nemo_ctl/readback.py` `check_readback`, 2026-11-03]: with a
+  sequence that has **two or more wait steps**, a readback with **0 `sipo_in` bits** received
+  gives `sipo_in frame ... PASS`. Also PASS (never compared) when the frame is wider than the
+  readback register (`bits > sipo_width`).
+- Cause: with more than one wait step `expected_readback` returns no expectations, so `n_exp`
+  (the expected `clk_sipo` edge count) is `None` and the bit-count check is skipped; the value
+  check is skipped too when `sipo_bits < bits` (`ok_v = bits > width or sipo_bits < bits or ...`).
+- Impact: none on the 2026-11-02 results (EXP-09 / EXP-10 / EXP-12 use one wait step: there the
+  count check runs and a 0-bit frame FAILs, checked). It matters for the real INFERENCE / WRITE
+  sequences, which will likely have several wait steps.
+- Proposed fix (not applied: `readback.py` is Rahaf's): when the count can't be derived and
+  fewer than `bits` were sampled, or `bits > sipo_width`, return the row as not judged
+  (`ok = None`, with a note), never PASS; plus a test for each case.
