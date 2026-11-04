@@ -102,6 +102,24 @@ def test_sipo_frame_wrong_bit_and_wrong_count():
     assert not r.ok and "135 bits sampled, 136 expected" in r.note
 
 
+def test_sipo_frame_is_never_passed_unchecked():
+    """issues.md 2026-11-03: these used to PASS without a comparison."""
+    exp, _ = expected_readback(STEPS, OUTS, WINDOW)
+    row = lambda steps, rb: next(r for r in check_readback(steps, OUTS, rb) if r.pin == "sipo_in frame")
+    # two wait steps: no expectations, so the bit count can't be checked; 0 bits must not PASS
+    two_waits = STEPS + [{"name": "wait2", "until": {"captured": "piso_out", "timeout": "300us"}}]
+    r = row(two_waits, _rb(exp, sipo=0, sipo_bits=0))
+    assert r.ok is None and "only 0 of 136 bits sampled" in r.note and "not checked" in r.note
+    # with every bit there it is still compared, so a wrong bit still FAILs
+    assert row(two_waits, _rb(exp)).ok
+    assert row(two_waits, _rb(exp, sipo=FRAME ^ 1)).ok is False
+    # a frame wider than the readback register
+    r = row(STEPS, {**_rb(exp, sipo=0xE7), "sipo_width": 8})
+    assert r.ok is None and "wider than the readback register" in r.note
+    # one wait step (today's sequences): 0 bits is still a FAIL
+    assert row(STEPS, _rb(exp, sipo=0, sipo_bits=0)).ok is False
+
+
 def test_no_readback_in_the_bitstream_and_vchip():
     rows = check_readback(STEPS, OUTS, None)
     assert len(rows) == 1 and rows[0].ok is None and "no pad readback" in rows[0].note

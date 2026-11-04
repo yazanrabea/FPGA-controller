@@ -171,15 +171,28 @@ def check_readback(steps: list[dict], cells: list[str], rb: dict | None,
         n_exp = exp[sipo_clock].edges if sipo_clock in exp else None
         width = rb["sipo_width"]
         got = rb["sipo"] & ((1 << min(bits, width)) - 1)
+        expected = f"{bits} bits 0x{frame:0{(bits + 3) // 4}X}"
+        measured = f"{rb['sipo_bits']} bits 0x{got:0{(min(bits, width) + 3) // 4}X}"
+        # never PASS what wasn't compared (issues.md 2026-11-03): a frame wider than the
+        # register, or a short frame whose expected bit count can't be derived (more than one
+        # wait step), is shown, not judged
+        if bits > width:
+            rows.append(Row(f"{sipo_cell} frame", "readback", expected, measured, None,
+                            f"the frame ({bits} bits) is wider than the readback register "
+                            f"({width} bits): not checked"))
+            return rows
+        if n_exp is None and rb["sipo_bits"] < bits:
+            rows.append(Row(f"{sipo_cell} frame", "readback", expected, measured, None,
+                            f"only {rb['sipo_bits']} of {bits} bits sampled, and the expected count "
+                            f"can't be derived ({'; '.join(notes) or 'no expected readback'}): not checked"))
+            return rows
         ok_n = n_exp is None or rb["sipo_bits"] == n_exp
-        ok_v = bits > width or rb["sipo_bits"] < bits or got == frame & ((1 << bits) - 1)
+        ok_v = rb["sipo_bits"] < bits or got == frame & ((1 << bits) - 1)
         note = []
         if not ok_n:
             note.append(f"{rb['sipo_bits']} bits sampled, {n_exp} expected")
         if not ok_v:
             d = got ^ frame
             note.append(f"{bin(d).count('1')} bit(s) wrong")
-        rows.append(Row(f"{sipo_cell} frame", "readback", f"{bits} bits 0x{frame:0{(bits + 3) // 4}X}",
-                        f"{rb['sipo_bits']} bits 0x{got:0{(min(bits, width) + 3) // 4}X}",
-                        ok_n and ok_v, "; ".join(note)))
+        rows.append(Row(f"{sipo_cell} frame", "readback", expected, measured, ok_n and ok_v, "; ".join(note)))
     return rows

@@ -2112,3 +2112,15 @@ Tag every result **[simulated]** or **[measured on board]**.
   (`git push origin --delete ...`) was blocked by the session's permission rules, left for
   Yazan to run himself.
 - Next: Rahaf decides on finding 1 (fix in `readback.py`); delete the two branches.
+
+## 2026-11-04, Yazan (with Claude), laptop, branch main: fix of review finding 1
+- Goal: Yazan: "yes" (push the review, fix finding 1).
+- Done: `tools/nemo_ctl/readback.py` `check_readback` (Rahaf's file, **Rahaf: please look**): the
+  `sipo_in frame` row is not judged (never PASS) when the frame is wider than the readback
+  register, or when fewer bits than the frame were sampled and the expected count can't be
+  derived (more than one wait step). Compared cases unchanged. New test
+  `test_readback.py::test_sipo_frame_is_never_passed_unchecked`.
+- Hardware setup: none.
+- Results: [tested, pytest] 392 passed, 1 skipped; the 2026-11-03 repro: 1 wait -> FAIL, 2 waits
+  -> not judged, wider than the register -> not judged. No RTL change, no rebuild needed.
+- Next: Rahaf reviews the change; delete Yazan's two old branches (blocked for Claude, Yazan runs it).

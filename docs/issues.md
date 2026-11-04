@@ -262,7 +262,7 @@ Format: symptom, suspected cause, fix, confirmation.
 - Why: the SERIAL capture counts its clock input (`clk_in`) edges, not data edges, so it "captures" 0x00 on schedule. Correct for the cell; it just means `captured` proves the clock arrived, not the data.
 - Caught by: the sampler `--check` (data_in 0 edges, FAIL) and by reading the capture (0x00 instead of 0xA5, as `cli verify` does). No change made; worth remembering when a chip sequence waits on `captured piso_out`.
 
-## 2026-11-03: pad readback — the `sipo_in frame` row can PASS without being checked (OPEN, found in Yazan's review)
+## 2026-11-03: pad readback — the `sipo_in frame` row can PASS without being checked (FIXED 2026-11-04)
 - Symptom [tested on the PC, `tools/nemo_ctl/readback.py` `check_readback`, 2026-11-03]: with a
   sequence that has **two or more wait steps**, a readback with **0 `sipo_in` bits** received
   gives `sipo_in frame ... PASS`. Also PASS (never compared) when the frame is wider than the
@@ -273,6 +273,9 @@ Format: symptom, suspected cause, fix, confirmation.
 - Impact: none on the 2026-11-02 results (EXP-09 / EXP-10 / EXP-12 use one wait step: there the
   count check runs and a 0-bit frame FAILs, checked). It matters for the real INFERENCE / WRITE
   sequences, which will likely have several wait steps.
-- Proposed fix (not applied: `readback.py` is Rahaf's): when the count can't be derived and
-  fewer than `bits` were sampled, or `bits > sipo_width`, return the row as not judged
-  (`ok = None`, with a note), never PASS; plus a test for each case.
+- Fix (2026-11-04, Yazan's OK; `readback.py` is Rahaf's file, change noted in the WORKLOG for
+  her): when the count can't be derived and fewer than `bits` were sampled, or `bits >
+  sipo_width`, the row is not judged (`ok = None`, the note says why), never PASS. Every case
+  that was compared before is unchanged. Confirmed: the repro now gives 1 wait step -> FAIL,
+  2 wait steps -> not judged, frame wider than the register -> not judged;
+  `test_readback.py::test_sipo_frame_is_never_passed_unchecked`; pytest 392 passed, 1 skipped.
